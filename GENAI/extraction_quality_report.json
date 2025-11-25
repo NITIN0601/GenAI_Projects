@@ -1,0 +1,74 @@
+{
+  "pdf_file": "10q0625.pdf",
+  "total_tables": 89,
+  "total_cells": 13349,
+  "avg_columns": 6.595505617977528,
+  "avg_rows": 19.831460674157302,
+  "title_quality": {
+    "with_titles": 9,
+    "empty_titles": 0,
+    "generic_titles": 6
+  },
+  "sample_tables": [
+    {
+      "title": "(Exact name of Registrant as",
+      "page": 1,
+      "columns": 15,
+      "rows": 13
+    },
+    {
+      "title": "Table_1",
+      "page": 2,
+      "columns": 7,
+      "rows": 52
+    },
+    {
+      "title": "Net Income Applicable to Morgan Stanley",
+      "page": 5,
+      "columns": 6,
+      "rows": 1
+    },
+    {
+      "title": "Table_1",
+      "page": 7,
+      "columns": 9,
+      "rows": 30
+    },
+    {
+      "title": "In the second quarter of 2025, the economic environment reflected varied market conditions. Early in the quarter there was economic uncertainty and market volatility driven by global trade concerns that influenced client confidence and investor sentiment. The latter part of the quarter was characterized by a steady rebound in capital markets. Ongoing geopolitical uncertainty, trade policy changes, inflation, as well as the timing and pace of central bank actions have impacted and could continue to impact capital markets and our businesses, as discussed further in \u201cBusiness Segments\u201d herein.",
+      "page": 8,
+      "columns": 3,
+      "rows": 5
+    },
+    {
+      "title": "The principal non-GAAP financial measures presented in this document are set forth in the following tables.",
+      "page": 8,
+      "columns": 5,
+      "rows": 15
+    },
+    {
+      "title": "Management\u2019s Discussion and Analysis",
+      "page": 9,
+      "columns": 4,
+      "rows": 17
+    },
+    {
+      "title": "Institutional Securities Income Statement Information",
+      "page": 10,
+      "columns": 6,
+      "rows": 37
+    },
+    {
+      "title": "Investment Banking Investment Banking Volumes",
+      "page": 10,
+      "columns": 5,
+      "rows": 3
+    },
+    {
+      "title": "Table_1",
+      "page": 11,
+      "columns": 6,
+      "rows": 22
+    }
+  ]
+}
