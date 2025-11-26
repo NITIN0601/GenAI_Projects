@@ -142,14 +142,32 @@ class DocumentMetadata(BaseModel):
 
 
 class EnhancedFinancialTable(BaseModel):
-                "footnotes": [],
-                "metadata": {
-                    "page_no": 5,
-                    "num_rows": 50,
-                    "num_columns": 3
-                }
-            }
-        }
+    """Enhanced table with complete structure and metadata."""
+    original_title: str = Field(..., description="Original table title")
+    canonical_title: Optional[str] = Field(None, description="Standardized table title")
+    
+    # Table structure
+    column_headers: List[ColumnHeader] = Field(default_factory=list, description="Column headers")
+    row_headers: List[RowHeader] = Field(default_factory=list, description="Row headers")
+    data_cells: List[DataCell] = Field(default_factory=list, description="Data cells")
+    footnotes: List[Footnote] = Field(default_factory=list, description="Footnotes")
+    
+    # Periods
+    periods: List[Period] = Field(default_factory=list, description="Periods covered")
+    
+    # Document hierarchy (for hierarchical metadata)
+    section_heading: Optional[str] = Field(None, description="Main section heading")
+    subsection_heading: Optional[str] = Field(None, description="Subsection heading")
+    subsubsection_heading: Optional[str] = Field(None, description="Sub-subsection heading")
+    heading_path: Optional[str] = Field(None, description="Full heading path")
+    section_keywords: List[str] = Field(default_factory=list, description="Keywords from headings")
+    
+    # Metadata
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    
+    class Config:
+        arbitrary_types_allowed = True
+
 
 
 class PageLayout(BaseModel):

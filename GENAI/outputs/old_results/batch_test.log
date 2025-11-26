@@ -1,0 +1,618 @@
+/Users/nitin/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+
+Batch Testing Docling Extraction
+=====================================================
+=================
+
+Processing 10k1224.pdf...
+2025-11-26 06:29:30,161 - INFO - detected formats: [<InputFormat.PDF: 'pdf'>]
+2025-11-26 06:29:30,212 - INFO - Going to convert document batch...
+2025-11-26 06:29:30,212 - INFO - Initializing pipeline for StandardPdfPipeline with options hash 44ae89a68fc272bc7889292e9b5a1bad
+2025-11-26 06:29:30,219 - INFO - Loading plugin 'docling_defaults'
+2025-11-26 06:29:30,220 - INFO - Registered picture descriptions: ['vlm', 'api']
+2025-11-26 06:29:30,227 - INFO - Loading plugin 'docling_defaults'
+2025-11-26 06:29:30,229 - INFO - Registered ocr engines: ['auto', 'easyocr', 'ocrmac', 'rapidocr', 'tesserocr', 'tesseract']
+2025-11-26 06:29:31,123 - INFO - Auto OCR model selected ocrmac.
+2025-11-26 06:29:31,129 - INFO - Accelerator device: 'mps'
+2025-11-26 06:29:32,690 - INFO - Accelerator device: 'mps'
+2025-11-26 06:29:33,631 - INFO - Processing document 10k1224.pdf
+2025-11-26 06:40:08,046 - INFO - Finished converting document 10k1224.pdf in 637.93 sec.
+  ✓ Found 298 tables
+2025-11-26 06:40:08,049 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+
+  Table 1 preview:
+    | Securities registered pursuant to Section 12(b)
+of the Act: Title of each class                      
+| Trading Symbol(s)   | Name of exchange ...
+2025-11-26 06:40:08,076 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+
+  Table 2 preview:
+    | Table of Contents                              
+| Part   | Item   |   Page |
+|----------------------------------------------------
+------------------------------...
+2025-11-26 06:40:08,084 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+
+  Table 3 preview:
+    | Category                |                      
+| Metric                                             
+| At December 31, 2024   |
+|-------------------------|----------------------...
+2025-11-26 06:40:08,087 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,092 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,093 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,094 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,095 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,096 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,099 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,100 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,100 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,101 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,102 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,105 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,106 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,108 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,109 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,109 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,110 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,112 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,113 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,113 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,115 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,117 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,118 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,119 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,120 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,120 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,122 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,122 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,123 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,123 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,123 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,125 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,127 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,128 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,130 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,130 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,131 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,132 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,132 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,133 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,134 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,134 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,135 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,135 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,136 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,137 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,139 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,139 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,142 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,144 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,145 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,145 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,146 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,147 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,147 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,148 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,148 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,150 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,152 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,153 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,154 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,154 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,154 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,156 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,159 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,161 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,162 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,163 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,164 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,164 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,165 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,166 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,167 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,169 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,170 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,171 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,172 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,173 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,175 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,175 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,177 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,178 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,180 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,182 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,183 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,184 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,187 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,188 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,190 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,191 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,195 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,200 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,200 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,201 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,201 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,202 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,205 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,208 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,211 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,213 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,214 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,214 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,217 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,221 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,225 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,227 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,228 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,232 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,234 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,237 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,238 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,240 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,241 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,244 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,247 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,248 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,249 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,249 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,250 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,250 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,250 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,260 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,267 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,273 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,275 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,277 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,278 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,278 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,278 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,278 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,281 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,283 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,284 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,284 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,285 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,286 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,288 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,291 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,294 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,296 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,296 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,303 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,305 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,307 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,308 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,308 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,308 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,308 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,309 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,310 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,311 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,311 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,313 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,314 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,316 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,318 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,319 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,321 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,321 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,322 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,322 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,327 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,328 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,330 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,331 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,333 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,336 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,338 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,340 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,341 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,341 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,342 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,343 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,344 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,345 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,345 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,345 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,346 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,346 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,346 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,347 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,347 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,348 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,348 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,349 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,349 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,349 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,350 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,352 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,353 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,353 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,353 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,354 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,354 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,356 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,357 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,359 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,361 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,361 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,362 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,363 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,365 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,367 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,368 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,370 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,371 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,372 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,374 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,374 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,374 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,375 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,376 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,377 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,377 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,379 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,380 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,380 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,380 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,382 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,383 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,384 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,384 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,384 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,386 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,387 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,391 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,394 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,398 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,398 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,400 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,400 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,400 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,401 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,401 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,401 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,402 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,402 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,403 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,403 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,403 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,404 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,404 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,405 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,406 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,406 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,408 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,408 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,408 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,408 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,410 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,412 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,413 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,413 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,413 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,413 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,414 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,415 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,416 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,417 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,418 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,418 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,418 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,421 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,423 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,426 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,426 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,427 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,427 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,427 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,427 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,428 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,428 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,428 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,428 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,429 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,429 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,431 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,435 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,438 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,439 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,439 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,439 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,446 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,449 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,452 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,455 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,456 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,459 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,463 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,463 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,464 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,466 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,471 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,475 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:40:08,476 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+
+Searching for contractual principal table...
+  ✓ Found 2 candidate table(s)
+    Table 91: Score 3/5
+    Table 111: Score 3/5
+
+Processing 10q0320.pdf...
+2025-11-26 06:40:08,633 - INFO - detected formats: [<InputFormat.PDF: 'pdf'>]
+2025-11-26 06:40:08,655 - INFO - Going to convert document batch...
+2025-11-26 06:40:08,656 - INFO - Initializing pipeline for StandardPdfPipeline with options hash 44ae89a68fc272bc7889292e9b5a1bad
+2025-11-26 06:40:08,656 - INFO - Auto OCR model selected ocrmac.
+2025-11-26 06:40:08,656 - INFO - Accelerator device: 'mps'
+2025-11-26 06:40:09,999 - INFO - Accelerator device: 'mps'
+2025-11-26 06:40:10,957 - INFO - Processing document 10q0320.pdf
+2025-11-26 06:47:07,403 - INFO - Finished converting document 10q0320.pdf in 418.79 sec.
+  ✓ Found 228 tables
+2025-11-26 06:47:07,407 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+
+  Table 1 preview:
+    | Title of each class                            
+| Trading Symbol(s)   | Name of exchange ...
+2025-11-26 06:47:07,410 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+
+  Table 2 preview:
+    | Table of Contents                              
+| Part   | Item   | Page   |
+|----------------------------------------------------
+------------------------------...
+2025-11-26 06:47:07,415 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+
+  Table 3 preview:
+    |                                                
+| Three Months Ended March 31,   | Three Months Ended
+March 31,   |
+|----------------------------------------------------
+-------|-----------...
+2025-11-26 06:47:07,418 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,419 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,420 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,421 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,422 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,423 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,425 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,427 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,427 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,428 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,429 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,429 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,430 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,430 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,432 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,433 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,434 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,434 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,435 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,436 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,437 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,440 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,441 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,442 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,442 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,443 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,443 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,445 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,446 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,447 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,448 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,449 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,450 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,450 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,451 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,451 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,452 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,453 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,453 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,454 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,454 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,454 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,455 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,456 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,456 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,457 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,457 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,460 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,462 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,463 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,463 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,465 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,466 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,466 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,467 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,467 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,468 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,470 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,470 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,471 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,473 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,476 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,477 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,477 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,478 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,479 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,480 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,481 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,482 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,482 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,484 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,485 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,485 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,486 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,487 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,488 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,490 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,491 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,492 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,492 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,493 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,494 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,494 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,495 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,496 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,496 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,497 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,497 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,498 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,501 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,502 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,506 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,509 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,513 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,513 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,513 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,514 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,517 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,519 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,523 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,525 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,526 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,526 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,530 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,535 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,539 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,540 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,543 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,547 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,548 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,549 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,549 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,550 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,551 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,552 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,554 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,557 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,557 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,558 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,559 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,559 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,559 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,563 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,568 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,572 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,576 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,578 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,579 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,580 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,582 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,583 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,584 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,584 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,584 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,586 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,589 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,589 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,590 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,590 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,593 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,595 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,597 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,600 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,603 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,605 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,606 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,609 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,612 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,613 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,614 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,616 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,617 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,617 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,617 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,617 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,618 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,619 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,621 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,621 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,623 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,624 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,625 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,626 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,627 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,627 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,628 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,629 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,629 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,630 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,631 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,631 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,632 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,632 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,633 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,633 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,634 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,634 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,637 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,639 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,640 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,640 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,641 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,644 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,644 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,646 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,647 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,649 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,650 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,650 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,651 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,652 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,653 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,654 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,655 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,656 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,657 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,657 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,657 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,657 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,658 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,658 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,660 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,661 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,662 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,665 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,669 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,669 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,670 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,670 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,673 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,675 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,676 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,676 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,677 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,677 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,677 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,678 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,678 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,678 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,685 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,688 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,690 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,691 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,692 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+2025-11-26 06:47:07,692 - WARNING - Usage of TableItem.export_to_markdown() without `doc` argument is deprecated.
+
+Searching for contractual principal table...
+  ✓ Found 3 candidate table(s)
+    Table 2: Score 3/5
+    Table 94: Score 3/5
+    Table 118: Score 3/5
+
+=====================================================
+=================
+Batch Test Complete!
+=====================================================
+=================
+
+  PDFs Processed: 2/2
+  Total Tables Extracted: 526
+  Contractual Principal Tables: 2
+
+✓ Results saved to batch_test_results.json
+
+✓ SUCCESS! Docling extracted 526 tables
+Ready to process remaining 4 PDFs
