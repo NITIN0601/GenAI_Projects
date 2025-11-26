@@ -1,0 +1,43 @@
+{
+  "title": "Difference Between Contractual Principal and Fair Value",
+  "unit": "millions USD",
+  "periods": [],
+  "data": {
+    "loans_and_other_debt": [],
+    "nonaccrual_loans": [],
+    "borrowings": []
+  },
+  "sources": [
+    {
+      "source": "10k1224.pdf",
+      "page": 105,
+      "title": "Table_1",
+      "periods": [],
+      "data": {
+        "nonaccrual_loans": {
+          "label": "Nonaccrual loan\ndays past due",
+          "values": [
+            90,
+            null,
+            155
+          ]
+        },
+        "borrowings": {
+          "label": "Borrowings3",
+          "values": [
+            null,
+            3,
+            249
+          ]
+        }
+      }
+    },
+    {
+      "source": "10q0320.pdf",
+      "page": 57,
+      "title": "1 Difference Between Contractual Principal and Fair Value",
+      "periods": [],
+      "data": {}
+    }
+  ]
+}

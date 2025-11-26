@@ -1,0 +1,113 @@
+# ============================================================================
+# Financial RAG System - Requirements
+# ============================================================================
+# Production-ready dependencies with exact versions for reproducibility
+# Last updated: 2025-11-25
+# ============================================================================
+
+# Core PDF Processing - Docling (Advanced)
+# ============================================================================
+docling==2.63.0                    # IBM's advanced PDF parser with layout analysis
+docling-core==2.52.0               # Core Docling functionality
+docling-ibm-models==3.10.2         # Pre-trained models for table detection
+docling-parse==4.7.1               # PDF parsing backend
+
+# PDF Processing - Legacy (Fallback)
+# ============================================================================
+PyMuPDF==1.26.5                    # Fast PDF rendering and text extraction
+pdfplumber==0.11.8                 # Table extraction (fallback method)
+beautifulsoup4==4.14.2             # HTML parsing for table structure
+lxml==6.0.2                        # XML/HTML parser backend
+
+# Vector Databases
+# ============================================================================
+chromadb==0.4.22                   # Primary vector database (embedded)
+faiss-cpu==1.13.0                  # Fast similarity search (CPU version)
+
+# Embeddings & ML
+# ============================================================================
+sentence-transformers==2.3.1       # Local embedding generation
+torch==2.8.0                       # PyTorch for ML models
+torchvision==0.23.0                # Vision models (required by torch)
+
+# LLM Integration
+# ============================================================================
+ollama==0.1.6                      # Local LLM integration (llama3.2)
+
+# LangChain Framework
+# ============================================================================
+langchain==0.1.0                   # RAG framework core
+langchain-community==0.0.13        # Community integrations
+langchain-core==0.1.10             # Core abstractions
+
+# Data Processing
+# ============================================================================
+pandas==2.3.3                      # Data manipulation
+numpy==1.26.4                      # Numerical computing
+
+# Caching & Storage
+# ============================================================================
+redis==5.0.1                       # Redis client for caching
+hiredis==2.3.2                     # High-performance Redis parser
+
+# Data Validation
+# ============================================================================
+pydantic==2.12.4                   # Data validation and settings
+pydantic-settings==2.11.0          # Settings management
+pydantic_core==2.41.5              # Pydantic core (auto-installed)
+
+# Normalization & Parsing
+# ============================================================================
+rapidfuzz==3.6.1                   # Fast fuzzy string matching
+python-dateutil==2.9.0.post0       # Date parsing utilities
+
+# CLI & UI
+# ============================================================================
+typer==0.19.2                      # CLI framework
+rich==14.2.0                       # Rich terminal output
+tqdm==4.67.1                       # Progress bars
+
+# Utilities
+# ============================================================================
+python-dotenv==1.2.1               # Environment variable management
+
+# Testing (Optional - Development Only)
+# ============================================================================
+pytest==7.4.3                      # Testing framework
+pytest-asyncio==0.21.1             # Async testing support
+
+# ============================================================================
+# Installation Instructions
+# ============================================================================
+# 
+# 1. Create virtual environment (recommended):
+#    python3 -m venv venv
+#    source venv/bin/activate  # On Windows: venv\Scripts\activate
+#
+# 2. Install dependencies:
+#    pip install -r requirements.txt
+#
+# 3. Install Ollama separately:
+#    - macOS: brew install ollama
+#    - Linux: curl -fsSL https://ollama.com/install.sh | sh
+#    - Windows: Download from https://ollama.com/download
+#
+# 4. Pull LLM model:
+#    ollama pull llama3.2
+#
+# 5. Install Redis (optional but recommended):
+#    - macOS: brew install redis && brew services start redis
+#    - Linux: sudo apt-get install redis-server
+#    - Windows: Download from https://redis.io/download
+#
+# ============================================================================
+# Notes
+# ============================================================================
+#
+# - Docling models (~2GB) will be downloaded on first use
+# - sentence-transformers model (~90MB) will be downloaded on first use
+# - Total disk space required: ~3GB for models + dependencies
+# - Minimum RAM: 8GB (16GB recommended for large PDFs)
+# - Python version: 3.9+ required
+#
+# ============================================================================

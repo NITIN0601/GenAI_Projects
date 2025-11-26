@@ -1,0 +1,3521 @@
+[
+  {
+    "source": "10k1224.pdf",
+    "title": "Table_1",
+    "page": 105,
+    "headers": [
+      "Cumulative pre-tax\nrecognized in AO",
+      "DVA gain (loss)\nCI",
+      "$ (2",
+      ",868) $"
+    ],
+    "rows": [
+      [
+        "1. Loans and other\nexcluding the non\nDifference betw\n$ in millions",
+        "receivables-specifi\n-credit components\neen Contract",
+        "c credit gains (l\nof gains and loss\nual Principal\nAt\nDecember 31,",
+        "osses) were\nes.\nand Fair\n2024 Dece"
+      ],
+      [
+        "Loans and other re",
+        "ceivables2",
+        "$ 10",
+        ",207 $"
+      ],
+      [
+        "Nonaccrual loan",
+        "s2",
+        "7",
+        ",719"
+      ],
+      [
+        "Borrowings3",
+        "",
+        "3",
+        ",249"
+      ],
+      [
+        "1. Amounts indicate\n2. The majority of th\nand other receiva\nwell below par.\n3. Excludes borrowin\nbased on changes\nThe previous\nconsolidated V\nassets treated\ncommodities a\nattributable to t\nFair Value Loan\n$ in millions",
+        "contractual principa\ne difference betwe\nbles relates to dist\ngs where the repa\nin a reference pric\ntables excl\nIEs, liabilities\nas collat\nnd other liab\nhem.\ns on Nonaccr",
+        "l greater than or (\nen principal and\nressed debt posi\nyment of the initia\ne or index.\nude non-re\nrelated to t\neralized fi\nilities that h\nual Status\nAt\nDecember 31,",
+        "less than) fair\nfair value am\ntions purchas\nl principal am\ncourse\nransfers o\nnancings,\nave speci\n2024 Dece"
+      ],
+      [
+        "Nonaccrual loans",
+        "",
+        "$",
+        "647 $"
+      ],
+      [
+        "Nonaccrual loan\ndays past due",
+        "s 90 or more",
+        "$",
+        "155 $"
+      ]
+    ],
+    "num_rows": 7,
+    "num_cols": 4,
+    "score": 4,
+    "has_loans": true,
+    "has_nonaccrual": true,
+    "has_fair_value": true,
+    "has_contractual": true,
+    "row_headers_found": [
+      "Nonaccrual loans",
+      "Borrowings",
+      "Nonaccrual loans",
+      "Nonaccrual loans"
+    ]
+  },
+  {
+    "source": "10k1224.pdf",
+    "title": "We invest directly, as principal, in financial instruments and other investments to economically hedge certain of our obligations under these DCP awards. Changes in the fair value of such investments, net of financing costs, are recorded in net revenues, and included in Transactional revenues in the Wealth Management business segment. Although changes in compensation expense resulting from changes in the fair value of the referenced investments will generally be offset by changes in the fair value of investments recognized in net revenues, there is typically a timing difference between the immediate recognition of gains and losses on our investments and the deferred recognition of the related compensation expense over the vesting period. While this timing difference may not be material to our Income before provision for income taxes in any individual period, it may impact the Wealth Management business segment reported ratios and operating metrics in certain periods due to potentially significant impacts to net revenues and compensation expenses. At December 31, 2024 and December 31, 2023, substantially all employee-referenced investments that subjected the Firm to price risk were economically hedged.",
+    "page": 40,
+    "headers": [
+      "Deferred cash-based",
+      "aw",
+      "ards",
+      "$ 770 $",
+      "693 $ 761"
+    ],
+    "rows": [
+      [
+        "Return on referenced",
+        "in",
+        "vestments",
+        "672",
+        "668 (716)"
+      ],
+      [
+        "Total recognized in\nexpense",
+        "co",
+        "mpensation",
+        "$ 1,442 $",
+        "1,361 $ 45"
+      ],
+      [
+        "Amounts Recogn\n$ in millions",
+        "iz",
+        "ed in Comp",
+        "ensation Expense\n2024 20",
+        "by Segment\n23 2022"
+      ],
+      [
+        "Institutional Securitie",
+        "s",
+        "",
+        "$ 150 $",
+        "162 $ (97)"
+      ],
+      [
+        "Wealth Management",
+        "",
+        "",
+        "1,100",
+        "984 11"
+      ],
+      [
+        "Investment Managem",
+        "en",
+        "t",
+        "192",
+        "215 131"
+      ],
+      [
+        "Total recognized in\nexpense",
+        "co",
+        "mpensation",
+        "$ 1,442 $",
+        "1,361 $ 45"
+      ]
+    ],
+    "num_rows": 7,
+    "num_cols": 5,
+    "score": 2,
+    "has_loans": false,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": true,
+    "row_headers_found": []
+  },
+  {
+    "source": "10k1224.pdf",
+    "title": "Other key macroeconomic variables used in the ACL calculation include corporate credit spreads, interest rates and commercial real estate indices. See Note 2 to the financial statements for a discussion of the Firm\u2019s ACL methodology under CECL.",
+    "page": 65,
+    "headers": [
+      "Accrual",
+      "99.2 %",
+      "WM 99.",
+      "7 %",
+      "IS 98",
+      ".9 %"
+    ],
+    "rows": [
+      [
+        "Nonaccrual1",
+        "0.8 %",
+        "0.",
+        "3 %",
+        "1",
+        ".1 %"
+      ],
+      [
+        ". Nonaccrual loa\ncontractually du\nNet Charge-o",
+        "ns are loans where pri\ne or are past due 90 days\nff Ratios for Loans",
+        "ncipal or i\nor more.\nHeld fo",
+        "nterest is\nr Inves",
+        "n\ntm",
+        "ot expecte\nent"
+      ],
+      [
+        "$ in millions",
+        "Secured\nLending\nCorporate Facilities",
+        "R\nCRE",
+        "esidentia\nReal\nEstate",
+        "l",
+        "SBL\nand\nOther"
+      ],
+      [
+        "2024",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "Net charge-off\nratio 1",
+        "0.57 % 0.03 %",
+        "1.87 %",
+        "\u2014",
+        "%",
+        "0.03 %"
+      ],
+      [
+        "Average loans",
+        "$ 6,895 $ 43,158 $",
+        "8,620 $",
+        "63,204",
+        "",
+        "$ 91,221"
+      ],
+      [
+        "2023",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "Net charge-off\nratio 1",
+        "0.47 % \u2014 %",
+        "1.50 %",
+        "\u2014",
+        "%",
+        "\u2014 %"
+      ],
+      [
+        "Average loans",
+        "$ 7,062 $ 37,702 $",
+        "8,590 $",
+        "57,177",
+        "",
+        "$ 91,126"
+      ],
+      [
+        "2022",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "Net charge-off\nratio 1",
+        "(0.09) % 0.01 %",
+        "0.09 %",
+        "\u2014",
+        "%",
+        "0.02 %"
+      ],
+      [
+        "Average loans",
+        "$ 6,544 $ 33,172 $",
+        "8,234 $",
+        "49,937",
+        "",
+        "$ 93,427"
+      ],
+      [
+        "RE\u2014Commercia\nBL\u2014Securities-b\n. Net charge-off\naverage loans\nnstitutional",
+        "l real estate\nased lending\nratio represents gross ch\nheld for investment before\nSecurities Loans a",
+        "arge-offs ne\nACL.\nnd Lendi",
+        "t of reco\nng Co",
+        "veri\nm",
+        "es divided\nmitment"
+      ],
+      [
+        "$ in millions",
+        "Contra\n< 1",
+        "At Dece",
+        "mber 31,",
+        "20",
+        "24"
+      ],
+      [
+        null,
+        null,
+        "ctual Years",
+        "to Matu",
+        "rity",
+        ">15"
+      ],
+      [
+        null,
+        null,
+        "1-5",
+        "5-15",
+        "",
+        null
+      ],
+      [
+        "Loans\nAA",
+        "$ 3 $",
+        "575 $",
+        "187",
+        "$",
+        "\u2014 $"
+      ],
+      [
+        "A",
+        "894",
+        "588",
+        "164",
+        "",
+        "\u2014"
+      ],
+      [
+        "BBB",
+        "5,165",
+        "13,185",
+        "91",
+        "",
+        "124"
+      ],
+      [
+        "BB",
+        "11,235",
+        "24,467",
+        "2,592",
+        "",
+        "358"
+      ],
+      [
+        "Other NIG",
+        "8,520",
+        "12,776",
+        "1,673",
+        "",
+        "145"
+      ],
+      [
+        "Unrated2",
+        "227",
+        "1,176",
+        "420",
+        "",
+        "2,503"
+      ],
+      [
+        "Total loans, ne",
+        "t of ACL 26,044",
+        "52,767",
+        "5,127",
+        "",
+        "3,130"
+      ],
+      [
+        "Lending comm\nAAA",
+        "itments\n\u2014",
+        "75",
+        "\u2014",
+        "",
+        "\u2014"
+      ],
+      [
+        "AA",
+        "2,560",
+        "4,285",
+        "88",
+        "",
+        "\u2014"
+      ],
+      [
+        "A",
+        "8,226",
+        "21,372",
+        "1,091",
+        "",
+        "\u2014"
+      ],
+      [
+        "BBB",
+        "10,135",
+        "54,752",
+        "1,507",
+        "",
+        "146"
+      ],
+      [
+        "BB",
+        "3,174",
+        "23,239",
+        "3,062",
+        "",
+        "941"
+      ],
+      [
+        "Other NIG",
+        "1,074",
+        "17,436",
+        "3,956",
+        "",
+        "2"
+      ],
+      [
+        "Unrated2",
+        "14",
+        "93",
+        "33",
+        "",
+        "\u2014"
+      ],
+      [
+        "Total lending\ncommitments",
+        "25,183 1",
+        "21,252",
+        "9,737",
+        "",
+        "1,089 1"
+      ],
+      [
+        "Total exposure",
+        "$ 51,227 $ 1",
+        "74,019 $",
+        "14,864",
+        "$",
+        "4,219 $ 2"
+      ]
+    ],
+    "num_rows": 32,
+    "num_cols": 6,
+    "score": 2,
+    "has_loans": false,
+    "has_nonaccrual": true,
+    "has_fair_value": false,
+    "has_contractual": true,
+    "row_headers_found": [
+      "Nonaccrual loans",
+      "Nonaccrual loans"
+    ]
+  },
+  {
+    "source": "10k1224.pdf",
+    "title": "Financial Instruments Not Measured at Fair Value",
+    "page": 104,
+    "headers": [
+      "",
+      "",
+      "",
+      "Ca\nV",
+      "rrying\nalue",
+      "L",
+      "evel 1",
+      "Fair V Level 2",
+      "alue Level 3",
+      ""
+    ],
+    "rows": [
+      [
+        "Financial ass\nCash and cash",
+        "ets\nequivalen",
+        "ts",
+        "$",
+        "105,386",
+        "$",
+        "105,386 $",
+        "\u2014",
+        "$ \u2014",
+        "$"
+      ],
+      [
+        "Investment se\nHTM",
+        "curities\u2014",
+        "",
+        "",
+        "61,071",
+        "",
+        "15,803",
+        "34,180",
+        "1,220",
+        ""
+      ],
+      [
+        "Securities purc\nunder agree\nresell",
+        "hased\nments to",
+        "",
+        "",
+        "118,565",
+        "",
+        "\u2014",
+        "117,151",
+        "1,450",
+        ""
+      ],
+      [
+        "Securities borr",
+        "owed",
+        "",
+        "",
+        "123,859",
+        "",
+        "\u2014",
+        "123,859",
+        "\u2014",
+        ""
+      ],
+      [
+        "Customer and\nreceivables",
+        "other",
+        "",
+        "",
+        "79,586",
+        "",
+        "\u2014",
+        "75,361",
+        "4,056",
+        ""
+      ],
+      [
+        "Loans1:\nHeld for inve",
+        "stment",
+        "",
+        "",
+        "225,834",
+        "",
+        "\u2014",
+        "17,859",
+        "202,297",
+        ""
+      ],
+      [
+        "Held for sale",
+        "",
+        "",
+        "",
+        "12,319",
+        "",
+        "\u2014",
+        "6,324",
+        "6,115",
+        ""
+      ],
+      [
+        "Other assets",
+        "",
+        "",
+        "",
+        "839",
+        "",
+        "\u2014",
+        "839",
+        "\u2014",
+        ""
+      ],
+      [
+        "Financial liabi\nDeposits",
+        "lities",
+        "",
+        "$",
+        "369,508",
+        "$",
+        "\u2014 $",
+        "370,039",
+        "$ \u2014",
+        "$"
+      ],
+      [
+        "Securities sold\nagreements t\nrepurchase",
+        "under\no",
+        "",
+        "",
+        "49,111",
+        "",
+        "\u2014",
+        "49,103",
+        "\u2014",
+        ""
+      ],
+      [
+        "Securities loan",
+        "ed",
+        "",
+        "",
+        "15,226",
+        "",
+        "\u2014",
+        "15,228",
+        "\u2014",
+        ""
+      ],
+      [
+        "Other secured",
+        "financings",
+        "",
+        "",
+        "7,514",
+        "",
+        "\u2014",
+        "7,511",
+        "\u2014",
+        ""
+      ],
+      [
+        "Customer and\npayables",
+        "other",
+        "",
+        "",
+        "175,890",
+        "",
+        "\u2014",
+        "175,890",
+        "\u2014",
+        ""
+      ],
+      [
+        "Borrowings",
+        "",
+        "",
+        "",
+        "185,487",
+        "",
+        "\u2014",
+        "188,269",
+        "93",
+        ""
+      ],
+      [
+        "",
+        "",
+        "",
+        "Com\nAm",
+        "mitment\nount",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "Lending comm",
+        "itments2",
+        "",
+        "$",
+        "175,774",
+        "$",
+        "\u2014 $",
+        "1,094",
+        "$ 839",
+        "$"
+      ],
+      [
+        "$ in millions",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "At Decem",
+        "ber 31, 20",
+        "23",
+        ""
+      ],
+      [
+        null,
+        null,
+        null,
+        "Ca\nV",
+        "rrying\nalue",
+        "",
+        "",
+        "Fair V",
+        "alue",
+        ""
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        "L",
+        "evel 1",
+        "Level 2",
+        "Level 3",
+        ""
+      ],
+      [
+        "Financial ass\nCash and cash",
+        "ets\nequivalen",
+        "ts",
+        "$",
+        "89,232",
+        "$",
+        "89,232 $",
+        "\u2014",
+        "$ \u2014",
+        "$"
+      ],
+      [
+        "Investment se\nHTM",
+        "curities\u2014",
+        "",
+        "",
+        "66,694",
+        "",
+        "21,937",
+        "34,411",
+        "1,105",
+        ""
+      ],
+      [
+        "Securities purc\nunder agree\nresell",
+        "hased\nments to",
+        "",
+        "",
+        "110,733",
+        "",
+        "\u2014",
+        "108,099",
+        "2,674",
+        ""
+      ],
+      [
+        "Securities borr",
+        "owed",
+        "",
+        "",
+        "121,091",
+        "",
+        "\u2014",
+        "121,091",
+        "\u2014",
+        ""
+      ],
+      [
+        "Customer and\nreceivables",
+        "other",
+        "",
+        "",
+        "74,337",
+        "",
+        "\u2014",
+        "70,110",
+        "4,031",
+        ""
+      ],
+      [
+        "Loans1:\nHeld for inve",
+        "stment",
+        "",
+        "",
+        "203,385",
+        "",
+        "\u2014",
+        "20,125",
+        "176,291",
+        ""
+      ],
+      [
+        "Held for sale",
+        "",
+        "",
+        "",
+        "15,255",
+        "",
+        "\u2014",
+        "8,652",
+        "6,672",
+        ""
+      ],
+      [
+        "Other assets",
+        "",
+        "",
+        "",
+        "704",
+        "",
+        "\u2014",
+        "704",
+        "\u2014",
+        ""
+      ],
+      [
+        "Financial liabi\nDeposits",
+        "lities",
+        "",
+        "$",
+        "345,332",
+        "$",
+        "\u2014 $",
+        "345,391",
+        "$ \u2014",
+        "$"
+      ],
+      [
+        "Securities sold\nagreements t\nrepurchase",
+        "under\no",
+        "",
+        "",
+        "61,631",
+        "",
+        "\u2014",
+        "61,621",
+        "\u2014",
+        ""
+      ],
+      [
+        "Securities loan",
+        "ed",
+        "",
+        "",
+        "15,057",
+        "",
+        "\u2014",
+        "15,055",
+        "\u2014",
+        ""
+      ],
+      [
+        "Other secured",
+        "financings",
+        "",
+        "",
+        "2,756",
+        "",
+        "\u2014",
+        "2,756",
+        "\u2014",
+        ""
+      ],
+      [
+        "Customer and\npayables",
+        "other",
+        "",
+        "",
+        "208,015",
+        "",
+        "\u2014",
+        "208,015",
+        "\u2014",
+        ""
+      ],
+      [
+        "Borrowings",
+        "",
+        "",
+        "",
+        "169,832",
+        "",
+        "\u2014",
+        "171,009",
+        "4",
+        ""
+      ],
+      [
+        "",
+        "",
+        "",
+        "Com\nAm",
+        "mitment\nount",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "Lending comm",
+        "itments2",
+        "",
+        "$",
+        "149,464",
+        "$",
+        "\u2014 $",
+        "1,338",
+        "$ 749",
+        "$"
+      ]
+    ],
+    "num_rows": 35,
+    "num_cols": 10,
+    "score": 2,
+    "has_loans": true,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": false,
+    "row_headers_found": [
+      "Borrowings",
+      "Borrowings"
+    ]
+  },
+  {
+    "source": "10k1224.pdf",
+    "title": "The Firm\u2019s Borrowings include notes carried and managed on a fair value basis. These include instruments whose payments and redemption values are linked to the performance of a specific index, a basket of stocks, a specific equity security, a commodity, a credit exposure or basket of credit exposures; and instruments with various interest rate-related features, including step-ups, step-downs and zero coupons. Also included are unsecured contracts that are not classified as OTC derivatives because they fail initial net investment criteria. To minimize the exposure from such instruments, the Firm has entered into various swap contracts and purchased options that effectively convert the borrowing costs into floating rates. The swaps and purchased options used to economically hedge the embedded features are derivatives and also are carried at fair value. Changes in fair value related to the notes and economic hedges are reported in Trading revenues. See Notes 2 and 5 for further information on borrowings carried at fair value.",
+    "page": 120,
+    "headers": [
+      "Put options embed",
+      "ded in d",
+      "ebt agreements $",
+      "429 $"
+    ],
+    "rows": [
+      [
+        "Liquidity obligation",
+        "s1",
+        "$",
+        "3,597 $"
+      ],
+      [
+        "1. Includes obligation\nSubordinated D",
+        "s to sup\nebt",
+        "port secondary market",
+        "trading.\n2024"
+      ],
+      [
+        "Contractual weight",
+        "ed aver",
+        "age coupon",
+        "4.5 %"
+      ],
+      [
+        "Subordinated\nrequirements o\nprimarily is\nsubordinated d\nRates for Borr\nOne Year",
+        "debt g\nf the\nU.S.\nebt ran\nowing",
+        "enerally is issu\nFirm or its re\ndollar denom\nge from 2025 to\ns with Original",
+        "ed to meet\ngulated subsi\ninated. Mat\n2039.\nMaturities Gr\nAt Dece\n2024 20"
+      ],
+      [
+        "Contractual weight",
+        "ed aver",
+        "age coupon1",
+        "4.1 % 3"
+      ],
+      [
+        "Weighted average\nderivatives",
+        "coupon",
+        "after hedging",
+        "5.6 % 6"
+      ]
+    ],
+    "num_rows": 6,
+    "num_cols": 4,
+    "score": 2,
+    "has_loans": false,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": true,
+    "row_headers_found": []
+  },
+  {
+    "source": "10k1224.pdf",
+    "title": "18. Interest Income and Interest Expense",
+    "page": 136,
+    "headers": [
+      "$ in millions",
+      "",
+      "",
+      "2024 2023",
+      "2022"
+    ],
+    "rows": [
+      [
+        "Interest incom",
+        "e",
+        "",
+        "",
+        ""
+      ],
+      [
+        "Cash and cash",
+        "equivalents1",
+        "",
+        "$ 3,068 $ 3,4",
+        "08 $ 914"
+      ],
+      [
+        "Investment se",
+        "curities",
+        "",
+        "5,161 3,9",
+        "92 3,066"
+      ],
+      [
+        "Loans",
+        "",
+        "",
+        "13,771 12,4",
+        "24 6,988"
+      ],
+      [
+        "Securities purc\nresell2",
+        "hased under agre",
+        "ements to",
+        "12,416 7,7",
+        "62 2,188"
+      ],
+      [
+        "Securities borr",
+        "owed3",
+        "",
+        "5,391 5,1",
+        "91 1,020"
+      ],
+      [
+        "Trading assets",
+        ", net of Trading lia",
+        "bilities",
+        "5,924 4,4",
+        "88 2,484"
+      ],
+      [
+        "Customer rece",
+        "ivables and Other1",
+        ",4",
+        "8,404 8,5",
+        "84 4,935"
+      ],
+      [
+        "Total interest",
+        "income",
+        "",
+        "$ 54,135 $ 45,8",
+        "49 $ 21,595"
+      ],
+      [
+        "Interest expe\nDeposits",
+        "nse",
+        "",
+        "$ 10,368 $ 8,2",
+        "16 $ 1,825"
+      ],
+      [
+        "Borrowings",
+        "",
+        "",
+        "13,242 11,4",
+        "37 5,054"
+      ],
+      [
+        "Securities sold\nrepurchase5",
+        "under agreement",
+        "s to",
+        "10,787 6,7",
+        "37 1,760"
+      ],
+      [
+        "Securities loan",
+        "ed6",
+        "",
+        "1,036 7",
+        "84 503"
+      ],
+      [
+        "Customer pay",
+        "ables and Other4,7",
+        "",
+        "10,091 10,4",
+        "45 3,126"
+      ],
+      [
+        "Total interest",
+        "expense",
+        "",
+        "$ 45,524 $ 37,6",
+        "19 $ 12,268"
+      ],
+      [
+        "Net interest",
+        "",
+        "",
+        "$ 8,611 $ 8,2",
+        "30 $ 9,327"
+      ],
+      [
+        "1. In 2023, inte\npresented se\nreceivables\nequivalents to\n2. Includes inter\n3. Includes fees\n4. Certain prior-\npresentation.\ninterest expe\neffect on net\nInstitutional S\n5. Includes inter\n6. Includes fees\n7. Includes fee\ntransactions,\nInterest inc\nincome stat\nrelated mar\nthe instrum\nrevenues or\nwithin Inter\nAccrued Int\n$ in millions",
+        "rest-bearing Cash\nparately for the fir\nand Other have b\nalign with the curre\nest paid on Securitie\npaid on Securities b\nperiod amounts hav\nThis adjustment re\nnse of $4,432 millio\ninterest income, wit\necurities segment. S\nest received on Sec\nreceived on Securit\ns received from Eq\nwhich can be under\nome and Inte\nement based o\nket convention\nent\u2019s fair value\nInvestments\nest income or\nerest",
+        "and cash equ\nst time. The\neen disaggreg\nnt presentation\ns purchased u\norrowed.\ne been adjuste\nsulted in a de\nn for the year\nh the entire im\nee Note 2 for\nurities sold und\nies loaned.\nuity Financing\neither margin\nrest expe\nn the natu\ns. When in\n, interest i\nrevenues.\nInterest ex",
+        "ivalents and relate\nprior year amounts\nated to exclude C\n.\nnder agreements to\nd to conform with th\ncrease to both inter\nended December 31\npact to the Firm reco\nadditional informatio\ner agreements to re\ncustomers related\nor securities lending\nnse are classif\nre of the instr\ncluded as a co\ns included wit\nOtherwise, it\npense.\nAt\nDecember 31, D\n2024",
+        "d interest were\nfor Custome\nash and cash\nresell.\ne current-period\nest income and\n, 2023, and no\nrded within the\nn.\npurchase.\nto their shor\narrangements.\nied in the\nument and\nmponent of\nhin Trading\nis included\nAt\necember 31,\n2023"
+      ],
+      [
+        "Customer and",
+        "other receivables",
+        "",
+        "$ 3,322 $",
+        "4,206"
+      ],
+      [
+        "Customer and",
+        "other payables",
+        "",
+        "3,938",
+        "4,360"
+      ]
+    ],
+    "num_rows": 19,
+    "num_cols": 5,
+    "score": 2,
+    "has_loans": true,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": false,
+    "row_headers_found": [
+      "Borrowings"
+    ]
+  },
+  {
+    "source": "10q0320.pdf",
+    "title": "Total Assets by Business Segment",
+    "page": 19,
+    "headers": [
+      "None",
+      "None",
+      "IS WM I",
+      "M",
+      "Tota",
+      "l"
+    ],
+    "rows": [
+      [
+        "Assets\nCash and cash",
+        "equivalents $1",
+        "01,615 $ 29,803 $",
+        "91",
+        "$131,",
+        "509"
+      ],
+      [
+        "Trading assets",
+        "at fair value 2",
+        "66,781 389",
+        "3,746",
+        "270,",
+        "916"
+      ],
+      [
+        "Investment sec",
+        "urities",
+        "40,662 75,495",
+        "\u2014",
+        "116,",
+        "157"
+      ],
+      [
+        "Securities purc\nagreements to",
+        "hased under\nresell",
+        "88,008 16,792",
+        "\u2014",
+        "104,",
+        "800"
+      ],
+      [
+        "Securities borro",
+        "wed",
+        "71,826 474",
+        "\u2014",
+        "72,",
+        "300"
+      ],
+      [
+        "Customer and\nreceivables",
+        "other",
+        "58,523 15,216",
+        "685",
+        "74,",
+        "424"
+      ],
+      [
+        "Loans1",
+        "",
+        "66,171 82,516",
+        "10",
+        "148,",
+        "697"
+      ],
+      [
+        "Other assets2",
+        "",
+        "13,903 13,139",
+        "1,950",
+        "28,",
+        "992"
+      ],
+      [
+        "Total assets",
+        "$7",
+        "07,489 $233,824 $",
+        "6,482",
+        "$947,",
+        "795"
+      ],
+      [
+        "$ in millions",
+        "",
+        "At December 31,",
+        "2019",
+        "",
+        ""
+      ],
+      [
+        null,
+        null,
+        "IS WM I",
+        "M",
+        "Tota",
+        "l"
+      ],
+      [
+        "Assets\nCash and cash",
+        "equivalents $",
+        "67,657 $ 14,247 $",
+        "267",
+        "$ 82,",
+        "171"
+      ],
+      [
+        "Trading assets",
+        "at fair value 2",
+        "93,477 47",
+        "3,586",
+        "297,",
+        "110"
+      ],
+      [
+        "Investment sec",
+        "urities",
+        "38,524 67,201",
+        "\u2014",
+        "105,",
+        "725"
+      ],
+      [
+        "Securities purc\nagreements to",
+        "hased under\nresell",
+        "80,744 7,480",
+        "\u2014",
+        "88,",
+        "224"
+      ],
+      [
+        "Securities borro",
+        "wed 1",
+        "06,199 350",
+        "\u2014",
+        "106,",
+        "549"
+      ],
+      [
+        "Customer and\nreceivables",
+        "other",
+        "39,743 15,190",
+        "713",
+        "55,",
+        "646"
+      ],
+      [
+        "Loans1",
+        "",
+        "50,557 80,075",
+        "5",
+        "130,",
+        "637"
+      ],
+      [
+        "Other assets2",
+        "",
+        "14,300 13,092",
+        "1,975",
+        "29,",
+        "367"
+      ],
+      [
+        "Total assets",
+        "$6",
+        "91,201 $197,682 $",
+        "6,546",
+        "$895,",
+        "429"
+      ]
+    ],
+    "num_rows": 20,
+    "num_cols": 6,
+    "score": 2,
+    "has_loans": true,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": false,
+    "row_headers_found": []
+  },
+  {
+    "source": "10q0320.pdf",
+    "title": "Allowance for Credit Losses Rollforward\u2014Loans and Lending Commitments",
+    "page": 34,
+    "headers": [
+      "December 31, 20191",
+      "",
+      "$",
+      "590"
+    ],
+    "rows": [
+      [
+        "Effect of CECL adoption",
+        "",
+        "",
+        "(41)"
+      ],
+      [
+        "Gross charge-offs",
+        "",
+        "",
+        "(32)"
+      ],
+      [
+        "Provision",
+        "",
+        "",
+        "407"
+      ],
+      [
+        "Other",
+        "",
+        "",
+        "(3)"
+      ],
+      [
+        "March 31, 2020",
+        "",
+        "$",
+        "921"
+      ],
+      [
+        "Allowance for credit loss",
+        "es\u2014Loans",
+        "$",
+        "617"
+      ],
+      [
+        "Allowance for credit loss",
+        "es\u2014Lending commit",
+        "ments",
+        "304"
+      ],
+      [
+        "1. At December 31, 2019,\ncommitments was $349\nCredit exposure\ncommitments is me\nmanagement standa\nthe aggregate allow\nthe borrower\u2019s fina\nloan-to-value ratio,\nQualitative and en\nbusiness condition\nlending terms, and\nalso be considered.\nThe aggregate allo\nincreased in the\nprovision for credi\nbusiness segment\nCOVID-19. This p\nactual and expected\nbalances, principall\nloans, as well as rev\nexpected future m\nNote 2 to the financ\nallowance for credi\nStatus of Loans He",
+        "the total allowance for\nmillion and $241 millio\narising from\nasured in accord\nrds. Risk factors\nance for loan and\nncial strength, i\ndebt service rati\nvironmental fact\ns, nature and vo\nvolume and seve\nwance for loans\ncurrent quarter,\nt losses within t\nresulting from\nrovision was pri\nfuture downgra\ny in Corporate re\nisions to our fore\narket and macro\nial statements fo\nt loss methodolo\nld for Investmen\nAt March 31, 2\nIS W",
+        "credit losses for\nn, respectively.\nour loans\nance with ou\nconsidered i\ncommitment\nndustry, faci\no, collateral a\nors such as e\nlume of the\nrity of past d\nand lending\nprincipally\nhe Institutio\nthe econom\nmarily the re\ndes, an incre\nlationship and\ncasts in light\neconomic co\nr a discussion\ngy under CE\nt\n020 At Dece",
+        null
+      ],
+      [
+        null,
+        null,
+        "M IS",
+        null
+      ],
+      [
+        "Current",
+        "99.5%",
+        "99.9% 99.",
+        null
+      ],
+      [
+        "Nonaccrual1",
+        "0.5%",
+        "0.1% 1.",
+        null
+      ]
+    ],
+    "num_rows": 11,
+    "num_cols": 4,
+    "score": 2,
+    "has_loans": false,
+    "has_nonaccrual": true,
+    "has_fair_value": false,
+    "has_contractual": true,
+    "row_headers_found": [
+      "Nonaccrual loans"
+    ]
+  },
+  {
+    "source": "10q0320.pdf",
+    "title": "1 Difference Between Contractual Principal and Fair Value",
+    "page": 57,
+    "headers": [
+      "0",
+      "1"
+    ],
+    "rows": [
+      [
+        NaN,
+        "income statement volatility caused by measurement basis"
+      ],
+      [
+        NaN,
+        "differences between the elected instruments and their associated"
+      ],
+      [
+        NaN,
+        "risk management transactions or to eliminate complexities of"
+      ],
+      [
+        "applying certain accounting models.",
+        NaN
+      ],
+      [
+        NaN,
+        "Borrowings Measured at Fair Value on a Recurring Basis"
+      ],
+      [
+        NaN,
+        "At At"
+      ],
+      [
+        NaN,
+        "March 31, December 31,"
+      ],
+      [
+        "$ in millions",
+        "2020 2019"
+      ],
+      [
+        "Business Unit Responsible for Risk Management",
+        NaN
+      ],
+      [
+        "Equity",
+        "$ 25,089 $ 30,214"
+      ],
+      [
+        "Interest rates",
+        "25,195 27,298"
+      ],
+      [
+        "Commodities",
+        "4,681 4,501"
+      ],
+      [
+        "Credit",
+        "1,179 1,246"
+      ],
+      [
+        "Foreign exchange",
+        "1,018 1,202"
+      ],
+      [
+        "Total",
+        "$ 57,162 $ 64,461"
+      ],
+      [
+        NaN,
+        "Net Revenues from Borrowings under the Fair Value Option"
+      ],
+      [
+        NaN,
+        "Three Months Ended"
+      ],
+      [
+        NaN,
+        "March 31,"
+      ],
+      [
+        "$ in millions",
+        "2020 2019"
+      ],
+      [
+        "Trading revenues",
+        "$ 3,447 $ (2,903)"
+      ],
+      [
+        "Interest expense",
+        "83 93"
+      ],
+      [
+        "Net revenues1",
+        "$ 3,364 $ (2,996)"
+      ]
+    ],
+    "num_rows": 22,
+    "num_cols": 2,
+    "score": 2,
+    "has_loans": false,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": true,
+    "row_headers_found": []
+  },
+  {
+    "source": "10q0324.pdf",
+    "title": "Forecasted U.S. Real GDP Growth Rates in Base Scenario",
+    "page": 29,
+    "headers": [
+      "",
+      "",
+      "4",
+      "Q 2024",
+      "4Q",
+      "202",
+      "5"
+    ],
+    "rows": [
+      [
+        "Year-over-year",
+        "growth rate",
+        "",
+        "1.0 %",
+        "",
+        "",
+        "2.0 %"
+      ],
+      [
+        "See Note 2 t\nfor a discu\nCECL.\nStatus of Lo",
+        "o the financi\nssion of the\nans Held for I\nAt\nIS",
+        "al statem\nFirm\u2019s\nnvestme\nMarch 31,",
+        "ents in the 202\nACL method\nnt\n2024 At Dece",
+        "3 F\nolo\nmbe",
+        "orm\ngy\nr 31,",
+        "10-K\nunder\n2023"
+      ],
+      [
+        null,
+        null,
+        "",
+        "WM IS",
+        "",
+        "W",
+        "M"
+      ],
+      [
+        "Accrual",
+        "9",
+        "9.0%",
+        "99.7% 98.9",
+        "%",
+        "",
+        "99.8%"
+      ],
+      [
+        "Nonaccrual1",
+        "",
+        "1.0%",
+        "0.3% 1.1",
+        "%",
+        "",
+        "0.2%"
+      ],
+      [
+        "1. Nonaccrual lo\ncontractually d\nnstitutional\n$ in millions",
+        "ans are loans w\nue or are past due\nSecurities Lo",
+        "here princi\n90 days or\nans and",
+        "pal or interest is no\nmore.\nLending Comm\nAt March 31, 20",
+        "t e\nit\n24",
+        "xpecte\nment",
+        "d when\ns1"
+      ],
+      [
+        null,
+        null,
+        "Contrac",
+        "tual Years to Maturit",
+        "y",
+        "5",
+        "Total"
+      ],
+      [
+        null,
+        null,
+        "<1",
+        "1-5 5-15",
+        ">1",
+        null,
+        null
+      ],
+      [
+        "Loans\nAA",
+        "$",
+        "1 $",
+        "11 $ 68 $",
+        "",
+        "\u2014 $",
+        "80"
+      ],
+      [
+        "A",
+        "",
+        "1,316",
+        "1,068 176",
+        "",
+        "\u2014",
+        "2,560"
+      ],
+      [
+        "BBB",
+        "",
+        "5,455",
+        "9,821 389",
+        "",
+        "\u2014",
+        "15,665"
+      ],
+      [
+        "BB",
+        "",
+        "10,925",
+        "18,090 2,525",
+        "3",
+        "15",
+        "31,855"
+      ],
+      [
+        "Other NIG",
+        "",
+        "9,356",
+        "11,661 2,851",
+        "1",
+        "71",
+        "24,039"
+      ],
+      [
+        "Unrated2",
+        "",
+        "271",
+        "1,509 94",
+        "3,2",
+        "02",
+        "5,076"
+      ],
+      [
+        "Total loans, ne",
+        "t of ACL",
+        "27,324",
+        "42,160 6,103",
+        "3,6",
+        "88",
+        "79,275"
+      ],
+      [
+        "Lending comm\nAAA",
+        "itments",
+        "\u2014",
+        "50 \u2014",
+        "",
+        "\u2014",
+        "50"
+      ],
+      [
+        "AA",
+        "",
+        "2,531",
+        "3,164 586",
+        "",
+        "\u2014",
+        "6,281"
+      ],
+      [
+        "A",
+        "",
+        "6,627",
+        "21,372 970",
+        "",
+        "\u2014",
+        "28,969"
+      ],
+      [
+        "BBB",
+        "",
+        "9,623",
+        "47,594 890",
+        "",
+        "\u2014",
+        "58,107"
+      ],
+      [
+        "BB",
+        "",
+        "3,238",
+        "18,980 3,809",
+        "4",
+        "65",
+        "26,492"
+      ],
+      [
+        "Other NIG",
+        "",
+        "1,497",
+        "14,817 2,296",
+        "",
+        "3",
+        "18,613"
+      ],
+      [
+        "Unrated2",
+        "",
+        "4",
+        "24 222",
+        "",
+        "\u2014",
+        "250"
+      ],
+      [
+        "Total lending\ncommitment",
+        "s",
+        "23,520 1",
+        "06,001 8,773",
+        "4",
+        "68",
+        "138,762"
+      ],
+      [
+        "Total exposur",
+        "e $",
+        "50,844 $ 1",
+        "48,161 $ 14,876 $",
+        "4,1",
+        "56 $",
+        "218,037"
+      ]
+    ],
+    "num_rows": 24,
+    "num_cols": 7,
+    "score": 2,
+    "has_loans": false,
+    "has_nonaccrual": true,
+    "has_fair_value": false,
+    "has_contractual": true,
+    "row_headers_found": [
+      "Nonaccrual loans",
+      "Nonaccrual loans"
+    ]
+  },
+  {
+    "source": "10q0324.pdf",
+    "title": "Table_1",
+    "page": 69,
+    "headers": [
+      "",
+      "",
+      "",
+      "",
+      "2"
+    ],
+    "rows": [
+      [
+        "Interest inco\nCash and cas",
+        "me\nh equivalents1",
+        "",
+        "$ 903",
+        ""
+      ],
+      [
+        "Investment se",
+        "curities",
+        "",
+        "1,197",
+        ""
+      ],
+      [
+        "Loans",
+        "",
+        "",
+        "3,305",
+        ""
+      ],
+      [
+        "Securities pur",
+        "chased under agreement",
+        "s to resell2",
+        "2,530",
+        ""
+      ],
+      [
+        "Securities bor",
+        "rowed3",
+        "",
+        "1,376",
+        ""
+      ],
+      [
+        "Trading asset",
+        "s, net of Trading liabilities",
+        "",
+        "1,382",
+        ""
+      ],
+      [
+        "Customer rec",
+        "eivables and Other1, 4",
+        "",
+        "2,237",
+        ""
+      ],
+      [
+        "Total interest",
+        "income",
+        "",
+        "$ 12,930",
+        "$"
+      ],
+      [
+        "Interest expe\nDeposits",
+        "nse",
+        "",
+        "$ 2,476",
+        "$"
+      ],
+      [
+        "Borrowings",
+        "",
+        "",
+        "3,223",
+        ""
+      ],
+      [
+        "Securities sol",
+        "d under agreements to re",
+        "purchase5",
+        "2,402",
+        ""
+      ],
+      [
+        "Securities loa",
+        "ned6",
+        "",
+        "224",
+        ""
+      ],
+      [
+        "Customer pay",
+        "ables and Other4, 7",
+        "",
+        "2,809",
+        ""
+      ],
+      [
+        "Total interest",
+        "expense",
+        "",
+        "$ 11,134",
+        "$"
+      ],
+      [
+        "Net interest",
+        "",
+        "",
+        "$ 1,796",
+        "$"
+      ],
+      [
+        "1. In the fourth\nrelated inter\namounts for\nCash and ca\n2. Includes inte\n3. Includes fees\n4. Certain prior\npresentation.\ninterest expe\nquarter of 20\ninformation.\n5. Includes inte\n6. Includes fees\n7. Includes fee\ntransactions,\nInterest inc\nincome stat\nrelated mar\nthe instrum\nrevenues o\nwithin Inter\nAccrued Int\n$ in millions",
+        "quarter of 2023, interest\nest were presented separ\nCustomer receivables and\nsh equivalents to align with\nrest paid on Securities purc\npaid on Securities borrowe\nperiod amounts have been\nThis adjustment resulted\nnse of $890 million and no\n23 for the Institutional Sec\nrest received on Securities\nreceived on Securities loa\ns received from Equity F\nwhich can be under either\nome and Interest\nement based on th\nket conventions. W\nent\u2019s fair value, inte\nr Investments reve\nest income or Intere\nerest",
+        "bearing Cash\nately for the\nOther have be\nthe current pre\nhased under a\nd.\nadjusted to co\nin a decrease\nchange to ne\nurities segmen\nsold under agre\nned.\ninancing custo\nmargin or secu\nexpense a\ne nature of\nhen include\nrest is incl\nnues. Othe\nst expense\nAt March\n2024",
+        "and cash equi\nfirst time. The\nen disaggregated\nsentation.\ngreements to rese\nnform with the cu\nto both interest i\nt interest income\nt. See Note 2 fo\nements to repurc\nmers related to\nrities lending arra\nre classified\nthe instrum\nd as a comp\nuded within\nrwise, it is\n.\n31, At Dec\n2",
+        "vale\nprior\nto\nll.\nrren\nnco\nfor\nr ad\nhas\nthe\nnge\ni\nen\non\nTr\ninc\nemb\n023"
+      ],
+      [
+        "Customer and",
+        "other receivables",
+        "$",
+        "5,149 $",
+        ""
+      ],
+      [
+        "Customer and",
+        "other payables",
+        "",
+        "4,942",
+        ""
+      ]
+    ],
+    "num_rows": 18,
+    "num_cols": 5,
+    "score": 2,
+    "has_loans": true,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": false,
+    "row_headers_found": [
+      "Borrowings"
+    ]
+  },
+  {
+    "source": "10q0325.pdf",
+    "title": "needs. We also monitor key metrics, including asset and liability size and capital usage.",
+    "page": 18,
+    "headers": [
+      "Assets\nCash and cas",
+      "h equivalents",
+      "$",
+      "IS 73,451 $ 1"
+    ],
+    "rows": [
+      [
+        "Trading asset",
+        "s at fair value",
+        "",
+        "385,402"
+      ],
+      [
+        "Investment s",
+        "ecurities",
+        "",
+        "34,722 12"
+      ],
+      [
+        "Securities pu\nagreements",
+        "rchased under\nto resell",
+        "",
+        "94,954 2"
+      ],
+      [
+        "Securities bo",
+        "rrowed",
+        "",
+        "139,436"
+      ],
+      [
+        "Customer an",
+        "d other receivables",
+        "",
+        "53,650 3"
+      ],
+      [
+        "Loans1",
+        "",
+        "",
+        "86,402 16"
+      ],
+      [
+        "Goodwill",
+        "",
+        "",
+        "438 1"
+      ],
+      [
+        "Intangible as",
+        "sets",
+        "",
+        "25"
+      ],
+      [
+        "Other assets2",
+        "",
+        "",
+        "15,239 1"
+      ],
+      [
+        "Total assets",
+        "",
+        "$",
+        "883,719 $ 39"
+      ],
+      [
+        "$ in millions",
+        "",
+        "",
+        "At D"
+      ],
+      [
+        null,
+        null,
+        "",
+        "IS"
+      ],
+      [
+        "Assets\nCash and cas",
+        "h equivalents",
+        "$",
+        "74,079 $ 3"
+      ],
+      [
+        "Trading asset",
+        "s at fair value",
+        "",
+        "320,003"
+      ],
+      [
+        "Investment s",
+        "ecurities",
+        "",
+        "38,096 12"
+      ],
+      [
+        "Securities pu\nagreements",
+        "rchased under\nto resell",
+        "",
+        "100,404 1"
+      ],
+      [
+        "Securities bo",
+        "rrowed",
+        "",
+        "121,901"
+      ],
+      [
+        "Customer an",
+        "d other receivables",
+        "",
+        "47,321 3"
+      ],
+      [
+        "Loans1",
+        "",
+        "",
+        "78,607 15"
+      ],
+      [
+        "Goodwill",
+        "",
+        "",
+        "435 1"
+      ],
+      [
+        "Intangible as",
+        "sets",
+        "",
+        "27"
+      ],
+      [
+        "Other assets2",
+        "",
+        "",
+        "15,735 1"
+      ],
+      [
+        "Total assets",
+        "",
+        "$",
+        "796,608 $ 40"
+      ]
+    ],
+    "num_rows": 23,
+    "num_cols": 4,
+    "score": 2,
+    "has_loans": true,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": false,
+    "row_headers_found": []
+  },
+  {
+    "source": "10q0625.pdf",
+    "title": "market fluctuations. On a regular basis, we review current performance versus established thresholds and assess the need to re-allocate our balance sheet based on business segment needs. We also monitor key metrics, including asset and liability size and capital usage.",
+    "page": 19,
+    "headers": [
+      "Assets\nCash and cas",
+      "h equivalents",
+      "IS $ 88,370 $ 2"
+    ],
+    "rows": [
+      [
+        "Trading asset",
+        "s at fair value",
+        "408,492 1"
+      ],
+      [
+        "Investment s",
+        "ecurities",
+        "34,590 12"
+      ],
+      [
+        "Securities pu\nagreements",
+        "rchased under\nto resell",
+        "92,383 1"
+      ],
+      [
+        "Securities bo",
+        "rrowed",
+        "138,876"
+      ],
+      [
+        "Customer an",
+        "d other receivables",
+        "62,117 3"
+      ],
+      [
+        "Loans1",
+        "",
+        "89,034 16"
+      ],
+      [
+        "Goodwill",
+        "",
+        "443 1"
+      ],
+      [
+        "Intangible as",
+        "sets",
+        "23"
+      ],
+      [
+        "Other assets2",
+        "",
+        "16,835 1"
+      ],
+      [
+        "Total assets",
+        "",
+        "$ 931,163 $ 40"
+      ],
+      [
+        "$ in millions",
+        "",
+        "At D"
+      ],
+      [
+        null,
+        null,
+        "IS"
+      ],
+      [
+        "Assets\nCash and cas",
+        "h equivalents",
+        "$ 74,079 $ 3"
+      ],
+      [
+        "Trading asset",
+        "s at fair value",
+        "320,003"
+      ],
+      [
+        "Investment s",
+        "ecurities",
+        "38,096 12"
+      ],
+      [
+        "Securities pu\nagreements",
+        "rchased under\nto resell",
+        "100,404 1"
+      ],
+      [
+        "Securities bo",
+        "rrowed",
+        "121,901"
+      ],
+      [
+        "Customer an",
+        "d other receivables",
+        "47,321 3"
+      ],
+      [
+        "Loans1",
+        "",
+        "78,607 15"
+      ],
+      [
+        "Goodwill",
+        "",
+        "435 1"
+      ],
+      [
+        "Intangible as",
+        "sets",
+        "27"
+      ],
+      [
+        "Other assets2",
+        "",
+        "15,735 1"
+      ],
+      [
+        "Total assets",
+        "",
+        "$ 796,608 $ 40"
+      ]
+    ],
+    "num_rows": 23,
+    "num_cols": 3,
+    "score": 2,
+    "has_loans": true,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": false,
+    "row_headers_found": []
+  },
+  {
+    "source": "10q0625.pdf",
+    "title": "June 30, December 31, 2025 2024",
+    "page": 40,
+    "headers": [
+      "Assets\nCash and cash e",
+      "quivalents",
+      "",
+      "",
+      "",
+      "$",
+      "",
+      "109,130",
+      "$",
+      "105,386"
+    ],
+    "rows": [
+      [
+        "Trading assets at",
+        "fair value ($21",
+        "9,770 and",
+        "$148,945 pledged as",
+        "collateral)",
+        "",
+        "",
+        "425,519",
+        "",
+        "331,884"
+      ],
+      [
+        "Investment secur\nAvailable-for-sal",
+        "ities:\ne at fair value",
+        "(amortized",
+        "cost of $109,699 and",
+        "$101,960)",
+        "",
+        "",
+        "106,872",
+        "",
+        "98,608"
+      ],
+      [
+        "Held-to-maturity",
+        "(fair value of",
+        "$48,032 an",
+        "d $51,203)",
+        "",
+        "",
+        "",
+        "56,701",
+        "",
+        "61,071"
+      ],
+      [
+        "Securities purcha",
+        "sed under agr",
+        "eements to",
+        "resell (includes $\u2014 a",
+        "nd $\u2014 at fair value)",
+        "",
+        "",
+        "106,755",
+        "",
+        "118,565"
+      ],
+      [
+        "Securities borrow",
+        "ed",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "139,959",
+        "",
+        "123,859"
+      ],
+      [
+        "Customer and oth",
+        "er receivables",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "98,310",
+        "",
+        "86,158"
+      ],
+      [
+        "Loans:\nHeld for investm",
+        "ent (net of allo",
+        "wance for",
+        "credit losses of $1,271",
+        "and $1,066)",
+        "",
+        "",
+        "245,654",
+        "",
+        "225,834"
+      ],
+      [
+        "Held for sale",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "12,332",
+        "",
+        "12,319"
+      ],
+      [
+        "Goodwill",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "16,734",
+        "",
+        "16,706"
+      ],
+      [
+        "Intangible assets",
+        "(net of accum",
+        "ulated amo",
+        "rtization of $1,712 and",
+        "$5,445)",
+        "",
+        "",
+        "6,185",
+        "",
+        "6,453"
+      ],
+      [
+        "Other assets",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "29,719",
+        "",
+        "28,228"
+      ],
+      [
+        "Total assets",
+        "",
+        "",
+        "",
+        "",
+        "$",
+        "",
+        "1,353,870",
+        "$",
+        "1,215,071"
+      ],
+      [
+        "Liabilities\nDeposits (include",
+        "s $7,465 and",
+        "$6,499 at fa",
+        "ir value)",
+        "",
+        "$",
+        "",
+        "389,377",
+        "$",
+        "376,007"
+      ],
+      [
+        "Trading liabilities",
+        "at fair value",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "171,351",
+        "",
+        "153,764"
+      ],
+      [
+        "Securities sold un",
+        "der agreemen",
+        "ts to repurc",
+        "hase (includes $696",
+        "and $956 at fair value)",
+        "",
+        "",
+        "69,537",
+        "",
+        "50,067"
+      ],
+      [
+        "Securities loaned",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "19,193",
+        "",
+        "15,226"
+      ],
+      [
+        "Other secured fin",
+        "ancings (inclu",
+        "des $15,52",
+        "5 and $14,088 at fair v",
+        "alue)",
+        "",
+        "",
+        "23,537",
+        "",
+        "21,602"
+      ],
+      [
+        "Customer and oth",
+        "er payables",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "215,345",
+        "",
+        "175,938"
+      ],
+      [
+        "Other liabilities an",
+        "d accrued exp",
+        "enses",
+        "",
+        "",
+        "",
+        "",
+        "27,459",
+        "",
+        "28,220"
+      ],
+      [
+        "Borrowings (inclu",
+        "des $125,491",
+        "and $103,3",
+        "32 at fair value)",
+        "",
+        "",
+        "",
+        "328,801",
+        "",
+        "288,819"
+      ],
+      [
+        "Total liabilities",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "1,244,600",
+        "",
+        "1,109,643"
+      ],
+      [
+        "Commitments a\nEquity\nMorgan Stanley s\nPreferred stock",
+        "nd contingent\nhareholders\u2019 e",
+        "liabilities\nquity:",
+        "(see Note 13)",
+        "",
+        "",
+        "",
+        "9,750",
+        "",
+        "9,750"
+      ],
+      [
+        "Common stock,\nShares author\n1,606,653,70",
+        "$0.01 par valu\nized: 3,500,00\n6",
+        "e:\n0,000; Sha",
+        "res issued: 2,038,893,",
+        "979; Shares outstanding: 1,598,299,431 and",
+        "",
+        "",
+        "20",
+        "",
+        "20"
+      ],
+      [
+        "Additional paid-i",
+        "n capital",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "30,263",
+        "",
+        "30,179"
+      ],
+      [
+        "Retained earnin",
+        "gs",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "109,567",
+        "",
+        "104,989"
+      ],
+      [
+        "Employee stock",
+        "trusts",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "5,085",
+        "",
+        "5,103"
+      ],
+      [
+        "Accumulated ot",
+        "her comprehen",
+        "sive incom",
+        "e (loss)",
+        "",
+        "",
+        "",
+        "(5,913)",
+        "",
+        "(6,814"
+      ],
+      [
+        "Common stock",
+        "held in treasur",
+        "y at cost, $",
+        "0.01 par value (440,59",
+        "4,548 and 432,240,273 shares)",
+        "",
+        "",
+        "(35,503)",
+        "",
+        "(33,613"
+      ],
+      [
+        "Common stock i",
+        "ssued to empl",
+        "oyee stock",
+        "trusts",
+        "",
+        "",
+        "",
+        "(5,085)",
+        "",
+        "(5,103"
+      ],
+      [
+        "Total Morgan St",
+        "anley shareho",
+        "lders\u2019 equ",
+        "ity",
+        "",
+        "",
+        "",
+        "108,184",
+        "",
+        "104,511"
+      ],
+      [
+        "Noncontrolling int",
+        "erests",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "1,086",
+        "",
+        "917"
+      ],
+      [
+        "Total equity",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "109,270",
+        "",
+        "105,428"
+      ],
+      [
+        "Total liabilities a",
+        "nd equity",
+        "",
+        "",
+        "",
+        "$",
+        "",
+        "1,353,870",
+        "$",
+        "1,215,071"
+      ]
+    ],
+    "num_rows": 33,
+    "num_cols": 10,
+    "score": 2,
+    "has_loans": true,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": false,
+    "row_headers_found": [
+      "Borrowings"
+    ]
+  },
+  {
+    "source": "10q0625.pdf",
+    "title": "Net Revenues from Liabilities under the Fair Value Option",
+    "page": 50,
+    "headers": [
+      "Three Months\nBorrowings",
+      "Ended June",
+      "30, 202",
+      "5\n$",
+      "(5,977)",
+      "$",
+      "",
+      "241",
+      "$ (6,218"
+    ],
+    "rows": [
+      [
+        "Deposits",
+        "",
+        "",
+        "",
+        "(88)",
+        "",
+        "",
+        "54",
+        "(142"
+      ],
+      [
+        "Three Months\nBorrowings",
+        "Ended June 30",
+        ", 2024",
+        "$",
+        "949",
+        "$",
+        "",
+        "155",
+        "$ 794"
+      ],
+      [
+        "$ in millions",
+        "",
+        "",
+        "Tra\nRev",
+        "ding\nenues",
+        "",
+        "Intere\nExpen",
+        "st\nse",
+        "Net\nRevenues1"
+      ],
+      [
+        "Six Months En\nBorrowings",
+        "ded June 30,",
+        "2025",
+        "$",
+        "(7,765)",
+        "$",
+        "",
+        "441",
+        "$ (8,206"
+      ],
+      [
+        "Deposits",
+        "",
+        "",
+        "",
+        "(125)",
+        "",
+        "",
+        "107",
+        "(232"
+      ],
+      [
+        "Six Months En\nBorrowings",
+        "ded June 30, 2",
+        "024",
+        "$",
+        "835",
+        "$",
+        "",
+        "299",
+        "$ 536"
+      ],
+      [
+        ". Amounts do n\nGains (loss\nTrading rev\nhe referenc\nates.\nGains (Loss\nRisk\n$ in millions",
+        "ot reflect any ga\nes) from c\nenues and a\ne price or in\nes) Due to",
+        "ins or l\nhange\nre ma\ndex,\nChan\nTra\nReve",
+        "osses from\ns in fa\ninly attr\ninterest\nges in In\nThree",
+        "related e\nir val\nibutab\nrates o\nstrum\nMonths",
+        "c\nu\nl\nr\ne\nE",
+        "onomi\ne ar\ne to\nfore\nnt-S\nnded",
+        "c hedg\ne rec\nmov\nign\npecif\nJune",
+        "es.\norded i\nements i\nexchang\nic Credit\n30,"
+      ],
+      [
+        null,
+        null,
+        null,
+        "2025",
+        "",
+        "",
+        "",
+        "20",
+        "24"
+      ],
+      [
+        null,
+        null,
+        null,
+        "ding\nnues",
+        "OCI",
+        "",
+        "Trad\nReve",
+        "ing\nnues",
+        "OCI"
+      ],
+      [
+        "Loans and othe",
+        "r receivables1",
+        "$",
+        "(45) $",
+        "\u2014",
+        "",
+        "$",
+        "(24)",
+        "$ \u2014"
+      ],
+      [
+        "Lending comm",
+        "itments",
+        "",
+        "(1)",
+        "\u2014",
+        "",
+        "",
+        "2",
+        "\u2014"
+      ],
+      [
+        "Deposits",
+        "",
+        "",
+        "\u2014",
+        "15",
+        "",
+        "",
+        "\u2014",
+        "15"
+      ],
+      [
+        "Borrowings",
+        "",
+        "",
+        "(3)",
+        "(248)",
+        "",
+        "",
+        "(7)",
+        "347"
+      ],
+      [
+        "$ in millions",
+        "",
+        "",
+        "Six M",
+        "onths E",
+        "n",
+        "ded J",
+        "une 3",
+        "0,"
+      ],
+      [
+        null,
+        null,
+        "",
+        "2025",
+        "",
+        "",
+        "",
+        "20",
+        "24"
+      ],
+      [
+        null,
+        null,
+        "Tra\nReve",
+        "ding\nnues",
+        "OCI",
+        "",
+        "Trad\nReve",
+        "ing\nnues",
+        "OCI"
+      ],
+      [
+        "Loans and othe",
+        "r receivables1",
+        "$",
+        "(51) $",
+        "\u2014",
+        "",
+        "$",
+        "2",
+        "$ \u2014"
+      ],
+      [
+        "Lending comm",
+        "itments",
+        "",
+        "(2)",
+        "\u2014",
+        "",
+        "",
+        "(1)",
+        "\u2014"
+      ],
+      [
+        "Deposits",
+        "",
+        "",
+        "\u2014",
+        "65",
+        "",
+        "",
+        "\u2014",
+        "11"
+      ],
+      [
+        "Borrowings",
+        "",
+        "",
+        "(12)",
+        "150",
+        "",
+        "",
+        "(17)",
+        "(390"
+      ],
+      [
+        "$ in millions",
+        "",
+        "",
+        "",
+        "At\nJune 30,\n2025",
+        "",
+        "",
+        "Dece",
+        "At\nmber 31,\n2024"
+      ],
+      [
+        "Cumulative pre\nrecognized in",
+        "-tax DVA gain\nAOCI",
+        "(loss)",
+        "$",
+        "(2",
+        ",6",
+        "53) $",
+        "",
+        "(2,868"
+      ]
+    ],
+    "num_rows": 22,
+    "num_cols": 9,
+    "score": 2,
+    "has_loans": true,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": false,
+    "row_headers_found": [
+      "Borrowings",
+      "Borrowings",
+      "Borrowings",
+      "Borrowings",
+      "Borrowings"
+    ]
+  },
+  {
+    "source": "10q0625.pdf",
+    "title": "Table_2",
+    "page": 68,
+    "headers": [
+      "Retained interest\nInvestment grade",
+      "s",
+      "",
+      "$ 475 $",
+      "vel 3 694",
+      "Total $ 1,169"
+    ],
+    "rows": [
+      [
+        "Non-investment gr",
+        "ade",
+        "",
+        "75",
+        "120",
+        "195"
+      ],
+      [
+        "Total",
+        "",
+        "",
+        "$ 550 $",
+        "814",
+        "$ 1,364"
+      ],
+      [
+        "Interests purcha\nInvestment grade",
+        "sed i",
+        "n the second",
+        "ary market3\n$ 160 $",
+        "\u2014",
+        "$ 160"
+      ],
+      [
+        "Non-investment gr",
+        "ade",
+        "",
+        "23",
+        "21",
+        "44"
+      ],
+      [
+        "Total",
+        "",
+        "",
+        "$ 183 $",
+        "21",
+        "$ 204"
+      ],
+      [
+        "Derivative assets",
+        "",
+        "",
+        "$ 1,329 $",
+        "\u2014",
+        "$ 1,329"
+      ],
+      [
+        "Derivative liabilitie",
+        "s",
+        "",
+        "555",
+        "\u2014",
+        "555"
+      ],
+      [
+        "$ in millions",
+        "",
+        "",
+        "Fair Value At D\nLevel 2 Le",
+        "ecember",
+        "31, 2024"
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        "vel 3",
+        "Total"
+      ],
+      [
+        "Retained interest\nInvestment grade",
+        "s",
+        "",
+        "$ 1,080 $",
+        "\u2014",
+        "$ 1,080"
+      ],
+      [
+        "Non-investment gr",
+        "ade",
+        "",
+        "71",
+        "50",
+        "121"
+      ],
+      [
+        "Total",
+        "",
+        "",
+        "$ 1,151 $",
+        "50",
+        "$ 1,201"
+      ],
+      [
+        "Interests purcha\nInvestment grade",
+        "sed i",
+        "n the second",
+        "ary market3\n$ 158 $",
+        "\u2014",
+        "$ 158"
+      ],
+      [
+        "Non-investment gr",
+        "ade",
+        "",
+        "18",
+        "11",
+        "29"
+      ],
+      [
+        "Total",
+        "",
+        "",
+        "$ 176 $",
+        "11",
+        "$ 187"
+      ],
+      [
+        "Derivative assets",
+        "",
+        "",
+        "$ 1,408 $",
+        "\u2014",
+        "$ 1,408"
+      ],
+      [
+        "Derivative liabilitie",
+        "s",
+        "",
+        "400",
+        "\u2014",
+        "400"
+      ],
+      [
+        "RML\u2014Residential m\nCML\u2014Commercial\n1. Amounts include\n2. Amounts include\n3. Amounts include\nof the transfer.\nThe previous t\nthe Firm, actin\ncontinuing inv\ntransferred as\nsecuritization,\nthe income sta\nbeneficial inte\nwhich Investm\nmay retain int\nor more tran\ninterests are c\nchanges in fair\nvalue for these\nconsistent with\nmajor categori\n2 in the 2024\npermitted by a\nwhere the Firm\nare only repor\nExposure table\nProceeds from\nLoans\n$ in millions",
+        "ortga\nmortg\nCLO\nasset\ntrans\nable\ng a\nolv\nsets\nand\ntem\nrests\nent\neres\nches\narri\nval\nint\nthe\nes o\nFo\nppl\n\u2019s\nted\n.\nNe",
+        "ge loans\nage loans\ntransactions m\ns transferred by\nactions where\ns include\ns principal,\nement and\nare car\nany chang\nent. The Fi\nissued by\nbanking re\nts in the se\nof the\ned at fair\nue recogni\nerests is m\nvaluation\nf assets an\nrm 10-K\nicable guid\nonly contin\nin the follo\nw Securitiz\nThree Mo\nJun",
+        "anaged by unrelated thi\nunrelated transferors.\nthe Firm also holds ret\ntransactions with\ntransferred fina\nreceived sales\nried at fair\nes in fair value a\nrm may act as u\nthese securitizat\nvenues are recog\ncuritized financ\nsecuritization.\nvalue in the bal\nzed in the incom\neasured using tec\ntechniques appli\nd liabilities as d\nand Note 4 her\nance, certain tra\nuing involvemen\nwing Assets Sol\nation Transactio\nnths Ended S\ne 30,",
+        "rd parties\nained int\nSPEs\nncial a\ntreat\nvalue\nre rec\nnderwr\nion ve\nnized.\nial ass\nCertain\nance s\ne state\nhniqu\ned to t\nescribe\nein. F\nnsfers\nt is a\nd with\nns an\nix Mont\nJun",
+        ".\nerests as part\nin which\nssets with\nment. The\nprior to\nognized in\niter of the\nhicles, for\nThe Firm\nets as one\nretained\nheet with\nment. Fair\nes that are\nhe Firm\u2019s\nd in Note\nurther, as\nof assets\nderivative\nRetained\nd Sales of\nhs Ended\ne 30,"
+      ],
+      [
+        null,
+        null,
+        "2025",
+        "2024",
+        "2025",
+        "2024"
+      ],
+      [
+        "New transactions1",
+        "",
+        "$ 12,136",
+        "$ 9,717 $",
+        "26,446",
+        "$ 16,599"
+      ],
+      [
+        "Retained interests",
+        "",
+        "2,461",
+        "2,091",
+        "5,240",
+        "4,191"
+      ]
+    ],
+    "num_rows": 21,
+    "num_cols": 6,
+    "score": 2,
+    "has_loans": false,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": true,
+    "row_headers_found": []
+  },
+  {
+    "source": "10q0925.pdf",
+    "title": "Table_2",
+    "page": 19,
+    "headers": [
+      "None",
+      "None",
+      "IS",
+      "WM IM Total"
+    ],
+    "rows": [
+      [
+        "Assets\nCash and cash e",
+        "quivalents",
+        "$ 74,079 $ 3",
+        "1,072 $ 235 $ 105,386"
+      ],
+      [
+        "Trading assets a",
+        "t fair value",
+        "320,003",
+        "6,915 4,966 331,884"
+      ],
+      [
+        "Investment secu",
+        "rities",
+        "38,096 12",
+        "1,583 \u2014 159,679"
+      ],
+      [
+        "Securities purch\nagreements to",
+        "ased under\nresell",
+        "100,404 1",
+        "8,161 \u2014 118,565"
+      ],
+      [
+        "Securities borrow",
+        "ed",
+        "121,901",
+        "1,958 \u2014 123,859"
+      ],
+      [
+        "Customer and ot",
+        "her receivables",
+        "47,321 3",
+        "7,196 1,641 86,158"
+      ],
+      [
+        "Loans1",
+        "",
+        "78,607 15",
+        "9,542 4 238,153"
+      ],
+      [
+        "Goodwill",
+        "",
+        "435 1",
+        "0,190 6,081 16,706"
+      ],
+      [
+        "Intangible assets",
+        "",
+        "27",
+        "2,939 3,487 6,453"
+      ],
+      [
+        "Other assets2",
+        "",
+        "15,735 1",
+        "1,292 1,201 28,228"
+      ],
+      [
+        "Total assets",
+        "",
+        "$ 796,608 $ 40",
+        "0,848 $ 17,615 $ 1,215,071"
+      ]
+    ],
+    "num_rows": 11,
+    "num_cols": 4,
+    "score": 2,
+    "has_loans": true,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": false,
+    "row_headers_found": []
+  },
+  {
+    "source": "10q0925.pdf",
+    "title": "September 30, December 31, 2025 2024",
+    "page": 40,
+    "headers": [
+      "Assets\nCash and cash e",
+      "quivalents",
+      "",
+      "",
+      "",
+      "$",
+      "103,734",
+      "$",
+      "105,386"
+    ],
+    "rows": [
+      [
+        "Trading assets at",
+        "fair value ($19",
+        "9,429 and",
+        "$148,945 pledged as",
+        "collateral)",
+        "",
+        "423,823",
+        "",
+        "331,884"
+      ],
+      [
+        "Investment secur\nAvailable-for-sal",
+        "ities:\ne at fair value",
+        "(amortized",
+        "cost of $110,695 and",
+        "$101,960)",
+        "",
+        "108,327",
+        "",
+        "98,608"
+      ],
+      [
+        "Held-to-maturity",
+        "(fair value of",
+        "$47,369 an",
+        "d $51,203)",
+        "",
+        "",
+        "55,205",
+        "",
+        "61,071"
+      ],
+      [
+        "Securities purcha",
+        "sed under agr",
+        "eements to",
+        "resell (includes $\u2014 a",
+        "nd $\u2014 at fair value)",
+        "",
+        "111,734",
+        "",
+        "118,565"
+      ],
+      [
+        "Securities borrow",
+        "ed",
+        "",
+        "",
+        "",
+        "",
+        "129,113",
+        "",
+        "123,859"
+      ],
+      [
+        "Customer and oth",
+        "er receivables",
+        "",
+        "",
+        "",
+        "",
+        "113,257",
+        "",
+        "86,158"
+      ],
+      [
+        "Loans:\nHeld for investm",
+        "ent (net of allo",
+        "wance for",
+        "credit losses of $1,213",
+        "and $1,066)",
+        "",
+        "255,867",
+        "",
+        "225,834"
+      ],
+      [
+        "Held for sale",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "11,433",
+        "",
+        "12,319"
+      ],
+      [
+        "Goodwill",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "16,725",
+        "",
+        "16,706"
+      ],
+      [
+        "Intangible assets",
+        "(net of accum",
+        "ulated amo",
+        "rtization of $1,798 and",
+        "$5,445)",
+        "",
+        "6,097",
+        "",
+        "6,453"
+      ],
+      [
+        "Other assets",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "29,491",
+        "",
+        "28,228"
+      ],
+      [
+        "Total assets",
+        "",
+        "",
+        "",
+        "",
+        "$",
+        "1,364,806",
+        "$",
+        "1,215,071"
+      ],
+      [
+        "Liabilities\nDeposits (include",
+        "s $8,477 and",
+        "$6,499 at fa",
+        "ir value)",
+        "",
+        "$",
+        "405,480",
+        "$",
+        "376,007"
+      ],
+      [
+        "Trading liabilities",
+        "at fair value",
+        "",
+        "",
+        "",
+        "",
+        "162,408",
+        "",
+        "153,764"
+      ],
+      [
+        "Securities sold un",
+        "der agreemen",
+        "ts to repurc",
+        "hase (includes $703",
+        "and $956 at fair value)",
+        "",
+        "61,504",
+        "",
+        "50,067"
+      ],
+      [
+        "Securities loaned",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "15,944",
+        "",
+        "15,226"
+      ],
+      [
+        "Other secured fin",
+        "ancings (inclu",
+        "des $16,68",
+        "7 and $14,088 at fair v",
+        "alue)",
+        "",
+        "21,441",
+        "",
+        "21,602"
+      ],
+      [
+        "Customer and oth",
+        "er payables",
+        "",
+        "",
+        "",
+        "",
+        "226,445",
+        "",
+        "175,938"
+      ],
+      [
+        "Other liabilities an",
+        "d accrued exp",
+        "enses",
+        "",
+        "",
+        "",
+        "28,854",
+        "",
+        "28,220"
+      ],
+      [
+        "Borrowings (inclu",
+        "des $127,285",
+        "and $103,3",
+        "32 at fair value)",
+        "",
+        "",
+        "331,679",
+        "",
+        "288,819"
+      ],
+      [
+        "Total liabilities",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "1,253,755",
+        "",
+        "1,109,643"
+      ],
+      [
+        "Commitments a\nEquity\nMorgan Stanley s\nPreferred stock",
+        "nd contingent\nhareholders\u2019 e",
+        "liabilities\nquity:",
+        "(see Note 13)",
+        "",
+        "",
+        "9,750",
+        "",
+        "9,750"
+      ],
+      [
+        "Common stock,\nShares author\n1,606,653,70",
+        "$0.01 par valu\nized: 3,500,00\n6",
+        "e:\n0,000; Sha",
+        "res issued: 2,038,893,",
+        "979; Shares outstanding: 1,591,091,689 and",
+        "",
+        "20",
+        "",
+        "20"
+      ],
+      [
+        "Additional paid-i",
+        "n capital",
+        "",
+        "",
+        "",
+        "",
+        "30,730",
+        "",
+        "30,179"
+      ],
+      [
+        "Retained earnin",
+        "gs",
+        "",
+        "",
+        "",
+        "",
+        "112,426",
+        "",
+        "104,989"
+      ],
+      [
+        "Employee stock",
+        "trusts",
+        "",
+        "",
+        "",
+        "",
+        "5,058",
+        "",
+        "5,103"
+      ],
+      [
+        "Accumulated ot",
+        "her comprehen",
+        "sive incom",
+        "e (loss)",
+        "",
+        "",
+        "(6,346)",
+        "",
+        "(6,814"
+      ],
+      [
+        "Common stock",
+        "held in treasur",
+        "y at cost, $",
+        "0.01 par value (447,80",
+        "2,290 and 432,240,273 shares)",
+        "",
+        "(36,618)",
+        "",
+        "(33,613"
+      ],
+      [
+        "Common stock i",
+        "ssued to empl",
+        "oyee stock",
+        "trusts",
+        "",
+        "",
+        "(5,058)",
+        "",
+        "(5,103"
+      ],
+      [
+        "Total Morgan St",
+        "anley shareho",
+        "lders\u2019 equ",
+        "ity",
+        "",
+        "",
+        "109,962",
+        "",
+        "104,511"
+      ],
+      [
+        "Noncontrolling int",
+        "erests",
+        "",
+        "",
+        "",
+        "",
+        "1,089",
+        "",
+        "917"
+      ],
+      [
+        "Total equity",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "111,051",
+        "",
+        "105,428"
+      ],
+      [
+        "Total liabilities a",
+        "nd equity",
+        "",
+        "",
+        "",
+        "$",
+        "1,364,806",
+        "$",
+        "1,215,071"
+      ]
+    ],
+    "num_rows": 33,
+    "num_cols": 9,
+    "score": 2,
+    "has_loans": true,
+    "has_nonaccrual": false,
+    "has_fair_value": true,
+    "has_contractual": false,
+    "row_headers_found": [
+      "Borrowings"
+    ]
+  }
+]
