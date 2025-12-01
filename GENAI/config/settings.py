@@ -1,54 +1,268 @@
+"""
+Enhanced configuration system with provider selection.
+
+Supports:
+- Environment-specific configs (dev, staging, prod)
+- Provider selection (OpenAI, local, etc.)
+- API key management
+- Feature flags
+"""
+
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, Literal, List
 import os
 
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
     
-    # Project paths
+    # ============================================================================
+    # PROJECT PATHS
+    # ============================================================================
     PROJECT_ROOT: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    RAW_DATA_DIR: str = os.path.join(os.path.dirname(PROJECT_ROOT), "raw_data")
     
-    # LLM Settings (Ollama - Free & Local)
-    LLM_MODEL: str = "llama3.2"  # Free Ollama model
-    LLM_TEMPERATURE: float = 0.1
-    LLM_MAX_TOKENS: int = 2000
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    # New structure paths
+    SRC_DIR: str = os.path.join(PROJECT_ROOT, "src")
+    SCRIPTS_DIR: str = os.path.join(PROJECT_ROOT, "scripts")
+    ARCHIVE_DIR: str = os.path.join(PROJECT_ROOT, "archive")
     
-    # Embedding Settings (sentence-transformers - Free & Local)
-    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-    EMBEDDING_DIMENSION: int = 384
+    # Data directories
+    DATA_DIR: str = os.path.join(PROJECT_ROOT, "data")
+    PROCESSED_DATA_DIR: str = os.path.join(DATA_DIR, "processed")
+    CACHE_DATA_DIR: str = os.path.join(DATA_DIR, "cache")
+    
+    # Raw data directory (configurable via .env)
+    # Default: raw_data inside GENAI folder (self-contained)
+    RAW_DATA_DIR: str = os.path.join(PROJECT_ROOT, "raw_data")
+    
+    # Legacy paths (for backward compatibility during migration)
+    LEGACY_OUTPUTS_DIR: str = os.path.join(PROJECT_ROOT, "outputs")
+    LEGACY_CACHE_DIR: str = os.path.join(PROJECT_ROOT, ".cache")
+
+    
+    # ============================================================================
+    # EMBEDDING PROVIDER SETTINGS
+    # ============================================================================
+    EMBEDDING_PROVIDER: Literal["local", "openai", "custom"] = "local"  # Default: local (FREE)
+    
+    # Local Embeddings (sentence-transformers - FREE)
+    EMBEDDING_MODEL_LOCAL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_DIMENSION_LOCAL: int = 384
+    
+    # OpenAI Embeddings (PAID)
+    EMBEDDING_MODEL_OPENAI: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSION_OPENAI: int = 1536
+    OPENAI_API_KEY: Optional[str] = None
+    
+    # Custom API Embeddings (YOUR WORKING API)
+    EB_URL: Optional[str] = None
+    EB_MODEL: Optional[str] = None
+    UNIQUE_ID: Optional[str] = None
+    BEARER_TOKEN: Optional[str] = None
+    
+    # Batch settings
     EMBEDDING_BATCH_SIZE: int = 32
     
-    # Vector Database Settings (ChromaDB - Free & Open Source)
-    CHROMA_PERSIST_DIR: str = os.path.join(PROJECT_ROOT, "chroma_db")
-    CHROMA_COLLECTION_NAME: str = "financial_tables"
-    DISTANCE_METRIC: str = "cosine"
+    # Dynamic properties based on provider
+    @property
+    def EMBEDDING_MODEL(self) -> str:
+        """Get embedding model based on provider."""
+        if self.EMBEDDING_PROVIDER == "openai":
+            return self.EMBEDDING_MODEL_OPENAI
+        elif self.EMBEDDING_PROVIDER == "custom":
+            return self.EB_MODEL or "custom-embedding-model"
+        return self.EMBEDDING_MODEL_LOCAL
     
-    # Redis Settings (Optional - for caching)
+    @property
+    def EMBEDDING_DIMENSION(self) -> int:
+        """Get embedding dimension based on provider."""
+        if self.EMBEDDING_PROVIDER == "openai":
+            return self.EMBEDDING_DIMENSION_OPENAI
+        elif self.EMBEDDING_PROVIDER == "custom":
+            return 384  # Will be auto-detected from API
+        return self.EMBEDDING_DIMENSION_LOCAL
+    
+    # ============================================================================
+    # LLM PROVIDER SETTINGS
+    # ============================================================================
+    LLM_PROVIDER: Literal["ollama", "openai", "custom"] = "ollama"  # Default: ollama (FREE)
+    
+    # Ollama (Local - FREE)
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama2"
+    
+    # OpenAI (PAID)
+    OPENAI_MODEL: str = "gpt-4"
+    
+    # Custom API LLM (YOUR WORKING API)
+    LLM_URL: Optional[str] = None
+    LLM_MODEL_CUSTOM: Optional[str] = None  # Renamed to avoid conflict with property
+    # Uses same UNIQUE_ID and BEARER_TOKEN as embeddings
+    
+    # LLM Generation Settings
+    LLM_TEMPERATURE: float = 0.1
+    LLM_MAX_TOKENS: int = 2000
+    
+    @property
+    def LLM_MODEL(self) -> str:
+        """Get LLM model based on provider."""
+        if self.LLM_PROVIDER == "openai":
+            return self.OPENAI_MODEL
+        return self.OLLAMA_MODEL
+    
+    # ============================================================================
+    # VECTOR DATABASE SETTINGS
+    # ============================================================================
+    # Vector DB
+    VECTORDB_PROVIDER: Literal["chromadb", "faiss", "redis"] = "faiss"  # chromadb, faiss, redis
+    
+    # ChromaDB Settings (FREE & OPEN SOURCE)
+    CHROMA_PERSIST_DIR: str = os.path.join(PROJECT_ROOT, "chroma_db")
+    CHROMA_COLLECTION_NAME: str = "financial_data"
+    
+    # Search Configuration
+    SEARCH_TOP_K: int = 5
+    SEARCH_FETCH_K: int = 20  # Fetch more for filtering/reranking
+    HYBRID_SEARCH_ALPHA: float = 0.5  # Weight for vector search (0.0 to 1.0)
+    BM25_K1: float = 1.5
+    BM25_B: float = 0.75
+    
+    # FAISS Settings (FREE & HIGH PERFORMANCE)
+    FAISS_PERSIST_DIR: str = os.path.join(PROJECT_ROOT, "faiss_db")
+    FAISS_INDEX_TYPE: str = "flat"  # flat, ivf, hnsw
+    
+    # Redis Vector Settings (OPTIONAL - for distributed systems)
+    REDIS_VECTOR_HOST: str = "localhost"
+    REDIS_VECTOR_PORT: int = 6379
+    REDIS_VECTOR_INDEX: str = "financial_tables_idx"
+    REDIS_VECTOR_PREFIX: str = "table:"
+    
+    # ============================================================================
+    # EXTRACTION BACKEND SETTINGS
+    # ============================================================================
+    EXTRACTION_BACKEND: Literal["docling", "pymupdf", "pdfplumber", "camelot"] = "docling"  # Default: docling (BEST)
+    
+    # Backend priority order (for fallback)
+    EXTRACTION_BACKENDS: List[str] = ["docling"]  # Can add multiple: ["docling", "pymupdf"]
+    
+    # Quality threshold for extraction
+    EXTRACTION_MIN_QUALITY: float = 60.0
+    
+    # Caching
+    EXTRACTION_CACHE_ENABLED: bool = True
+    EXTRACTION_CACHE_TTL_HOURS: int = 168  # 7 days
+    
+    # ============================================================================
+    # REDIS CACHE SETTINGS (Optional - for caching)
+    # ============================================================================
+    REDIS_ENABLED: bool = False  # Set to True if Redis installed
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
-    REDIS_ENABLED: bool = True  # Set to False if Redis not installed
     CACHE_TTL: int = 86400  # 24 hours
     
-    # Chunking Settings
-    CHUNK_SIZE: int = 500
-    CHUNK_OVERLAP: int = 50
+    # ============================================================================
+    # CHUNKING SETTINGS
+    # ============================================================================
+    CHUNK_SIZE: int = 10  # rows per chunk for tables
+    CHUNK_OVERLAP: int = 3  # overlapping rows
     
-    # Retrieval Settings
+    # ============================================================================
+    # RETRIEVAL SETTINGS
+    # ============================================================================
     TOP_K: int = 5
     SIMILARITY_THRESHOLD: float = 0.7
     
-    # PDF Processing
+    # ============================================================================
+    # PDF PROCESSING SETTINGS
+    # ============================================================================
     HANDLE_TWO_COLUMN: bool = True
     EXTRACT_TABLES: bool = True
+    PDF_MAX_SIZE_MB: int = 500
+    
+    # ============================================================================
+    # EXTRACTION CACHE SETTINGS
+    # ============================================================================
+    EXTRACTION_CACHE_ENABLED: bool = True
+    EXTRACTION_CACHE_TTL_HOURS: int = 168  # 7 days
+    
+    # ============================================================================
+    # FEATURE FLAGS
+    # ============================================================================
+    ENABLE_CHUNKING: bool = True
+    ENABLE_DEDUPLICATION: bool = True
+    ENABLE_PROGRESS_BARS: bool = True
+    
+    # ============================================================================
+    # ENVIRONMENT
+    # ============================================================================
+    ENVIRONMENT: Literal["dev", "staging", "prod"] = "dev"
+    DEBUG: bool = True
+    
+    # ============================================================================
+    # SCHEDULER SETTINGS
+    # ============================================================================
+    SCHEDULER_ENABLED: bool = False  # Enable automatic filing scheduler
+    SCHEDULER_AUTO_EXTRACT: bool = True  # Auto-extract after download
+    SCHEDULER_LOOKAHEAD_DAYS: int = 180  # Days to look ahead for filings
+    SCHEDULER_CHECK_INTERVAL_HOURS: int = 24  # Periodic check interval
+    
+    # ============================================================================
+    # TABLE EXPORT SETTINGS
+    # ============================================================================
+    OUTPUT_DIR: str = "outputs/tables"  # Directory for exported tables
+    EXPORT_BOTH_FORMATS: bool = True  # Export both CSV and Excel
+    TABLE_SIMILARITY_THRESHOLD: float = 0.85  # Threshold for table title matching
+    
     
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        case_sensitive = True
 
 
 # Global settings instance
 settings = Settings()
+
+
+# Helper functions
+def get_provider_config() -> dict:
+    """Get current provider configuration."""
+    return {
+        "embedding": {
+            "provider": settings.EMBEDDING_PROVIDER,
+            "model": settings.EMBEDDING_MODEL,
+            "dimension": settings.EMBEDDING_DIMENSION
+        },
+        "llm": {
+            "provider": settings.LLM_PROVIDER,
+            "model": settings.LLM_MODEL
+        },
+        "vectordb": {
+            "provider": settings.VECTORDB_PROVIDER
+        }
+    }
+
+
+def print_config():
+    """Print current configuration."""
+    config = get_provider_config()
+    
+    print("=" * 80)
+    print("CURRENT CONFIGURATION")
+    print("=" * 80)
+    print(f"\n📊 Embedding Provider: {config['embedding']['provider']}")
+    print(f"   Model: {config['embedding']['model']}")
+    print(f"   Dimension: {config['embedding']['dimension']}")
+    
+    print(f"\n🤖 LLM Provider: {config['llm']['provider']}")
+    print(f"   Model: {config['llm']['model']}")
+    
+    print(f"\n💾 VectorDB Provider: {config['vectordb']['provider']}")
+    
+    print(f"\n🔧 Features:")
+    print(f"   Chunking: {'enabled' if settings.ENABLE_CHUNKING else 'disabled'}")
+    print(f"   Deduplication: {'enabled' if settings.ENABLE_DEDUPLICATION else 'disabled'}")
+    print(f"   Cache: {'enabled' if settings.EXTRACTION_CACHE_ENABLED else 'disabled'}")
+    
+    print("\n" + "=" * 80)

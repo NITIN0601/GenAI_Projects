@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+.cache/
+.logs/
+.metrics/
+*.log
+
+# Environment
+.env
+.env.local
+
+# Outputs (optional - uncomment if you don't want to track)
+# outputs/
+
+# Database (optional - uncomment if you don't want to track)
+# chroma_db/
