@@ -208,6 +208,55 @@ class FAISSVectorStore(VectorStore):
             embedding, k, filter=filter
         )
 
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        filters: Optional[Dict[str, Any]] = None
+    ) -> List["SearchResult"]:
+        """
+        Search vector store.
+        
+        Args:
+            query: Search query
+            top_k: Number of results
+            filters: Metadata filters
+            
+        Returns:
+            List of SearchResult objects
+        """
+        from src.models.schemas import SearchResult, TableMetadata
+        
+        # Use similarity_search_with_score
+        docs_and_scores = self.similarity_search_with_score(
+            query,
+            k=top_k,
+            filter=filters
+        )
+        
+        results = []
+        for doc, score in docs_and_scores:
+            try:
+                metadata = TableMetadata(**doc.metadata)
+            except Exception:
+                metadata = TableMetadata(
+                    source_doc=doc.metadata.get("source_doc", "unknown"),
+                    page_no=int(doc.metadata.get("page_no", 0)),
+                    table_title=doc.metadata.get("table_title", "unknown"),
+                    year=int(doc.metadata.get("year", 0)),
+                    report_type=doc.metadata.get("report_type", "unknown")
+                )
+                
+            results.append(SearchResult(
+                chunk_id=doc.metadata.get("chunk_reference_id", str(uuid.uuid4())),
+                content=doc.page_content,
+                metadata=metadata,
+                score=score,
+                distance=score
+            ))
+            
+        return results
+
     def similarity_search_by_vector_with_score(
         self,
         embedding: List[float],

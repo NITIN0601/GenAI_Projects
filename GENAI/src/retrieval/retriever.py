@@ -26,7 +26,7 @@ class Retriever:
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None,
         similarity_threshold: float = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List["SearchResult"]:
         """
         Retrieve relevant chunks for a query.
         
@@ -37,57 +37,36 @@ class Retriever:
             similarity_threshold: Minimum similarity score (0-1)
             
         Returns:
-            List of retrieved chunks with metadata
+            List of SearchResult objects
         """
         from config.settings import settings
+        from src.models.schemas import SearchResult
         
         if similarity_threshold is None:
             similarity_threshold = settings.SIMILARITY_THRESHOLD
         
-        # Perform semantic search using LangChain interface
-        # Both FAISS and ChromaDB stores now support similarity_search_with_score
-        results_with_scores = self.vector_store.similarity_search_with_score(
+        # Perform semantic search using VectorDBManager
+        # Now returns List[SearchResult]
+        results = self.vector_store.search(
             query=query,
-            k=top_k * 2,  # Get more results for filtering
-            filter=filters
+            top_k=top_k * 2,  # Get more results for filtering
+            filters=filters
         )
         
-        # Format results and filter by threshold
-        filtered_results = []
-        for doc, score in results_with_scores:
-            # Calculate similarity (Chroma/FAISS usually return distance or similarity depending on config)
-            # Assuming score is distance for now (lower is better), or similarity (higher is better)
-            # This logic might need adjustment based on specific metric used
-            
-            # For now, we'll assume the score is usable as is or convert if needed
-            # FAISS FlatIP returns inner product (similarity), Chroma default is L2 (distance)
-            
-            # Let's normalize to a dictionary format expected by the rest of the system
-            result = {
-                "id": doc.metadata.get("chunk_reference_id", ""),
-                "content": doc.page_content,
-                "metadata": doc.metadata,
-                "score": score,
-                "distance": score # Keep original score
-            }
-            
-            # Apply threshold if needed (logic depends on metric)
-            # For now, just append
-            filtered_results.append(result)
-        
-        # Return top_k results
-        return filtered_results[:top_k]
+        # Apply threshold if needed (logic depends on metric)
+        # For now, just return top_k
+        return results[:top_k]
     
     def build_context(
         self,
-        retrieved_chunks: List[Dict[str, Any]],
+        retrieved_chunks: List["SearchResult"],
         max_context_length: int = 4000
     ) -> str:
         """
         Build context string from retrieved chunks.
         
         Args:
-            retrieved_chunks: List of retrieved chunks
+            retrieved_chunks: List of SearchResult objects
             max_context_length: Maximum context length in characters
             
         Returns:
@@ -97,19 +76,19 @@ class Retriever:
         current_length = 0
         
         for i, chunk in enumerate(retrieved_chunks, 1):
-            metadata = chunk.get('metadata', {})
-            content = chunk.get('content', '')
+            metadata = chunk.metadata
+            content = chunk.content
             
             # Format chunk with metadata
             chunk_text = f"\n--- Source {i} ---\n"
-            chunk_text += f"Document: {metadata.get('source_doc', 'Unknown')}\n"
-            chunk_text += f"Page: {metadata.get('page_no', 'N/A')}\n"
-            chunk_text += f"Table: {metadata.get('table_title', 'Unknown')}\n"
+            chunk_text += f"Document: {metadata.source_doc}\n"
+            chunk_text += f"Page: {metadata.page_no}\n"
+            chunk_text += f"Table: {metadata.table_title}\n"
             
-            if 'year' in metadata:
-                chunk_text += f"Year: {metadata['year']}\n"
-            if 'quarter' in metadata:
-                chunk_text += f"Quarter: {metadata['quarter']}\n"
+            if metadata.year:
+                chunk_text += f"Year: {metadata.year}\n"
+            if metadata.quarter:
+                chunk_text += f"Quarter: {metadata.quarter}\n"
             
             chunk_text += f"\nContent:\n{content}\n"
             
@@ -124,13 +103,13 @@ class Retriever:
     
     def extract_sources(
         self,
-        retrieved_chunks: List[Dict[str, Any]]
+        retrieved_chunks: List["SearchResult"]
     ) -> List[TableMetadata]:
         """
         Extract source metadata from retrieved chunks.
         
         Args:
-            retrieved_chunks: List of retrieved chunks
+            retrieved_chunks: List of SearchResult objects
             
         Returns:
             List of TableMetadata objects
@@ -139,30 +118,18 @@ class Retriever:
         seen = set()  # Avoid duplicates
         
         for chunk in retrieved_chunks:
-            metadata = chunk.get('metadata', {})
+            metadata = chunk.metadata
             
             # Create unique key
             key = (
-                metadata.get('source_doc'),
-                metadata.get('page_no'),
-                metadata.get('table_title')
+                metadata.source_doc,
+                metadata.page_no,
+                metadata.table_title
             )
             
             if key not in seen:
                 seen.add(key)
-                
-                # Create TableMetadata object
-                source = TableMetadata(
-                    source_doc=metadata.get('source_doc', 'Unknown'),
-                    page_no=metadata.get('page_no', 0),
-                    table_title=metadata.get('table_title', 'Unknown'),
-                    year=metadata.get('year', 0),
-                    quarter=metadata.get('quarter'),
-                    report_type=metadata.get('report_type', 'Unknown'),
-                    table_type=metadata.get('table_type'),
-                    fiscal_period=metadata.get('fiscal_period')
-                )
-                sources.append(source)
+                sources.append(metadata)
         
         return sources
     

@@ -166,6 +166,15 @@ class FinancialTable(BaseModel):
     metadata: Optional[TableMetadata] = None
 
 
+class SearchResult(BaseModel):
+    """Result from vector search."""
+    chunk_id: str = Field(..., description="Unique chunk ID")
+    content: str = Field(..., description="Text content")
+    metadata: TableMetadata = Field(..., description="Chunk metadata")
+    score: float = Field(..., description="Similarity score/distance")
+    distance: Optional[float] = Field(None, description="Raw distance metric")
+
+
 class RAGQuery(BaseModel):
     """Query structure for RAG system."""
     query: str = Field(..., description="User question")

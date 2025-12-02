@@ -48,6 +48,9 @@ class QueryEngine:
         self.cache = cache or get_redis_cache()
         self.prompt_strategy = prompt_strategy
         
+        # Store last retrieved chunks for export
+        self._last_retrieved_chunks = []
+        
         # Get LangChain components
         self.llm = self.llm_manager.get_langchain_model()
         
@@ -96,13 +99,17 @@ class QueryEngine:
         if hasattr(self.retriever, 'get_relevant_documents'):
             # LangChain Retriever (including our SearchStrategy)
             docs = self.retriever.get_relevant_documents(query)
+            # Note: docs are LangChain Documents, not SearchResults
+            self._last_retrieved_chunks = docs  # Store for export
             return "\n\n".join([d.page_content for d in docs])
         else:
             # Fallback for legacy retriever
             # Note: Legacy retriever uses 'retrieve' method
             results = self.retriever.retrieve(query)
+            # Store SearchResult objects
+            self._last_retrieved_chunks = results
             # Handle both dict results and object results if any
-            return "\n\n".join([r.get('content', '') if isinstance(r, dict) else getattr(r, 'content', '') for r in results])
+            return "\n\n".join([r.content if hasattr(r, 'content') else r.get('content', '') for r in results])
 
     def query(
         self,
@@ -155,6 +162,15 @@ class QueryEngine:
                 confidence=0.0,
                 retrieved_chunks=0
             )
+
+    def get_last_retrieved_chunks(self):
+        """
+        Get chunks from last query execution.
+        
+        Returns:
+            List of retrieved chunks (SearchResult or LangChain Document objects)
+        """
+        return self._last_retrieved_chunks
 
 
 # Global instance

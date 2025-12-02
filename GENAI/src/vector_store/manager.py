@@ -36,7 +36,7 @@ class VectorDBInterface(ABC):
         query: str,
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List["SearchResult"]:
         """Search for similar chunks."""
         pass
     
@@ -134,7 +134,7 @@ class VectorDBManager:
         query: str,
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List["SearchResult"]:
         """Search for similar chunks."""
         return self.db.search(query, top_k, filters)
     

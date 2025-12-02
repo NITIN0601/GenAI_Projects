@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 from config.settings import settings, print_config
 from src.extraction.extractor import UnifiedExtractor
 from src.embeddings.manager import get_embedding_manager
-from src.vector_store.stores.chromadb_store import get_vector_store
+from src.vector_store.manager import get_vectordb_manager
 from src.models.schemas import TableChunk, TableMetadata
 
 
@@ -60,7 +60,7 @@ def main():
     logger.info(f"✓ Embedding manager initialized: {settings.EMBEDDING_PROVIDER}")
     
     # Vector Store (reads VECTORDB_PROVIDER from .env)
-    vector_store = get_vector_store()
+    vector_store = get_vectordb_manager()
     logger.info(f"✓ Vector store initialized: {settings.VECTORDB_PROVIDER}")
     
     # ========================================================================
@@ -173,14 +173,15 @@ def main():
         stats = vector_store.get_stats()
         logger.info(f"✓ Vector DB Stats:")
         logger.info(f"  - Total chunks: {stats.get('total_chunks', 'N/A')}")
-        logger.info(f"  - Collection: {stats.get('collection_name', 'N/A')}")
+        logger.info(f"  - Provider: {stats.get('provider', 'N/A')}")
         
         # Test search
         test_query = "revenue"
         results = vector_store.search(test_query, top_k=3)
         logger.info(f"\n✓ Test search for '{test_query}':")
         for i, result in enumerate(results[:3], 1):
-            logger.info(f"  {i}. {result.get('metadata', {}).get('table_title', 'Unknown')}")
+            # result is now a SearchResult object
+            logger.info(f"  {i}. {result.metadata.table_title}")
         
     except Exception as e:
         logger.error(f"✗ Error verifying storage: {e}")

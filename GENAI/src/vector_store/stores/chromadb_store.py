@@ -94,7 +94,7 @@ class VectorStore:
         query_embedding: Optional[List[float]] = None,
         top_k: int = 5,
         filter: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List["SearchResult"]:
         """
         Search vector store.
         
@@ -105,8 +105,10 @@ class VectorStore:
             filters: Metadata filters
             
         Returns:
-            List of results with content and metadata
+            List of SearchResult objects
         """
+        from src.models.schemas import SearchResult, TableMetadata
+        
         try:
             if query_text:
                 # Use LangChain's similarity_search_with_score
@@ -128,13 +130,27 @@ class VectorStore:
             # Convert to standard format
             results = []
             for doc, score in docs_and_scores:
-                results.append({
-                    "id": doc.metadata.get("chunk_reference_id", ""),
-                    "content": doc.page_content,
-                    "metadata": doc.metadata,
-                    "score": score, # Distance usually
-                    "distance": score
-                })
+                # Create TableMetadata from doc.metadata
+                # We need to handle potential missing fields gracefully
+                try:
+                    metadata = TableMetadata(**doc.metadata)
+                except Exception:
+                    # Fallback for incomplete metadata
+                    metadata = TableMetadata(
+                        source_doc=doc.metadata.get("source_doc", "unknown"),
+                        page_no=int(doc.metadata.get("page_no", 0)),
+                        table_title=doc.metadata.get("table_title", "unknown"),
+                        year=int(doc.metadata.get("year", 0)),
+                        report_type=doc.metadata.get("report_type", "unknown")
+                    )
+
+                results.append(SearchResult(
+                    chunk_id=doc.metadata.get("chunk_reference_id", str(uuid.uuid4())),
+                    content=doc.page_content,
+                    metadata=metadata,
+                    score=score,
+                    distance=score
+                ))
                 
             return results
             

@@ -202,6 +202,13 @@ class Settings(BaseSettings):
     EXPORT_FORMAT: Literal["csv", "excel", "both"] = "both"  # Export format
     TABLE_SIMILARITY_THRESHOLD: float = 0.85  # Threshold for table title matching
     
+    # ============================================================================
+    # RAG OUTPUT SETTINGS
+    # ============================================================================
+    SAVE_RAG_TABLES: bool = True  # Save retrieved tables to CSV/Excel
+    SAVE_RAG_RESPONSES: bool = True  # Save text responses to log files
+    RAG_OUTPUT_DIR: str = "output/rag_queries"  # Directory for RAG outputs
+    
     
     class Config:
         env_file = ".env"
@@ -239,18 +246,18 @@ def print_config():
     print("=" * 80)
     print("CURRENT CONFIGURATION")
     print("=" * 80)
-    print(f"\n📊 Embedding Provider: {config['embedding']['provider']}")
+    print(f"\n Embedding Provider: {config['embedding']['provider']}")
     print(f"   Model: {config['embedding']['model']}")
     print(f"   Dimension: {config['embedding']['dimension']}")
     
-    print(f"\n🤖 LLM Provider: {config['llm']['provider']}")
+    print(f"\n LLM Provider: {config['llm']['provider']}")
     print(f"   Model: {config['llm']['model']}")
     
-    print(f"\n💾 VectorDB Provider: {config['vectordb']['provider']}")
+    print(f"\n VectorDB Provider: {config['vectordb']['provider']}")
     
-    print(f"\n🔧 Features:")
-    print(f"   Chunking: {'enabled' if settings.ENABLE_CHUNKING else 'disabled'}")
-    print(f"   Deduplication: {'enabled' if settings.ENABLE_DEDUPLICATION else 'disabled'}")
-    print(f"   Cache: {'enabled' if settings.EXTRACTION_CACHE_ENABLED else 'disabled'}")
+    print(f"\n Features:")
+    print(f"  Chunking: {'enabled' if settings.ENABLE_CHUNKING else 'disabled'}")
+    print(f"  Deduplication: {'enabled' if settings.ENABLE_DEDUPLICATION else 'disabled'}")
+    print(f"  Cache: {'enabled' if settings.EXTRACTION_CACHE_ENABLED else 'disabled'}")
     
     print("\n" + "=" * 80)

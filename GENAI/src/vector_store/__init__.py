@@ -14,5 +14,10 @@ Example:
 
 __version__ = "2.0.0"
 
-__all__ = []
+from src.vector_store.manager import VectorDBManager, get_vectordb_manager
+
+__all__ = [
+    'VectorDBManager',
+    'get_vectordb_manager',
+]
 
