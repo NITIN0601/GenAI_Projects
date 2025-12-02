@@ -4,6 +4,7 @@ Provider abstraction layer for embeddings.
 Supports:
 - OpenAI (text-embedding-3-small, text-embedding-ada-002)
 - Local (sentence-transformers)
+- Custom API
 - Easy switching via configuration
 """
 
@@ -173,6 +174,7 @@ class EmbeddingManager:
     Supports:
     - OpenAI (cloud, paid)
     - Local (sentence-transformers, free)
+    - Custom API
     """
     
     def __init__(
@@ -199,8 +201,8 @@ class EmbeddingManager:
             self.provider = LocalEmbeddingProvider(model_name=model)
         elif self.provider_name == "custom":
             # Import custom provider
-            from embeddings.custom_api_provider import CustomAPIEmbeddingProvider
-            self.provider = CustomAPIEmbeddingProvider()
+            from src.embeddings.providers.custom_api_provider import get_custom_embedding_provider
+            self.provider = get_custom_embedding_provider()
         else:
             raise ValueError(
                 f"Unknown provider: {provider}. "

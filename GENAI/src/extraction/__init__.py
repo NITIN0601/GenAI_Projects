@@ -47,6 +47,12 @@ from src.extraction.backends import DoclingBackend, PyMuPDFBackend
 from src.extraction.quality import QualityAssessor
 from src.extraction.cache import ExtractionCache
 from src.extraction.strategy import ExtractionStrategy
+from src.extraction.consolidation import (
+    MultiYearTableConsolidator,
+    QuarterlyTableConsolidator,
+    get_multi_year_consolidator,
+    get_quarterly_consolidator
+)
 
 __version__ = "2.0.0"
 
@@ -71,6 +77,12 @@ __all__ = [
     'ExtractionStrategy',
     'QualityAssessor',
     'ExtractionCache',
+    
+    # Table consolidation
+    'MultiYearTableConsolidator',
+    'QuarterlyTableConsolidator',
+    'get_multi_year_consolidator',
+    'get_quarterly_consolidator',
     
     # Base classes
     'ExtractionBackend',

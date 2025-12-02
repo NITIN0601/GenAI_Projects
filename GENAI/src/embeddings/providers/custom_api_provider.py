@@ -8,16 +8,117 @@ Compatible with the existing provider system.
 import os
 import requests
 import logging
-from typing import List, Dict, Any, Optional
+import json
+from typing import List, Dict, Any, Optional, Union
 import urllib3
 
 from src.embeddings.providers import EmbeddingProvider
 from src.llm.providers.base import LLMProvider
+from config.settings import settings
 
 # Disable SSL warnings for custom endpoints
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
+
+
+def model_request(url: str, data: dict, model_type: str, testing: bool = False, headers: Dict[str, str] = None):
+    """
+    Sends a POST request to the specified model API and returns a summary of the response.
+
+    Args:
+        url (str): The API endpoint URL.
+        data (dict): The payload to send in the request.
+        model_type (str): Type of model ('LLM' or 'EB').
+        testing (bool): Flag to determine the return type for LLM/EB.
+        headers (dict): Headers to send with the request.
+
+    Returns:
+        dict, str, list: Parsed model response content/embedding or summary dict.
+        None: If an error occurs.
+    """
+    logger.debug(f"Testing {model_type} Model...")
+
+    def parse_response(
+        response_json: Dict[str, Any],
+        model_type: str,
+        testing: bool = False
+    ) -> Union[Dict[str, Any], str, list, None]:
+        """
+        Parses the API response based on the model type.
+        """
+        if model_type == "LLM":
+            try:
+                content = response_json["choices"][0]["message"]["content"]
+                usage = response_json.get('usage', {})
+                if testing:
+                    return {
+                        "Model_Type": model_type,
+                        "Model_Name": response_json.get('model'),
+                        "Response_Type": type(content).__name__,
+                        "Response_Length": len(content),
+                        "Usage_Consumed": {
+                            'prompt_tokens': usage.get('prompt_tokens'),
+                            'completion_tokens': usage.get('completion_tokens'),
+                            'total_tokens': usage.get('total_tokens')
+                        }
+                    }
+                else:
+                    return content
+            except (KeyError, IndexError) as e:
+                raise ValueError(f"Invalid LLM response structure: {e}") from e
+
+        elif model_type == "EB":
+            try:
+                embedding = response_json['data'][0]['embedding']
+                if testing:
+                    return {
+                        "Model_Type": model_type,
+                        "Model_Name": response_json.get('model'),
+                        "Response_Type": type(embedding).__name__,
+                        "Response_Length": len(embedding),
+                        "Usage_Consumed": response_json.get('usage', {})
+                    }
+                else:
+                    return embedding
+            except (KeyError, IndexError) as e:
+                raise ValueError(f"Invalid EB response structure: {e}") from e
+
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+
+    try:
+        response = requests.post(url, headers=headers, json=data, verify=False)
+        # logger.debug(f"HTTP Status Code: {response.status_code}")
+        response.raise_for_status()
+
+        return parse_response(response.json(), model_type, testing)
+
+    except requests.exceptions.HTTPError as http_err:
+        logger.info(f"HTTP error occurred: {http_err}")
+        if http_err.response is not None:
+             logger.info(f"Response Content: {http_err.response.text}")
+        raise
+    except requests.exceptions.ConnectionError as conn_err:
+        logger.info(f"Connection error occurred: {conn_err}")
+        raise
+    except requests.exceptions.Timeout as timeout_err:
+        logger.info(f"Timeout error occurred: {timeout_err}")
+        raise
+    except requests.exceptions.RequestException as req_error:
+        logger.info(f"General Request Error: {req_error}")
+        raise
+    except json.JSONDecodeError as json_error:
+        logger.info(f"Failed to parse JSON response: {json_error}")
+        raise
+    except ValueError as val_error:
+        logger.info(f"Data parsing error: {val_error}")
+        raise
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {e}")
+        raise
+
+    return None
 
 
 class CustomAPIEmbeddingProvider(EmbeddingProvider):
@@ -36,21 +137,26 @@ class CustomAPIEmbeddingProvider(EmbeddingProvider):
         api_url: Optional[str] = None,
         model_name: Optional[str] = None,
         unique_id: Optional[str] = None,
-        bearer_token: Optional[str] = None
+        bearer_token: Optional[str] = None,
+        dimension: Optional[int] = None
     ):
         """
         Initialize custom API embedding provider.
-        
-        Args:
-            api_url: API endpoint (defaults to EB_URL env var)
-            model_name: Model name (defaults to EB_MODEL env var)
-            unique_id: Unique ID (defaults to UNIQUE_ID env var)
-            bearer_token: Bearer token (defaults to BEARER_TOKEN env var)
         """
-        self.api_url = api_url or os.getenv('EB_URL')
-        self.model_name = model_name or os.getenv('EB_MODEL')
-        self.unique_id = unique_id or os.getenv('UNIQUE_ID')
-        self.bearer_token = bearer_token or os.getenv('BEARER_TOKEN')
+        self.api_url = api_url or settings.EB_URL or os.getenv('EB_URL')
+        self.model_name = model_name or settings.EB_MODEL or os.getenv('EB_MODEL')
+        self.unique_id = unique_id or settings.UNIQUE_ID or os.getenv('UNIQUE_ID')
+        self.bearer_token = bearer_token or settings.BEARER_TOKEN or os.getenv('BEARER_TOKEN')
+        
+        # Try to get dimension from settings or env, fallback to auto-detect later
+        self.dimension = dimension or settings.EB_DIMENSION
+        if self.dimension is None:
+            env_dim = os.getenv('EB_DIMENSION')
+            if env_dim:
+                try:
+                    self.dimension = int(env_dim)
+                except ValueError:
+                    pass
         
         if not all([self.api_url, self.model_name, self.unique_id, self.bearer_token]):
             raise ValueError(
@@ -69,48 +175,17 @@ class CustomAPIEmbeddingProvider(EmbeddingProvider):
     def generate_embedding(self, text: str) -> List[float]:
         """
         Generate embedding for text using custom API.
-        
-        Args:
-            text: Input text
-            
-        Returns:
-            Embedding vector
         """
         data = {
             "model": self.model_name,
             "input": text
         }
         
-        try:
-            response = requests.post(
-                self.api_url,
-                headers=self.headers,
-                json=data,
-                verify=False  # Disable SSL verification
-            )
-            response.raise_for_status()
-            
-            response_json = response.json()
-            embedding = response_json['data'][0]['embedding']
-            
-            return embedding
-        
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Custom API embedding request failed: {e}")
-            raise
-        except (KeyError, IndexError) as e:
-            logger.error(f"Invalid embedding response structure: {e}")
-            raise ValueError(f"Invalid embedding response: {e}")
+        return model_request(self.api_url, data, "EB", testing=False, headers=self.headers)
     
     def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """
         Generate embeddings for multiple texts.
-        
-        Args:
-            texts: List of input texts
-            
-        Returns:
-            List of embedding vectors
         """
         # Generate one at a time (can be optimized if API supports batch)
         embeddings = []
@@ -121,9 +196,17 @@ class CustomAPIEmbeddingProvider(EmbeddingProvider):
         return embeddings
     
     def get_embedding_dimension(self) -> int:
-        """Get embedding dimension by generating a test embedding."""
-        test_embedding = self.generate_embedding("test")
-        return len(test_embedding)
+        """Get embedding dimension."""
+        if self.dimension:
+            return self.dimension
+            
+        # Fallback to auto-detection
+        try:
+            test_embedding = self.generate_embedding("test")
+            self.dimension = len(test_embedding)
+            return self.dimension
+        except Exception:
+            return 384 # Fallback
     
     def get_dimension(self) -> int:
         """Get embedding dimension (alias for compatibility)."""
@@ -140,7 +223,7 @@ class CustomAPILLMProvider(LLMProvider):
     
     Uses environment variables:
     - LLM_URL: LLM API endpoint
-    - LLM_MODEL: LLM model name
+    - LLM_MODEL_CUSTOM: LLM model name
     - UNIQUE_ID: Unique identifier for requests
     - BEARER_TOKEN: Authentication token
     """
@@ -155,23 +238,17 @@ class CustomAPILLMProvider(LLMProvider):
     ):
         """
         Initialize custom API LLM provider.
-        
-        Args:
-            api_url: API endpoint (defaults to LLM_URL env var)
-            model_name: Model name (defaults to LLM_MODEL env var)
-            unique_id: Unique ID (defaults to UNIQUE_ID env var)
-            bearer_token: Bearer token (defaults to BEARER_TOKEN env var)
-            temperature: Sampling temperature
         """
-        self.api_url = api_url or os.getenv('LLM_URL')
-        self.model_name = model_name or os.getenv('LLM_MODEL')
-        self.unique_id = unique_id or os.getenv('UNIQUE_ID')
-        self.bearer_token = bearer_token or os.getenv('BEARER_TOKEN')
+        self.api_url = api_url or settings.LLM_URL or os.getenv('LLM_URL')
+        # Use LLM_MODEL_CUSTOM preference, fallback to LLM_MODEL
+        self.model_name = model_name or settings.LLM_MODEL_CUSTOM or os.getenv('LLM_MODEL_CUSTOM') or os.getenv('LLM_MODEL')
+        self.unique_id = unique_id or settings.UNIQUE_ID or os.getenv('UNIQUE_ID')
+        self.bearer_token = bearer_token or settings.BEARER_TOKEN or os.getenv('BEARER_TOKEN')
         self.temperature = temperature
         
         if not all([self.api_url, self.model_name, self.unique_id, self.bearer_token]):
             raise ValueError(
-                "Missing required environment variables: LLM_URL, LLM_MODEL, UNIQUE_ID, BEARER_TOKEN"
+                "Missing required environment variables: LLM_URL, LLM_MODEL_CUSTOM (or LLM_MODEL), UNIQUE_ID, BEARER_TOKEN"
             )
         
         self.headers = {
@@ -191,71 +268,51 @@ class CustomAPILLMProvider(LLMProvider):
     ) -> str:
         """
         Generate text using custom API.
-        
-        Args:
-            prompt: Input prompt
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            
-        Returns:
-            Generated text
         """
         data = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": temperature or self.temperature,
+            "temperature": temperature if temperature is not None else self.temperature,
             "stream": False
         }
         
         if max_tokens:
             data["max_tokens"] = max_tokens
         
-        try:
-            response = requests.post(
-                self.api_url,
-                headers=self.headers,
-                json=data,
-                verify=False  # Disable SSL verification
-            )
-            response.raise_for_status()
-            
-            response_json = response.json()
-            content = response_json["choices"][0]["message"]["content"]
-            
-            return content
-        
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Custom API LLM request failed: {e}")
-            raise
-        except (KeyError, IndexError) as e:
-            logger.error(f"Invalid LLM response structure: {e}")
-            raise ValueError(f"Invalid LLM response: {e}")
+        return model_request(self.api_url, data, "LLM", testing=False, headers=self.headers)
     
     def generate_with_context(
         self,
         query: str,
         context: str,
-        max_tokens: Optional[int] = None
+        system_prompt: Optional[str] = None
     ) -> str:
         """
         Generate text with context (for RAG).
-        
-        Args:
-            query: User query
-            context: Retrieved context
-            max_tokens: Maximum tokens
-            
-        Returns:
-            Generated answer
         """
-        prompt = f"""Context:
-{context}
+        if system_prompt is None:
+             # Avoid circular import if possible, or import inside method
+             try:
+                 from src.prompts import FINANCIAL_ANALYSIS_PROMPT
+                 system_prompt = FINANCIAL_ANALYSIS_PROMPT
+             except ImportError:
+                 system_prompt = "Context:\n{context}\n\nQuestion: {question}\n\nAnswer:"
 
-Question: {query}
-
-Answer based on the context above:"""
+        prompt = system_prompt.format(context=context, question=query)
         
-        return self.generate(prompt, max_tokens=max_tokens)
+        return self.generate(prompt)
+
+    def check_availability(self) -> bool:
+        """Check if LLM is available."""
+        try:
+            self.generate("test", max_tokens=5)
+            return True
+        except Exception:
+            return False
+
+    def get_provider_name(self) -> str:
+        """Get provider name."""
+        return f"custom-{self.model_name}"
 
 
 # Factory functions for easy integration

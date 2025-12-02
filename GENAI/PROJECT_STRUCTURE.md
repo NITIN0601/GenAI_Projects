@@ -12,17 +12,26 @@ GENAI/
 ├── 📄 main.py                          # Main CLI entry point
 ├── 📄 requirements.txt                 # Python dependencies
 ├── 📄 .env.example                     # Configuration template
+├── 📄 .env.example                     # Configuration template
 ├── 📄 README.md                        # Project overview
+├── 📄 Dockerfile                       # ✨ Container definition (NEW)
+├── 📄 Makefile                         # ✨ Developer commands (NEW)
 │
 ├── 📂 config/                          # Configuration & Settings
 │   ├── settings.py                     # Centralized settings (VectorDB, LLM, Embeddings)
-│   ├── prompts.py                      # LangChain prompt templates
 │   └── __init__.py
 │
 ├── 📂 src/                             # Core Application Code
+│   ├── 📂 prompts/                     # ✨ Centralized Prompts (NEW)
+│   │   ├── base.py                     # Core financial analysis prompts
+│   │   ├── rag.py                      # RAG-specific prompts
+│   │   ├── search_strategies.py        # Search strategy prompts
+│   │   ├── advanced.py                 # Advanced techniques (CoT, ReAct)
+│   │   └── few_shot.py                 # Few-shot examples
+│   │
 │   ├── 📂 extraction/                  # PDF Extraction System
 │   │   ├── extractor.py                # Unified extractor with fallback
-│   │   ├── enrichment.py               # ✨ Metadata enrichment (NEW)
+│   │   ├── enrichment.py               # Metadata enrichment
 │   │   ├── base.py                     # Base classes & interfaces
 │   │   ├── strategy.py                 # Extraction strategy
 │   │   ├── quality.py                  # Quality assessment
@@ -32,7 +41,10 @@ GENAI/
 │   │   │   ├── pymupdf_backend.py      # PyMuPDF (fallback)
 │   │   │   ├── pdfplumber_backend.py   # PDFPlumber (fallback)
 │   │   │   └── camelot_backend.py      # Camelot (fallback)
-│   │   └── 📂 formatters/              # Output formatters
+│   │   ├── 📂 formatters/              # Output formatters
+│   │   └── 📂 consolidation/           # ✨ Table Consolidation (MOVED)
+│   │       ├── quarterly.py            # Quarterly consolidation
+│   │       └── multi_year.py           # Multi-year consolidation
 │   │
 │   ├── 📂 embeddings/                  # Embedding Generation
 │   │   ├── manager.py                  # Embedding manager (unified interface)
@@ -51,14 +63,17 @@ GENAI/
 │   │       └── redis_store.py          # Redis (LangChain-compliant)
 │   │
 │   ├── 📂 retrieval/                   # Retrieval & Search
-│   │   ├── retrievers.py               # ✨ Advanced retrievers (NEW)
-│   │   │                               #    - BM25Retriever
-│   │   │                               #    - EnsembleRetriever (Hybrid)
+│   │   ├── retrievers.py               # Advanced retrievers
 │   │   ├── retriever.py                # Base retriever
 │   │   ├── query_processor.py          # Query processing pipeline
 │   │   ├── query_classifier.py         # Query type classification
 │   │   ├── query_parser.py             # Query parsing
-│   │   └── reranker.py                 # Result reranking
+│   │   └── 📂 search/                  # Search Strategies
+│   │       ├── orchestrator.py         # Search Orchestrator
+│   │       └── 📂 strategies/          # Strategy implementations
+│   │           ├── hybrid_search.py
+│   │           ├── hyde_search.py
+│   │           └── multi_query_search.py
 │   │
 │   ├── 📂 llm/                         # LLM Integration
 │   │   ├── manager.py                  # LLM manager
@@ -82,15 +97,17 @@ GENAI/
 │   │   └── vectordb_schemas.py         # Vector DB schemas
 │   │
 │   └── 📂 utils/                       # Utilities
-│       ├── logging_config.py           # Logging setup
+│       ├── logger.py                   # Logging setup
 │       ├── metrics.py                  # Metrics collection
-│       └── extraction_utils.py         # Extraction helpers
+│       ├── exceptions.py               # Custom exceptions
+│       └── helpers.py                  # Helper functions
 │
 ├── 📂 scripts/                         # Utility Scripts
 │   ├── download_documents.py           # PDF downloader
 │   ├── ingest_pipeline.py              # Batch ingestion
 │   ├── verify_langchain.py             # LangChain verification
 │   ├── verify_enrichment.py            # Metadata enrichment test
+│   ├── quick_test_extraction.py        # Fast extraction test
 │   └── migrate_vectordb.py             # Vector DB migration
 │
 ├── 📂 tests/                           # Test Suite

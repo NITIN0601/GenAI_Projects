@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 
 from src.retrieval.query_understanding import QueryUnderstanding, QueryType, ParsedQuery, get_query_understanding
-from src.rag.consolidation.multi_year import TableConsolidationEngine, get_consolidation_engine
+from src.extraction.consolidation import TableConsolidationEngine, get_consolidation_engine
 from src.models.schemas import RAGQuery, RAGResponse
 from src.retrieval.retriever import get_retriever
 from src.llm.manager import get_llm_manager

@@ -1,5 +1,5 @@
 """
-Few-shot examples for financial query prompting.
+Few-shot learning components for financial query prompting.
 
 Provides curated examples to improve LLM response quality through in-context learning.
 """
@@ -8,7 +8,11 @@ from typing import List, Dict, Optional
 from langchain_core.prompts import FewShotPromptTemplate, PromptTemplate
 from langchain_core.example_selectors import SemanticSimilarityExampleSelector
 
-# Curated few-shot examples for financial queries
+
+# ============================================================================
+# CURATED FEW-SHOT EXAMPLES
+# ============================================================================
+
 FINANCIAL_EXAMPLES = [
     {
         "question": "What was the total revenue in Q1 2024?",
@@ -52,12 +56,18 @@ FINANCIAL_EXAMPLES = [
     }
 ]
 
+
 # Example template for formatting
 EXAMPLE_TEMPLATE = """
 Question: {question}
 Context: {context}
 Answer: {answer}
 """
+
+
+# ============================================================================
+# FEW-SHOT MANAGER
+# ============================================================================
 
 class FewShotManager:
     """
@@ -133,7 +143,7 @@ class FewShotManager:
             prompt = FewShotPromptTemplate(
                 example_selector=selector,
                 example_prompt=example_prompt,
-                suffix="Now answer this question using the context provided:\\n\\nQuestion: {question}\\nContext: {context}\\nAnswer:",
+                suffix="Now answer this question using the context provided:\n\nQuestion: {question}\nContext: {context}\nAnswer:",
                 input_variables=["question", "context"]
             )
         else:
@@ -141,7 +151,7 @@ class FewShotManager:
             prompt = FewShotPromptTemplate(
                 examples=self.examples[:self.k],
                 example_prompt=example_prompt,
-                suffix="Now answer this question using the context provided:\\n\\nQuestion: {question}\\nContext: {context}\\nAnswer:",
+                suffix="Now answer this question using the context provided:\n\nQuestion: {question}\nContext: {context}\nAnswer:",
                 input_variables=["question", "context"]
             )
         
@@ -151,9 +161,22 @@ class FewShotManager:
 # Global instance
 _few_shot_manager: Optional[FewShotManager] = None
 
+
 def get_few_shot_manager(embedding_function=None) -> FewShotManager:
     """Get global few-shot manager instance."""
     global _few_shot_manager
     if _few_shot_manager is None:
         _few_shot_manager = FewShotManager(embedding_function=embedding_function)
     return _few_shot_manager
+
+
+# ============================================================================
+# EXPORTS
+# ============================================================================
+
+__all__ = [
+    'FINANCIAL_EXAMPLES',
+    'EXAMPLE_TEMPLATE',
+    'FewShotManager',
+    'get_few_shot_manager',
+]

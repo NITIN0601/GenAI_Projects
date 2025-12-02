@@ -15,16 +15,9 @@ from typing import List, Dict, Any, Optional
 import logging
 
 from src.retrieval.search.base import BaseSearchStrategy, SearchResult
+from src.prompts.search_strategies import HYDE_PROMPT
 
 logger = logging.getLogger(__name__)
-
-
-# Default HyDE prompt template
-HYDE_PROMPT_TEMPLATE = """Given the following question about financial data, write a detailed, factual answer as it would appear in a 10-K or 10-Q SEC filing.
-
-Question: {query}
-
-Write a paragraph that would answer this question in a financial document (focus on facts, numbers, and financial terminology):"""
 
 
 class HyDESearchStrategy(BaseSearchStrategy):
@@ -65,7 +58,7 @@ class HyDESearchStrategy(BaseSearchStrategy):
         
         self.prompt_template = (
             self.config.hyde_prompt_template or
-            HYDE_PROMPT_TEMPLATE
+            HYDE_PROMPT.template
         )
     
     def search(

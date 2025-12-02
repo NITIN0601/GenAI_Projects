@@ -14,19 +14,9 @@ from typing import List, Dict, Any, Optional
 import logging
 
 from src.retrieval.search.base import BaseSearchStrategy, SearchResult
+from src.prompts.search_strategies import MULTI_QUERY_PROMPT
 
 logger = logging.getLogger(__name__)
-
-
-# Default multi-query prompt
-MULTI_QUERY_PROMPT = """You are an AI assistant helping to improve search results for financial data queries.
-
-Given a user question, generate {num_queries} different versions of the question that could help find relevant information in financial documents (10-K, 10-Q filings).
-
-Original question: {query}
-
-Generate {num_queries} alternative phrasings or related questions (one per line):
-1."""
 
 
 class MultiQuerySearchStrategy(BaseSearchStrategy):
@@ -159,7 +149,7 @@ class MultiQuerySearchStrategy(BaseSearchStrategy):
         
         try:
             # Format prompt
-            prompt = MULTI_QUERY_PROMPT.format(
+            prompt = MULTI_QUERY_PROMPT.template.format(
                 query=query,
                 num_queries=num_queries
             )

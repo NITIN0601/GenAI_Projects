@@ -4,6 +4,7 @@ Provider abstraction layer for LLMs.
 Supports:
 - OpenAI (GPT-4, GPT-3.5-turbo)
 - Ollama (llama3.2, mistral, etc.)
+- Custom API
 - Easy switching via configuration
 """
 
@@ -109,7 +110,7 @@ class OpenAILLMProvider(LLMProvider):
     ) -> str:
         """Generate response with context (for RAG)."""
         if system_prompt is None:
-            from config.prompts import FINANCIAL_ANALYSIS_PROMPT
+            from src.prompts import FINANCIAL_ANALYSIS_PROMPT
             system_prompt = FINANCIAL_ANALYSIS_PROMPT
         
         # Format prompt
@@ -220,7 +221,7 @@ class OllamaLLMProvider(LLMProvider):
     ) -> str:
         """Generate response with context (for RAG)."""
         if system_prompt is None:
-            from config.prompts import FINANCIAL_ANALYSIS_PROMPT
+            from src.prompts import FINANCIAL_ANALYSIS_PROMPT
             system_prompt = FINANCIAL_ANALYSIS_PROMPT
         
         prompt = system_prompt.format(context=context, question=query)
@@ -246,6 +247,7 @@ class LLMManager:
     Supports:
     - OpenAI (GPT-4, GPT-3.5-turbo)
     - Ollama (llama3.2, mistral, etc.)
+    - Custom API
     """
     
     def __init__(
@@ -259,7 +261,7 @@ class LLMManager:
         Initialize LLM manager.
         
         Args:
-            provider: "openai" or "ollama"
+            provider: "openai", "ollama", or "custom"
             model: Model name (provider-specific)
             api_key: API key for cloud providers
             base_url: Base URL for Ollama
@@ -273,10 +275,14 @@ class LLMManager:
             model = model or "llama3.2"
             base_url = base_url or "http://localhost:11434"
             self.provider = OllamaLLMProvider(model=model, base_url=base_url)
+        elif self.provider_name == "custom":
+            # Import inside method to avoid circular import
+            from src.embeddings.providers.custom_api_provider import get_custom_llm_provider
+            self.provider = get_custom_llm_provider()
         else:
             raise ValueError(
                 f"Unknown provider: {provider}. "
-                f"Supported: 'openai', 'ollama'"
+                f"Supported: 'openai', 'ollama', 'custom'"
             )
         
         logger.info(f"LLM Manager: {self.provider.get_provider_name()}")

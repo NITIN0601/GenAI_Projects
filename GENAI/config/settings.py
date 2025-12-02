@@ -43,20 +43,16 @@ class Settings(BaseSettings):
     # ============================================================================
     # EMBEDDING PROVIDER SETTINGS
     # ============================================================================
-    EMBEDDING_PROVIDER: Literal["local", "openai", "custom"] = "local"  # Default: local (FREE)
+    EMBEDDING_PROVIDER: Literal["local", "custom"] = "local"  # Default: local (FREE)
     
     # Local Embeddings (sentence-transformers - FREE)
     EMBEDDING_MODEL_LOCAL: str = "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_DIMENSION_LOCAL: int = 384
     
-    # OpenAI Embeddings (PAID)
-    EMBEDDING_MODEL_OPENAI: str = "text-embedding-3-small"
-    EMBEDDING_DIMENSION_OPENAI: int = 1536
-    OPENAI_API_KEY: Optional[str] = None
-    
     # Custom API Embeddings (YOUR WORKING API)
     EB_URL: Optional[str] = None
     EB_MODEL: Optional[str] = None
+    EB_DIMENSION: Optional[int] = None  # Dimension for custom embeddings
     UNIQUE_ID: Optional[str] = None
     BEARER_TOKEN: Optional[str] = None
     
@@ -67,32 +63,25 @@ class Settings(BaseSettings):
     @property
     def EMBEDDING_MODEL(self) -> str:
         """Get embedding model based on provider."""
-        if self.EMBEDDING_PROVIDER == "openai":
-            return self.EMBEDDING_MODEL_OPENAI
-        elif self.EMBEDDING_PROVIDER == "custom":
+        if self.EMBEDDING_PROVIDER == "custom":
             return self.EB_MODEL or "custom-embedding-model"
         return self.EMBEDDING_MODEL_LOCAL
     
     @property
     def EMBEDDING_DIMENSION(self) -> int:
         """Get embedding dimension based on provider."""
-        if self.EMBEDDING_PROVIDER == "openai":
-            return self.EMBEDDING_DIMENSION_OPENAI
-        elif self.EMBEDDING_PROVIDER == "custom":
-            return 384  # Will be auto-detected from API
+        if self.EMBEDDING_PROVIDER == "custom":
+            return self.EB_DIMENSION or 384  # Use configured dimension or default
         return self.EMBEDDING_DIMENSION_LOCAL
     
     # ============================================================================
     # LLM PROVIDER SETTINGS
     # ============================================================================
-    LLM_PROVIDER: Literal["ollama", "openai", "custom"] = "ollama"  # Default: ollama (FREE)
+    LLM_PROVIDER: Literal["ollama", "custom"] = "ollama"  # Default: ollama (FREE)
     
     # Ollama (Local - FREE)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama2"
-    
-    # OpenAI (PAID)
-    OPENAI_MODEL: str = "gpt-4"
     
     # Custom API LLM (YOUR WORKING API)
     LLM_URL: Optional[str] = None
@@ -106,8 +95,6 @@ class Settings(BaseSettings):
     @property
     def LLM_MODEL(self) -> str:
         """Get LLM model based on provider."""
-        if self.LLM_PROVIDER == "openai":
-            return self.OPENAI_MODEL
         return self.OLLAMA_MODEL
     
     # ============================================================================
@@ -166,6 +153,7 @@ class Settings(BaseSettings):
     # ============================================================================
     CHUNK_SIZE: int = 10  # rows per chunk for tables
     CHUNK_OVERLAP: int = 3  # overlapping rows
+    MIN_CHUNK_SIZE: int = 3  # minimum rows per chunk
     
     # ============================================================================
     # RETRIEVAL SETTINGS
@@ -211,7 +199,7 @@ class Settings(BaseSettings):
     # TABLE EXPORT SETTINGS
     # ============================================================================
     OUTPUT_DIR: str = "outputs/tables"  # Directory for exported tables
-    EXPORT_BOTH_FORMATS: bool = True  # Export both CSV and Excel
+    EXPORT_FORMAT: Literal["csv", "excel", "both"] = "both"  # Export format
     TABLE_SIMILARITY_THRESHOLD: float = 0.85  # Threshold for table title matching
     
     

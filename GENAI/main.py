@@ -637,7 +637,7 @@ def consolidate(
     
     try:
         # Import consolidator
-        from src.rag.table_consolidator import get_table_consolidator
+        from src.extraction.consolidation import get_quarterly_consolidator
         from src.embeddings.manager import get_embedding_manager
         
         # Get vector store and embedding manager
@@ -651,7 +651,7 @@ def consolidate(
             settings.TABLE_SIMILARITY_THRESHOLD = threshold
         
         # Initialize consolidator
-        consolidator = get_table_consolidator(vector_store, embedding_manager)
+        consolidator = get_quarterly_consolidator(vector_store, embedding_manager)
         
         # Step 1: Find matching tables
         with console.status("[bold green]Searching for matching tables..."):

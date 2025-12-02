@@ -125,6 +125,7 @@ class SearchOrchestrator:
         config: Optional[SearchConfig] = None,
         use_cache: bool = True,
         use_reranking: bool = False,
+        top_k: Optional[int] = None,
         **kwargs
     ) -> List[SearchResult]:
         """
@@ -136,15 +137,24 @@ class SearchOrchestrator:
             config: Search configuration
             use_cache: Whether to use cache (if available)
             use_reranking: Whether to rerank results (if available)
+            top_k: Override default top_k
             **kwargs: Strategy-specific parameters
             
         Returns:
             List of search results sorted by relevance
         """
+        from config.settings import settings
+        
         start_time = datetime.now()
         
         strategy = strategy or self.default_strategy
         config = config or SearchConfig()
+        
+        # Override top_k if provided
+        if top_k:
+            config.top_k = top_k
+        elif not config.top_k:
+            config.top_k = settings.SEARCH_TOP_K
         
         # Update metrics
         self.metrics["total_searches"] += 1

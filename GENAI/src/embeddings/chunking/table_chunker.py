@@ -15,7 +15,8 @@ class TableChunker:
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.flatten_headers = flatten_headers
-        self.min_chunk_size = 3
+        from config.settings import settings
+        self.min_chunk_size = settings.MIN_CHUNK_SIZE
     
     def chunk_table(
         self,

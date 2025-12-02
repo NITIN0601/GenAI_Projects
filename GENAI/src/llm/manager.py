@@ -1,24 +1,78 @@
-"""LLM manager using LangChain and Ollama."""
+"""LLM manager using LangChain and Ollama/Custom Providers."""
 
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 import logging
 from langchain_ollama import ChatOllama
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage, AIMessage
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.outputs import ChatResult, ChatGeneration
 
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
+class CustomLangChainWrapper(BaseChatModel):
+    """Wrapper to make CustomAPILLMProvider compatible with LangChain."""
+    
+    provider: Any = None
+    
+    def __init__(self, provider):
+        super().__init__()
+        self.provider = provider
+
+    @property
+    def _llm_type(self) -> str:
+        return "custom-api"
+
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        # Convert messages to prompt
+        # This is a simple conversion. For better results, the custom provider 
+        # should ideally support list of messages if the API supports it.
+        # But based on the user's code, it takes a single string prompt or messages list.
+        # The CustomAPILLMProvider.generate takes a prompt string.
+        # However, CustomAPILLMProvider.generate constructs a messages list internally:
+        # "messages": [{"role": "user", "content": prompt}]
+        
+        # So we should probably construct a single prompt string from the history
+        # OR update CustomAPILLMProvider to accept messages.
+        # For now, let's concat.
+        
+        prompt = ""
+        for m in messages:
+            if isinstance(m, SystemMessage):
+                prompt += f"System: {m.content}\n"
+            elif isinstance(m, HumanMessage):
+                prompt += f"User: {m.content}\n"
+            elif isinstance(m, AIMessage):
+                prompt += f"Assistant: {m.content}\n"
+            else:
+                prompt += f"{m.content}\n"
+        
+        # Remove trailing newline
+        prompt = prompt.strip()
+
+        # Generate
+        # We use generate() which takes a string prompt
+        response = self.provider.generate(prompt)
+
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=response))])
+
+
 class LLMManager:
     """
-    LLM integration using LangChain and Ollama.
+    LLM integration using LangChain.
     
-    Wraps LangChain's ChatOllama to provide a unified interface
-    compatible with the rest of the application while leveraging
-    LangChain's capabilities.
+    Supports:
+    - Ollama (via ChatOllama)
+    - Custom API (via CustomLangChainWrapper)
     """
     
     def __init__(
@@ -31,24 +85,36 @@ class LLMManager:
         Initialize LLM manager.
         
         Args:
-            model_name: Ollama model name
-            base_url: Ollama API base URL
+            model_name: Model name
+            base_url: API base URL
             callbacks: LangChain callbacks
         """
-        self.model_name = model_name or settings.LLM_MODEL
-        self.base_url = base_url or settings.OLLAMA_BASE_URL
+        self.provider_type = settings.LLM_PROVIDER
         self.callbacks = callbacks or []
         
-        logger.info(f"Initializing LangChain LLM with model: {self.model_name}")
-        
-        # Initialize LangChain ChatOllama
-        self.llm: BaseChatModel = ChatOllama(
-            model=self.model_name,
-            base_url=self.base_url,
-            temperature=settings.LLM_TEMPERATURE,
-            callbacks=self.callbacks,
-            keep_alive="5m"  # Keep model loaded for 5 minutes
-        )
+        if self.provider_type == "custom":
+            self.model_name = model_name or settings.LLM_MODEL_CUSTOM
+            logger.info(f"Initializing Custom LLM: {self.model_name}")
+            
+            # Import inside method to avoid circular import
+            from src.embeddings.providers.custom_api_provider import get_custom_llm_provider
+            custom_provider = get_custom_llm_provider()
+            self.llm = CustomLangChainWrapper(provider=custom_provider)
+            
+        else:
+            # Default to Ollama
+            self.model_name = model_name or settings.LLM_MODEL or settings.OLLAMA_MODEL
+            self.base_url = base_url or settings.OLLAMA_BASE_URL
+            
+            logger.info(f"Initializing LangChain Ollama LLM: {self.model_name}")
+            
+            self.llm = ChatOllama(
+                model=self.model_name,
+                base_url=self.base_url,
+                temperature=settings.LLM_TEMPERATURE,
+                callbacks=self.callbacks,
+                keep_alive="5m"
+            )
         
     def generate(
         self,
@@ -60,24 +126,14 @@ class LLMManager:
     ) -> str:
         """
         Generate response using LangChain.
-        
-        Args:
-            prompt: Input prompt
-            temperature: Sampling temperature (override)
-            max_tokens: Maximum tokens (override)
-            stream: Whether to stream (not fully supported in this wrapper yet)
-            system_prompt: Optional system prompt
-            
-        Returns:
-            Generated text
         """
         messages = []
         if system_prompt:
             messages.append(SystemMessage(content=system_prompt))
         messages.append(HumanMessage(content=prompt))
         
-        # Update runtime settings if needed
-        if temperature is not None:
+        # Update runtime settings if needed (only for Ollama for now)
+        if temperature is not None and hasattr(self.llm, 'temperature'):
             self.llm.temperature = temperature
             
         try:

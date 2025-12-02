@@ -1,7 +1,10 @@
 """
-Table consolidation service for merging tables across quarters/years.
+Quarterly/period table consolidation service.
 
-Consolidates tables with similar titles from multiple documents and exports to CSV/Excel.
+Consolidates tables with similar titles from multiple quarters/periods 
+and exports to CSV/Excel.
+
+For multi-year consolidation with transposition, use MultiYearTableConsolidator instead.
 """
 
 import pandas as pd
@@ -17,13 +20,13 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 
-class TableConsolidator:
+class QuarterlyTableConsolidator:
     """
-    Consolidate tables across multiple documents by table title.
+    Consolidate tables across multiple quarters/periods by table title.
     
     Features:
     - Hybrid search (semantic + fuzzy + metadata filtering)
-    - Horizontal table merging (same rows, additional columns)
+    - Horizontal table merging (same rows, additional columns per quarter)
     - Handles missing data (N/A)
     - Exports to both CSV and Excel
     """
@@ -229,13 +232,14 @@ class TableConsolidator:
         export_paths = {}
         
         # Export CSV
-        csv_path = output_dir / f"{base_filename}.csv"
-        df.to_csv(csv_path, index=False)
-        export_paths['csv'] = str(csv_path)
-        logger.info(f"Exported CSV: {csv_path}")
+        if settings.EXPORT_FORMAT in ["csv", "both"]:
+            csv_path = output_dir / f"{base_filename}.csv"
+            df.to_csv(csv_path, index=False)
+            export_paths['csv'] = str(csv_path)
+            logger.info(f"Exported CSV: {csv_path}")
         
-        # Export Excel (if enabled)
-        if settings.EXPORT_BOTH_FORMATS:
+        # Export Excel
+        if settings.EXPORT_FORMAT in ["excel", "both"]:
             excel_path = output_dir / f"{base_filename}.xlsx"
             df.to_excel(excel_path, index=False, engine='openpyxl')
             export_paths['excel'] = str(excel_path)
@@ -325,13 +329,12 @@ class TableConsolidator:
         else:
             return 5
 
-
 # Global instance
-_consolidator: Optional[TableConsolidator] = None
+_quarterly_consolidator: Optional[QuarterlyTableConsolidator] = None
 
-def get_table_consolidator(vector_store=None, embedding_manager=None):
-    """Get global table consolidator instance."""
-    global _consolidator
-    if _consolidator is None or vector_store is not None:
-        _consolidator = TableConsolidator(vector_store, embedding_manager)
-    return _consolidator
+def get_quarterly_consolidator(vector_store=None, embedding_manager=None) -> QuarterlyTableConsolidator:
+    """Get global quarterly table consolidator instance."""
+    global _quarterly_consolidator
+    if _quarterly_consolidator is None or vector_store is not None:
+        _quarterly_consolidator = QuarterlyTableConsolidator(vector_store, embedding_manager)
+    return _quarterly_consolidator

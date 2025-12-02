@@ -2,7 +2,6 @@
 LLM integration module.
 
 Provides unified interface for multiple LLM providers:
-- OpenAI
 - Ollama (local)
 - Custom APIs
 

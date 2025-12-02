@@ -10,9 +10,9 @@ from src.retrieval.retriever import get_retriever
 from src.llm.manager import get_llm_manager
 from src.embeddings.manager import get_embedding_manager
 from src.cache.backends.redis_cache import get_redis_cache
-from src.rag.few_shot_examples import get_few_shot_manager
+from src.prompts.few_shot import get_few_shot_manager
 from config.settings import settings
-from config.prompts import FINANCIAL_CHAT_PROMPT, COT_PROMPT, REACT_PROMPT
+from src.prompts import FINANCIAL_CHAT_PROMPT, COT_PROMPT, REACT_PROMPT
 
 console = Console()
 

@@ -10,6 +10,8 @@ This module handles:
 Example:
     Input: 5 separate tables (2020-2024) with same structure
     Output: 1 consolidated transposed table with years as columns
+
+For quarterly/period consolidation, use QuarterlyTableConsolidator instead.
 """
 
 from typing import List, Dict, Any, Optional
@@ -17,7 +19,7 @@ import pandas as pd
 from collections import defaultdict
 
 
-class TableConsolidator:
+class MultiYearTableConsolidator:
     """
     Consolidates tables across multiple years and transposes for readability.
     
@@ -357,17 +359,20 @@ class TableConsolidator:
         
         return header + markdown_table
 
-
 # Global instance
-_consolidator: Optional[TableConsolidator] = None
+_multi_year_consolidator: Optional[MultiYearTableConsolidator] = None
 
 
-def get_table_consolidator() -> TableConsolidator:
-    """Get or create global table consolidator instance."""
-    global _consolidator
-    if _consolidator is None:
-        _consolidator = TableConsolidator()
-    return _consolidator
+def get_multi_year_consolidator() -> MultiYearTableConsolidator:
+    """Get or create global multi-year table consolidator instance."""
+    global _multi_year_consolidator
+    if _multi_year_consolidator is None:
+        _multi_year_consolidator = MultiYearTableConsolidator()
+    return _multi_year_consolidator
+
+
+# Backward compatibility alias
+get_table_consolidator = get_multi_year_consolidator
 
 
 def consolidate_and_transpose(
@@ -386,7 +391,7 @@ def consolidate_and_transpose(
     Returns:
         Consolidated table in requested format
     """
-    consolidator = get_table_consolidator()
+    consolidator = get_multi_year_consolidator()
     result = consolidator.consolidate_multi_year_tables(search_results, table_title)
     
     if format == 'dataframe':

@@ -65,9 +65,33 @@ class RedisVectorStore(VectorStore):
             # Index doesn't exist, create it
             schema = (
                 TextField("content"),
+                # Identity
                 TagField("source_doc"),
+                TagField("chunk_reference_id"),
+                
+                # Company
+                TagField("company_ticker"),
+                TextField("company_name"),
+                
+                # Context
+                TagField("statement_type"),
+                TagField("filing_type"),
+                TagField("fiscal_period_end"),
+                
+                # Table Info
+                TextField("table_title"),  # TextField for full-text search on titles
+                TagField("table_type"),
+                
+                # Time
                 TagField("year"),
                 TagField("quarter"),
+                
+                # Financials
+                TagField("units"),
+                TagField("currency"),
+                TagField("is_consolidated"),
+                
+                # Vector
                 VectorField(
                     "embedding",
                     "FLAT",
@@ -80,7 +104,7 @@ class RedisVectorStore(VectorStore):
             )
             definition = IndexDefinition(prefix=["doc:"], index_type=IndexType.HASH)
             self.client.ft(self.index_name).create_index(schema, definition=definition)
-            logger.info(f"Created index: {self.index_name}")
+            logger.info(f"Created index: {self.index_name} with full metadata schema")
 
     def add_texts(
         self,
