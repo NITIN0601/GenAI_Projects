@@ -51,7 +51,7 @@ class EmbeddingManager(Embeddings):
         self.provider_type = settings.EMBEDDING_PROVIDER
         self.device = device
         
-        elif self.provider_type == "custom":
+        if self.provider_type == "custom":
             self.model_name = model_name or settings.EB_MODEL
             logger.info(f"Initializing Custom Embeddings: {self.model_name}")
             

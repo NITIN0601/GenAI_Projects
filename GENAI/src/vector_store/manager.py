@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any, List
 import os
 
 from src.utils import get_logger
+from src.embeddings.manager import get_embedding_manager
 
 logger = get_logger(__name__)
 from src.models.schemas import TableChunk
@@ -107,10 +108,10 @@ class VectorDBManager:
                 index_type=kwargs.get('index_type', 'flat')
             )
         elif self.provider_name == "redis":
-            # Redis Vector implementation (to be added)
-            raise NotImplementedError(
-                "Redis Vector support coming soon. "
-                "Use 'chromadb' or 'faiss' for now."
+            from src.vector_store.stores.redis_store import RedisVectorStore
+            self.db = RedisVectorStore(
+                embedding_function=get_embedding_manager(),
+                index_name=kwargs.get('index_name', 'financial_docs')
             )
         else:
             raise ValueError(
