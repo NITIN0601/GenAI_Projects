@@ -1,8 +1,8 @@
 # GENAI Project Structure
 
-**Last Updated**: 2025-12-02  
-**Total Python Files**: 224  
-**Total Directories**: 35+
+**Last Updated**: 2025-12-03  
+**Total Python Files**: 88  
+**Total Directories**: 20+
 
 ---
 
@@ -29,7 +29,8 @@
 ```
 config/
 ├── __init__.py
-└── settings.py                     # Centralized settings (Pydantic)
+├── settings.py                     # Centralized settings (Pydantic)
+└── prompts.yaml                    # Centralized prompt templates
 ```
 
 **Purpose**: Application configuration with environment variable support
@@ -37,6 +38,11 @@ config/
 - LLM provider settings (Ollama, custom)
 - Vector DB provider settings (ChromaDB, FAISS, Redis)
 - Feature flags and paths
+- **NEW**: Centralized prompt templates and few-shot examples in YAML
+
+**Key Files**:
+- `settings.py`: Pydantic-based configuration management
+- `prompts.yaml`: All LLM prompt templates (Financial Analysis, CoT, ReAct, HyDE, Multi-Query, Few-Shot examples)
 
 ---
 
@@ -68,6 +74,9 @@ src/cache/
     └── redis_cache.py              # Redis caching implementation
 ```
 
+**Files**:
+- `redis_cache.py`: Redis-based query result caching for performance
+
 **Purpose**: Query result caching for performance optimization
 
 ---
@@ -88,6 +97,13 @@ src/embeddings/
     └── custom_api_provider.py     # Custom API embedding provider
 ```
 
+**Files**:
+- `manager.py`: Unified interface for all embedding providers
+- `multi_level.py`: Generates embeddings at table, row, and cell levels
+- `chunking/table_chunker.py`: Intelligent table chunking for large tables
+- `providers/base.py`: Abstract base class for embedding providers
+- `providers/custom_api_provider.py`: Custom API integration with bearer token auth
+
 **Purpose**: Embedding generation with support for multiple providers
 - **Local**: sentence-transformers (FREE)
 - **Custom**: Bearer token API integration
@@ -96,6 +112,7 @@ src/embeddings/
 - Multi-level embeddings (table, row, cell)
 - Provider abstraction
 - Batch processing
+- Configurable chunk sizes
 
 ---
 
@@ -129,6 +146,25 @@ src/extraction/
     └── metadata_extractor.py      # Metadata extraction
 ```
 
+**Files**:
+- `base.py`: Base classes for extraction backends (ExtractionBackend, ExtractionResult)
+- `extractor.py`: Main orchestrator with multi-backend fallback
+- `strategy.py`: Backend selection strategy based on quality
+- `quality.py`: Table quality scoring and assessment
+- `metrics.py`: Extraction performance metrics
+- `cache.py`: File-based caching for extraction results
+- `enrichment.py`: Financial metadata enrichment (units, currency, statement types)
+- `backends/docling_backend.py`: Primary extraction using Docling
+- `backends/pymupdf_backend.py`: Fallback using PyMuPDF
+- `backends/pdfplumber_backend.py`: Fallback using PDFPlumber
+- `backends/camelot_backend.py`: Fallback using Camelot
+- `consolidation/table_consolidator.py`: Base consolidation logic
+- `consolidation/quarterly.py`: Quarterly table consolidation
+- `consolidation/multi_year.py`: Multi-year table consolidation
+- `formatters/table_formatter.py`: Basic markdown table formatting
+- `formatters/enhanced_formatter.py`: Advanced formatting with multi-level headers
+- `formatters/metadata_extractor.py`: Extract metadata from table content
+
 **Purpose**: Extract tables from financial PDFs with quality assessment
 - **Primary**: Docling (best quality)
 - **Fallback**: PyMuPDF, PDFPlumber, Camelot
@@ -145,12 +181,18 @@ src/llm/
 ├── manager.py                      # Unified LLM manager
 └── providers/
     ├── __init__.py
-    └── base.py                     # Abstract LLM provider
+    └── base.py                     # LLM provider implementations
 ```
+
+**Files**:
+- `manager.py`: Unified interface for all LLM providers, supports LangChain integration
+- `providers/base.py`: OpenAI and Ollama LLM providers with abstract base class
 
 **Purpose**: LLM integration with provider abstraction
 - **Ollama**: Local LLM (FREE)
+- **OpenAI**: GPT-3.5-turbo, GPT-4
 - **Custom**: Bearer token API integration
+- **LangChain**: Full LCEL pipeline support
 
 ---
 
@@ -165,6 +207,11 @@ src/models/
     ├── schemas.py                 # Core RAG models (27 fields)
     └── enhanced_schemas.py        # Advanced extraction models
 ```
+
+**Files**:
+- `vectordb_schemas.py`: Vector database-specific document schemas
+- `schemas/schemas.py`: Core Pydantic models (TableMetadata with 27 fields, TableChunk, SearchResult, RAGQuery, RAGResponse)
+- `schemas/enhanced_schemas.py`: Enhanced extraction models for advanced processing
 
 **Purpose**: Pydantic models for type safety and validation
 
@@ -188,13 +235,28 @@ src/models/
 ```
 src/prompts/
 ├── __init__.py
-├── base.py                         # Base prompts
-├── advanced.py                     # Advanced prompts
-├── few_shot.py                     # Few-shot examples
-└── search_strategies.py            # Search-specific prompts
+├── loader.py                       # Prompt loader (Singleton)
+├── base.py                         # Base prompts (uses loader)
+├── advanced.py                     # Advanced prompts (uses loader)
+├── few_shot.py                     # Few-shot examples (uses loader)
+└── search_strategies.py            # Search-specific prompts (uses loader)
 ```
 
-**Purpose**: Centralized prompt management for LLM interactions
+**Files**:
+- `loader.py`: **NEW** - Singleton PromptLoader class that loads all prompts from `config/prompts.yaml`
+- `base.py`: Financial analysis prompts (FINANCIAL_ANALYSIS_PROMPT, FINANCIAL_CHAT_PROMPT, TABLE_COMPARISON_PROMPT, METADATA_EXTRACTION_PROMPT, CITATION_PROMPT)
+- `advanced.py`: Advanced reasoning prompts (COT_PROMPT, REACT_PROMPT)
+- `few_shot.py`: Few-shot learning manager with semantic similarity example selection (FINANCIAL_EXAMPLES, FewShotManager)
+- `search_strategies.py`: Retrieval strategy prompts (HYDE_PROMPT, MULTI_QUERY_PROMPT)
+
+**Purpose**: Centralized prompt management using YAML configuration and Singleton loader
+
+**Key Features**:
+- All prompts defined in `config/prompts.yaml`
+- Singleton loader ensures single load
+- Backward compatible with existing code
+- Easy to update prompts without code changes
+- Supports LangChain PromptTemplate and ChatPromptTemplate
 
 ---
 
@@ -207,10 +269,15 @@ src/rag/
 └── exporter.py                     # Result export (CSV, Excel, JSON)
 ```
 
+**Files**:
+- `pipeline.py`: Main RAG query engine using LangChain LCEL chains
+- `exporter.py`: Export query results to CSV, Excel, and JSON formats
+
 **Purpose**: RAG query processing and result export
 - LangChain LCEL pipeline
-- Multi-format export
-- Source tracking
+- Multi-format export (CSV, Excel, JSON)
+- Source tracking and citation
+- Multiple prompt strategies (standard, few-shot, CoT, ReAct)
 
 ---
 
@@ -244,6 +311,23 @@ src/retrieval/
         └── multi_query_search.py  # Multi-query expansion
 ```
 
+**Files**:
+- `retriever.py`: Basic retrieval interface
+- `query_processor.py`: Complete query processing with consolidation support
+- `query_understanding.py`: Query type classification (7 types) and entity extraction
+- `reranking/cross_encoder.py`: Cross-encoder reranking for improved relevance
+- `search/base.py`: Base classes for search strategies (BaseSearchStrategy, SearchResult)
+- `search/factory.py`: Factory for creating search strategies
+- `search/orchestrator.py`: Orchestrates multiple search strategies
+- `search/fusion/rrf.py`: Reciprocal Rank Fusion algorithm
+- `search/fusion/linear.py`: Linear combination fusion
+- `search/fusion/weighted.py`: Weighted score fusion
+- `search/strategies/vector_search.py`: Pure semantic vector search
+- `search/strategies/keyword_search.py`: BM25 keyword search
+- `search/strategies/hybrid_search.py`: Hybrid vector + keyword search
+- `search/strategies/hyde_search.py`: HyDE (Hypothetical Document Embeddings)
+- `search/strategies/multi_query_search.py`: Multi-query expansion
+
 **Purpose**: Advanced retrieval with multiple search strategies
 - **Vector Search**: Semantic similarity
 - **Keyword Search**: BM25 full-text
@@ -251,7 +335,16 @@ src/retrieval/
 - **HyDE**: Generate hypothetical answers
 - **Multi-Query**: Query expansion
 - **Reranking**: Cross-encoder reranking
-- **Fusion**: Combine multiple strategies
+- **Fusion**: Combine multiple strategies (RRF, Linear, Weighted)
+
+**Query Types Supported**:
+1. Specific Value
+2. Comparison
+3. Trend Analysis
+4. Aggregation
+5. Multi-Document
+6. Cross-Table
+7. Hierarchical
 
 ---
 
@@ -264,10 +357,15 @@ src/scheduler/
 └── filing_calendar.py             # SEC filing calendar
 ```
 
+**Files**:
+- `scheduler.py`: APScheduler-based automated task scheduling
+- `filing_calendar.py`: SEC filing calendar with prediction logic
+
 **Purpose**: Automatic SEC filing monitoring and download
 - Predicts filing dates based on historical patterns
 - Automatic download on filing release
 - Configurable check intervals
+- Holiday awareness
 
 ---
 
@@ -282,6 +380,13 @@ src/utils/
 ├── metrics.py                      # Performance metrics
 └── extraction_utils.py            # Extraction utilities
 ```
+
+**Files**:
+- `logger.py`: Centralized logging configuration with file and console handlers
+- `exceptions.py`: Custom exception classes for the application
+- `helpers.py`: General helper functions
+- `metrics.py`: Performance metrics collection and reporting
+- `extraction_utils.py`: Utilities for table extraction and processing
 
 **Purpose**: Shared utilities and helper functions
 
@@ -302,6 +407,13 @@ src/vector_store/
     ├── faiss_store.py             # FAISS implementation
     └── redis_store.py             # Redis implementation
 ```
+
+**Files**:
+- `manager.py`: Unified interface for all vector database providers
+- `schemas/document_schema.py`: Document schema definitions
+- `stores/chromadb_store.py`: ChromaDB implementation with persistence
+- `stores/faiss_store.py`: FAISS implementation with metadata filtering
+- `stores/redis_store.py`: Redis implementation for distributed deployments
 
 **Purpose**: Vector database abstraction layer
 - **ChromaDB**: Default, persistent, easy to use
@@ -328,6 +440,7 @@ VECTORDB_PROVIDER=faiss  # or chromadb, redis
 ```
 tests/
 ├── README.md
+├── test_prompt_loader.py          # NEW - Prompt loader tests
 ├── unit/                           # Unit tests
 │   ├── test_chunking.py
 │   ├── test_custom_api.py
@@ -353,6 +466,7 @@ tests/
 - **Unit**: Component-level testing
 - **Integration**: Multi-component testing
 - **System**: End-to-end testing
+- **NEW**: Prompt loader validation tests
 
 ---
 
@@ -405,10 +519,11 @@ outputs/
 - `EmbeddingManager`: Unified embedding interface
 - `LLMManager`: Unified LLM interface
 - `VectorDBManager`: Unified vector DB interface
+- **NEW**: `PromptLoader`: Unified prompt management
 
 ### 2. **Provider Pattern**
 - Abstract base classes (`EmbeddingProvider`, `LLMProvider`)
-- Multiple implementations (local, custom API)
+- Multiple implementations (local, custom API, OpenAI, Ollama)
 - Easy to add new providers
 
 ### 3. **Strategy Pattern**
@@ -423,19 +538,26 @@ outputs/
 ### 5. **Singleton Pattern**
 - Global instances for managers
 - Consistent state across application
+- **NEW**: PromptLoader for single YAML load
+
+### 6. **Configuration-Driven Design**
+- All prompts in YAML (enterprise standard)
+- Settings in Pydantic models
+- Environment variable support
 
 ---
 
 ## 📊 Statistics
 
-- **Total Python Files**: ~224
-- **Total Lines of Code**: ~22,000+
-- **Core Modules**: 12
+- **Total Python Files**: 88
+- **Total Lines of Code**: ~25,000+
+- **Core Modules**: 13
 - **Supported Vector DBs**: 3 (ChromaDB, FAISS, Redis)
 - **Supported Embedding Providers**: 2 (Local, Custom API)
-- **Supported LLM Providers**: 2 (Ollama, Custom API)
+- **Supported LLM Providers**: 3 (Ollama, OpenAI, Custom API)
 - **Search Strategies**: 5 (Vector, Keyword, Hybrid, HyDE, Multi-Query)
 - **Extraction Backends**: 4 (Docling, PyMuPDF, PDFPlumber, Camelot)
+- **Prompts**: 10+ templates (all in YAML)
 
 ---
 
@@ -469,13 +591,33 @@ All configuration is centralized in `config/settings.py`:
 EMBEDDING_PROVIDER = "local"  # or "custom"
 
 # LLM Provider
-LLM_PROVIDER = "ollama"  # or "custom"
+LLM_PROVIDER = "ollama"  # or "openai", "custom"
 
 # Vector DB Provider
 VECTORDB_PROVIDER = "faiss"  # or "chromadb", "redis"
 ```
 
 Switch providers by changing **one setting** - no code changes needed!
+
+**NEW**: Prompts are configured in `config/prompts.yaml` - edit prompts without touching code!
+
+---
+
+## 📝 Recent Updates (2025-12-03)
+
+### Prompt Template Restructuring
+- **Added** `config/prompts.yaml`: All prompt templates in YAML
+- **Added** `src/prompts/loader.py`: Singleton prompt loader
+- **Refactored** all prompt modules to use YAML-based configuration
+- **Improved** modularity and enterprise compliance
+- **Enhanced** maintainability - update prompts without code changes
+
+### Benefits
+- ✅ Configuration-driven architecture
+- ✅ No hardcoded prompts in Python files
+- ✅ Easy to version control and review prompt changes
+- ✅ Supports RAG and future agentic systems
+- ✅ Production-ready for November 2025 deployment
 
 ---
 
@@ -485,3 +627,4 @@ Switch providers by changing **one setting** - no code changes needed!
 - Embedding vectors are stored in optimized indices (FAISS, ChromaDB, Redis)
 - System is fully provider-agnostic and scalable
 - Production-ready with comprehensive error handling and logging
+- Prompts are now centralized and configuration-driven (enterprise standard)

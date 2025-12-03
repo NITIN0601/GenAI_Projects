@@ -3,121 +3,47 @@ Core financial analysis prompt templates.
 
 This module contains the base prompts for financial Q&A, table analysis,
 metadata extraction, and citation formatting.
+
+Refactored to load prompts from config/prompts.yaml via PromptLoader.
 """
 
-from langchain_core.prompts import (
-    PromptTemplate,
-    ChatPromptTemplate,
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate
-)
+from src.prompts.loader import get_prompt_loader
 
+# Initialize loader
+_loader = get_prompt_loader()
 
 # ============================================================================
 # FINANCIAL ANALYSIS PROMPTS
 # ============================================================================
 
-FINANCIAL_ANALYSIS_TEMPLATE = """You are a financial analyst assistant. Answer questions based on the provided financial data from SEC filings (10-K and 10-Q reports).
-
-Context from financial tables:
-{context}
-
-Question: {question}
-
-Instructions:
-1. Provide accurate answers based ONLY on the provided context
-2. If the information is not in the context, say "I don't have that information"
-3. Always cite the source (table name, page number, and document)
-4. For numerical data, include the exact values and units
-5. Be concise but complete
-
-Answer:"""
-
-FINANCIAL_ANALYSIS_PROMPT = PromptTemplate(
-    template=FINANCIAL_ANALYSIS_TEMPLATE,
-    input_variables=["context", "question"]
-)
-
+FINANCIAL_ANALYSIS_PROMPT = _loader.get_prompt_template("financial_analysis")
 
 # Chat Prompt Version (for ChatModels)
-FINANCIAL_CHAT_PROMPT = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template(
-        "You are a financial analyst assistant. Answer questions based on the provided financial data."
-    ),
-    HumanMessagePromptTemplate.from_template(
-        """Context:
-{context}
-
-Question: {question}
-
-Provide accurate answers based ONLY on the context. Cite sources."""
-    )
-])
+FINANCIAL_CHAT_PROMPT = _loader.get_chat_prompt_template(
+    "financial_chat_system", 
+    "financial_chat_human"
+)
 
 
 # ============================================================================
 # TABLE ANALYSIS PROMPTS
 # ============================================================================
 
-TABLE_COMPARISON_TEMPLATE = """Compare the following financial tables and highlight key differences.
-
-Table 1:
-{table1}
-
-Table 2:
-{table2}
-
-Focus on:
-1. Significant changes in values
-2. New or missing line items
-3. Trends over time
-
-Comparison:"""
-
-TABLE_COMPARISON_PROMPT = PromptTemplate(
-    template=TABLE_COMPARISON_TEMPLATE,
-    input_variables=["table1", "table2"]
-)
+TABLE_COMPARISON_PROMPT = _loader.get_prompt_template("table_comparison")
 
 
 # ============================================================================
 # METADATA EXTRACTION PROMPTS
 # ============================================================================
 
-METADATA_EXTRACTION_TEMPLATE = """Extract the following metadata from the text:
-- Year
-- Quarter
-- Table Title
-- Report Type (10-K/10-Q)
-
-Text:
-{text}
-
-Return JSON format."""
-
-METADATA_EXTRACTION_PROMPT = PromptTemplate(
-    template=METADATA_EXTRACTION_TEMPLATE,
-    input_variables=["text"]
-)
+METADATA_EXTRACTION_PROMPT = _loader.get_prompt_template("metadata_extraction")
 
 
 # ============================================================================
 # CITATION PROMPTS
 # ============================================================================
 
-CITATION_TEMPLATE = """Format the following answer with proper citations based on the metadata.
-
-Answer: {answer}
-Metadata: {metadata}
-
-Format:
-[Answer text]
-(Source: [Document Name], Page [Page Number], Table [Table Name])"""
-
-CITATION_PROMPT = PromptTemplate(
-    template=CITATION_TEMPLATE,
-    input_variables=["answer", "metadata"]
-)
+CITATION_PROMPT = _loader.get_prompt_template("citation")
 
 
 # ============================================================================
