@@ -190,7 +190,7 @@ def get_vectordb_manager(
     # Use config if not specified
     if provider is None:
         from config.settings import settings
-        provider = getattr(settings, 'VECTORDB_PROVIDER', 'chromadb')
+        provider = getattr(settings, 'VECTORDB_PROVIDER', 'faiss')
     
     if _vectordb_manager is None:
         _vectordb_manager = VectorDBManager(provider=provider, **kwargs)
