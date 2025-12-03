@@ -74,9 +74,14 @@ class QueryUnderstanding:
             "expenses": ["total_expenses", "operating_expenses"],
             "operating expenses": ["operating_expenses"],
             
-            # Special tables
-            "contractual principal": ["loans_and_other_debt", "nonaccrual_loans", "borrowings"],
-            "fair value": ["loans_and_other_debt", "nonaccrual_loans", "borrowings"]
+            # Special tables - Contractual Principal vs Fair Value
+            "contractual principal": ["loans_and_other_receivables", "nonaccrual_loans", "borrowings"],
+            "fair value": ["loans_and_other_receivables", "nonaccrual_loans", "borrowings"],
+            "difference between contractual": ["loans_and_other_receivables", "nonaccrual_loans", "borrowings"],
+            "contractual and fair value": ["loans_and_other_receivables", "nonaccrual_loans", "borrowings"],
+            "loans and other receivables": ["loans_and_other_receivables"],
+            "nonaccrual loans": ["nonaccrual_loans"],
+            "borrowings": ["borrowings", "total_borrowings"]
         }
         
         # Table type mappings

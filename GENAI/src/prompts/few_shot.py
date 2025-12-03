@@ -91,6 +91,42 @@ FINANCIAL_EXAMPLES = [
         "question": "Give me shareholders equity from 2021 to 2025 as a time series Excel file",
         "context": "Shareholders equity data: 2021, 2022, 2023, 2024, 2025 year-ends",
         "answer": "I've created a time-series Excel file of shareholders equity for 2021-2025 with year-end dates (2021-12-31 through 2025-12-31) as column headers. File saved to outputs/consolidated_tables/shareholders_equity_2021_2025.xlsx. Values show consistent growth: $78,901M (2021) to $95,678M (2025), a 21% increase. (Source: 10-K Annual Reports 2021-2025, Consolidated Balance Sheets, Equity section)"
+    },
+    # ============================================================================
+    # RAW TABLE RETRIEVAL (NO OPERATIONS)
+    # ============================================================================
+    {
+        "question": "Show me the raw balance sheet tables from 2023 and 2024 without any modifications",
+        "context": "Consolidated Balance Sheet tables found for Dec 31 2023 and Dec 31 2024",
+        "answer": "Here are the raw balance sheet tables as they appear in the original filings:\n\n**2023 Balance Sheet (Dec 31, 2023)**\n[Original table from 10-K 2023, Page 78]\n\n**2024 Balance Sheet (Dec 31, 2024)**\n[Original table from 10-K 2024, Page 82]\n\nThese are the exact tables from the SEC filings with no calculations or modifications applied. (Source: 10-K 2023 and 10-K 2024, Consolidated Balance Sheets)"
+    },
+    {
+        "question": "Give me the income statement tables from 2020 to 2024 as they are, just combined",
+        "context": "Income statement tables available for 2020, 2021, 2022, 2023, 2024",
+        "answer": "Here are the raw income statement tables from 2020-2024, presented as they appear in the original filings:\n\n**2020 Income Statement** (Source: 10-K 2020, Page 65)\n[Original table]\n\n**2021 Income Statement** (Source: 10-K 2021, Page 67)\n[Original table]\n\n**2022 Income Statement** (Source: 10-K 2022, Page 69)\n[Original table]\n\n**2023 Income Statement** (Source: 10-K 2023, Page 71)\n[Original table]\n\n**2024 Income Statement** (Source: 10-K 2024, Page 73)\n[Original table]\n\nNo consolidation or calculations performed - these are the exact tables from each year's filing."
+    },
+    {
+        "question": "Show me the original cash flow statements for Q1 and Q2 2025 without any processing",
+        "context": "Cash flow statement tables for Q1 2025 and Q2 2025",
+        "answer": "Here are the original cash flow statements:\n\n**Q1 2025 Cash Flow Statement** (Source: 10-Q Q1 2025, Page 12)\n[Original markdown table as extracted]\n\n**Q2 2025 Cash Flow Statement** (Source: 10-Q Q2 2025, Page 14)\n[Original markdown table as extracted]\n\nThese are the raw tables exactly as they appear in the quarterly filings, with no modifications or consolidation."
+    },
+    # ============================================================================
+    # SPECIFIC TABLE EXAMPLES (Complex Tables)
+    # ============================================================================
+    {
+        "question": "Get me the Difference between Contractual Principal and Fair Value table from December 2019 to now and export to Excel",
+        "context": "Found 'Difference between Contractual Principal and Fair Value' tables across all available filings: Q4 2019, Q1-Q4 2020, Q1-Q4 2021, Q1-Q4 2022, Q1-Q4 2023, Q1-Q4 2024, Q1-Q2 2025 (total: 23 quarters). Tables contain: Loans and other receivables, Nonaccrual loans, Borrowings",
+        "answer": "I've consolidated the 'Difference between Contractual Principal and Fair Value' table from Q4 2019 through Q2 2025 (23 quarters total) into a time-series Excel file. The table includes three key categories:\\n\\n**Row Headers:**\\n- Loans and other receivables\\n- Nonaccrual loans\\n- Borrowings\\n\\n**Time Series:** Quarterly dates from 2019-12-31 through 2025-06-30 (all available quarters)\\n\\nFile saved to: outputs/consolidated_tables/contractual_fair_value_difference_2019_2025_all_quarters.xlsx\\n\\nKey insights: Loans and other receivables difference decreased from $1,234M (Q4 2019) to $987M (Q2 2025) over 23 quarters, while nonaccrual loans remained relatively stable. The quarterly progression shows seasonal patterns and long-term trends. (Source: 10-K and 10-Q filings Q4 2019 - Q2 2025, Fair Value Disclosures)"
+    },
+    {
+        "question": "Show me the contractual principal versus fair value data for December only from 2019 to 2024",
+        "context": "Contractual principal and fair value comparison tables found for year-ends: Dec 2019, Dec 2020, Dec 2021, Dec 2022, Dec 2023, Dec 2024 (6 year-ends)",
+        "answer": "I've retrieved the contractual principal vs fair value data for December (year-end) only from 2019 to 2024. The consolidated table shows:\\n\\n**Categories tracked:**\\n- Loans and other receivables (contractual vs fair value difference)\\n- Nonaccrual loans (contractual vs fair value difference)\\n- Borrowings (contractual vs fair value difference)\\n\\n**Periods covered:** 6 year-ends (Dec 31, 2019 through Dec 31, 2024)\\n\\nSaved as: outputs/consolidated_tables/contractual_fair_value_december_only_2019_2024.csv\\n\\nThe data shows year-end snapshots only, focusing on the annual progression without quarterly variations. This is useful for year-over-year comparisons. (Source: 10-K Annual Reports 2019-2024, Fair Value Measurements section)"
+    },
+    {
+        "question": "Show me the contractual principal versus fair value data for all available years",
+        "context": "Contractual principal and fair value comparison tables found across all filings: Q4 2019, all quarters 2020-2024, Q1-Q2 2025 (23 quarters total)",
+        "answer": "I've retrieved the contractual principal vs fair value data for all available periods from Q4 2019 to Q2 2025. The consolidated table shows:\\n\\n**Categories tracked:**\\n- Loans and other receivables (contractual vs fair value difference)\\n- Nonaccrual loans (contractual vs fair value difference)\\n- Borrowings (contractual vs fair value difference)\\n\\n**Periods covered:** 23 quarters from Q4 2019 to Q2 2025 (includes all 10-K year-end and 10-Q quarterly filings)\\n\\nSaved as: outputs/consolidated_tables/contractual_fair_value_all_periods.csv\\n\\nThe data shows how the difference between contractual principal and fair value has evolved quarterly over the 5.5-year period for each category, capturing both seasonal variations and long-term trends. (Source: All available 10-K and 10-Q filings, Fair Value Measurements section)"
     }
 ]
 

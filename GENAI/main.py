@@ -198,13 +198,27 @@ def extract(
                         # Generate embedding
                         embedding = embedding_manager.generate_embedding(content)
                         
-                        # Create Metadata with embedding info
+                        # Extract quarter number and month from quarter string
+                        quarter_str = result.metadata.get('quarter')
+                        quarter_number = None
+                        month = None
+                        
+                        if quarter_str:
+                            # Extract quarter number (Q1 -> 1, Q2 -> 2, etc.)
+                            if quarter_str.upper().startswith('Q'):
+                                quarter_number = int(quarter_str[1])
+                                # Map quarter to ending month (Q1=3, Q2=6, Q3=9, Q4=12)
+                                month = quarter_number * 3
+                        
+                        # Create Metadata with embedding info and temporal fields
                         metadata = TableMetadata(
                             source_doc=filename,
                             page_no=table.get('metadata', {}).get('page_no', 1),
                             table_title=table.get('metadata', {}).get('table_title', f'Table {i+1}'),
                             year=result.metadata.get('year'),
-                            quarter=result.metadata.get('quarter'),
+                            quarter=quarter_str,
+                            quarter_number=quarter_number,
+                            month=month,
                             report_type=result.metadata.get('report_type'),
                             embedding_model=embedding_manager.get_model_name(),
                             embedded_date=datetime.now()

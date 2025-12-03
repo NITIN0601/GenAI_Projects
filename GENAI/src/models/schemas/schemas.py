@@ -18,6 +18,8 @@ class TableMetadata(BaseModel):
     # === Temporal Info ===
     year: int = Field(..., description="Fiscal year")
     quarter: Optional[str] = Field(None, description="Quarter (Q1, Q2, Q3, Q4) for 10-Q reports")
+    quarter_number: Optional[int] = Field(None, description="Quarter as number (1, 2, 3, 4) for filtering")
+    month: Optional[int] = Field(None, description="Month (1-12) for precise date filtering")
     report_type: str = Field(..., description="Report type: 10-K or 10-Q")
     fiscal_period: Optional[str] = Field(None, description="Fiscal period from table headers")
     extraction_date: datetime = Field(default_factory=datetime.now, description="When this was extracted")
