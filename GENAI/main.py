@@ -37,8 +37,9 @@ from datetime import datetime
 import logging
 
 # Configure logging
-from src.utils.logging_config import configure_logging, get_logger
-configure_logging(log_dir=".logs")
+# Configure logging
+from src.utils.logger import setup_logging, get_logger
+setup_logging(level="INFO")
 logger = get_logger("main")
 
 # Import our modules (updated for new structure)
@@ -197,14 +198,16 @@ def extract(
                         # Generate embedding
                         embedding = embedding_manager.generate_embedding(content)
                         
-                        # Create Metadata
+                        # Create Metadata with embedding info
                         metadata = TableMetadata(
                             source_doc=filename,
                             page_no=table.get('metadata', {}).get('page_no', 1),
                             table_title=table.get('metadata', {}).get('table_title', f'Table {i+1}'),
                             year=result.metadata.get('year'),
                             quarter=result.metadata.get('quarter'),
-                            report_type=result.metadata.get('report_type')
+                            report_type=result.metadata.get('report_type'),
+                            embedding_model=embedding_manager.get_model_name(),
+                            embedded_date=datetime.now()
                         )
                         
                         # Create Chunk
@@ -327,7 +330,7 @@ def stats():
     
     # Vector DB stats
     try:
-        vector_store = get_vector_store()
+        vector_store = get_vectordb_manager()
         vs_stats = vector_store.get_stats()
         
         table = RichTable(title="Vector Database")
@@ -439,7 +442,7 @@ def consolidate(
         from src.embeddings.manager import get_embedding_manager
         
         # Get vector store and embedding manager
-        vector_store = get_vector_store()
+        vector_store = get_vectordb_manager()
         embedding_manager = get_embedding_manager()
         
         # Override settings if provided

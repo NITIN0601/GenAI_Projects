@@ -129,6 +129,7 @@ class FAISSVectorStore(VectorStore):
         self.index.add(embeddings_matrix)
         
         logger.info(f"Added {len(texts)} chunks to FAISS index (total: {self.index.ntotal})")
+        self.save()
         return ids
 
     def add_chunks(self, chunks: List, show_progress: bool = True):
@@ -343,10 +344,10 @@ class FAISSVectorStore(VectorStore):
         self.index = self._create_index()
         
         # Re-add embeddings (we need to regenerate them if we don't store them)
-        # NOTE: In this simple implementation, we lose the vectors if we don't store them.
         # For now, we assume this is a rare operation or we accept re-indexing.
         # A better approach would be to store vectors or use FAISS remove_ids (if supported by index type)
         logger.info(f"Deleted chunks from {source_doc}. Index cleared (re-indexing required).")
+        self.save()
     
     def clear(self):
         """Clear all data from the index."""
@@ -355,6 +356,7 @@ class FAISSVectorStore(VectorStore):
         self.documents = []
         self.ids = []
         logger.info("FAISS index cleared")
+        self.save()
     
     def get_stats(self) -> Dict[str, Any]:
         """Get statistics about the vector store."""

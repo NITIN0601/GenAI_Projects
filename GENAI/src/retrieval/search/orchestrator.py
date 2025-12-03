@@ -421,8 +421,8 @@ def get_search_orchestrator(
     
     if _orchestrator is None:
         if not vector_store:
-            from src.vector_store.stores.chromadb_store import get_vector_store
-            vector_store = get_vector_store()
+            from src.vector_store.manager import get_vectordb_manager  # Use unified manager
+            vector_store = get_vectordb_manager()
         
         if not embedding_manager:
             from src.embeddings.manager import get_embedding_manager

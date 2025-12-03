@@ -53,6 +53,44 @@ FINANCIAL_EXAMPLES = [
         "question": "What was the return on equity?",
         "context": "Performance Metrics - Q1 2024\nNet income: $3,456M | Average shareholders' equity: $92,000M | ROE: 15.0%",
         "answer": "The return on equity (ROE) for Q1 2024 was 15.0%, calculated as net income of $3,456 million divided by average shareholders' equity of $92,000 million (annualized). (Source: 10-Q Q1 2024, Financial Highlights)"
+    },
+    # ============================================================================
+    # TABLE CONSOLIDATION EXAMPLES
+    # ============================================================================
+    {
+        "question": "Show me net revenues for all quarters from 2020 to 2025 and save as CSV",
+        "context": "Found net revenues data across multiple quarters: Q1-Q4 2020, Q1-Q4 2021, Q1-Q4 2022, Q1-Q4 2023, Q1-Q4 2024, Q1-Q2 2025",
+        "answer": "I've consolidated net revenues across all quarters from 2020 to 2025 into a time-series table with dates as columns (2020-03-31, 2020-06-30, etc.). The table has been saved as CSV to outputs/consolidated_tables/net_revenues_2020_2025.csv. The data shows quarterly progression with values ranging from $10,234M (Q1 2020) to $15,234M (Q2 2025). (Source: Multiple 10-Q and 10-K filings, 2020-2025)"
+    },
+    {
+        "question": "Consolidate total assets from 2022 to 2024 and export to Excel with transpose",
+        "context": "Total assets data available for year-ends: Dec 31 2022, Dec 31 2023, Dec 31 2024",
+        "answer": "I've consolidated total assets for 2022-2024 and transposed the table so years are in rows and metrics in columns. The Excel file has been saved to outputs/consolidated_tables/total_assets_2022_2024.xlsx. The data shows: 2022: $1,234,567M, 2023: $1,345,678M, 2024: $1,456,789M, representing steady growth. (Source: 10-K filings 2022-2024, Consolidated Balance Sheets)"
+    },
+    {
+        "question": "Get me a consolidated view of net income across all available years",
+        "context": "Net income data found for: 2020, 2021, 2022, 2023, 2024, 2025 (partial)",
+        "answer": "I've created a consolidated time-series table of net income across all available years (2020-2025). The table uses year-end dates as column headers (2020-12-31, 2021-12-31, etc.) and has been saved as CSV. Key insights: Net income grew from $8,123M (2020) to $14,567M (2024), a 79% increase over 4 years. (Source: 10-K Annual Reports 2020-2024, Consolidated Statements of Income)"
+    },
+    {
+        "question": "Compare investment banking revenues quarterly from Q1 2023 to Q2 2025 and save as Excel",
+        "context": "Investment banking revenue data available for Q1 2023 through Q2 2025 (10 quarters)",
+        "answer": "I've consolidated investment banking revenues for 10 quarters (Q1 2023 - Q2 2025) into a time-series Excel file saved at outputs/consolidated_tables/investment_banking_revenues_Q1_2023_Q2_2025.xlsx. The table shows quarterly dates (2023-03-31, 2023-06-30, etc.) with values ranging from $1,123M to $1,456M. Notable trend: 18% growth from Q1 2023 to Q2 2025. (Source: 10-Q filings Q1 2023 - Q2 2025, Business Segment data)"
+    },
+    {
+        "question": "Show total liabilities trend from 2020-2024 in CSV format with dates",
+        "context": "Total liabilities data: 2020-12-31, 2021-12-31, 2022-12-31, 2023-12-31, 2024-12-31",
+        "answer": "I've created a time-series CSV file of total liabilities from 2020-2024 with year-end dates as columns. File saved to outputs/consolidated_tables/total_liabilities_2020_2024.csv. The data shows: 2020: $987,654M, 2021: $1,012,345M, 2022: $1,098,765M, 2023: $1,156,789M, 2024: $1,234,567M. This represents a 25% increase over the 4-year period. (Source: 10-K Annual Reports 2020-2024, Consolidated Balance Sheets)"
+    },
+    {
+        "question": "Consolidate cash and cash equivalents for all quarters and transpose the table",
+        "context": "Cash data available for all quarters from Q1 2020 to Q2 2025 (22 quarters)",
+        "answer": "I've consolidated cash and cash equivalents across 22 quarters (Q1 2020 - Q2 2025) and transposed the table with quarters in rows. Saved as outputs/consolidated_tables/cash_equivalents_all_quarters_transposed.xlsx. The transposed format makes it easier to see the progression: Starting at $45,678M (Q1 2020) and ending at $67,890M (Q2 2025), showing strong liquidity growth. (Source: 10-Q and 10-K filings 2020-2025, Consolidated Balance Sheets)"
+    },
+    {
+        "question": "Give me shareholders equity from 2021 to 2025 as a time series Excel file",
+        "context": "Shareholders equity data: 2021, 2022, 2023, 2024, 2025 year-ends",
+        "answer": "I've created a time-series Excel file of shareholders equity for 2021-2025 with year-end dates (2021-12-31 through 2025-12-31) as column headers. File saved to outputs/consolidated_tables/shareholders_equity_2021_2025.xlsx. Values show consistent growth: $78,901M (2021) to $95,678M (2025), a 21% increase. (Source: 10-K Annual Reports 2021-2025, Consolidated Balance Sheets, Equity section)"
     }
 ]
 

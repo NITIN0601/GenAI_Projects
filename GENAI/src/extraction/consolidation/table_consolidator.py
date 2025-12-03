@@ -178,7 +178,9 @@ class MultiYearTableConsolidator:
             consolidated_data[row_header] = {}
             for year in years:
                 value = data_by_year[year].get(row_header, 'N/A')
-                consolidated_data[row_header][str(year)] = value
+                # Use year-end date for time series consistency
+                date_key = f"{year}-12-31"
+                consolidated_data[row_header][date_key] = value
         
         return {
             'row_headers': row_headers,
@@ -209,14 +211,15 @@ class MultiYearTableConsolidator:
         # Build transposed structure
         transposed_data = {}
         for year in years:
-            transposed_data[str(year)] = {}
+            date_key = f"{year}-12-31"
+            transposed_data[date_key] = {}
             for row_header in row_headers:
-                value = data[row_header].get(str(year), 'N/A')
-                transposed_data[str(year)][row_header] = value
+                value = data[row_header].get(date_key, 'N/A')
+                transposed_data[date_key][row_header] = value
         
         return {
             'column_headers': row_headers,  # Original row headers become columns
-            'row_headers': [str(y) for y in years],  # Years become rows
+            'row_headers': [f"{y}-12-31" for y in years],  # Dates become rows
             'data': transposed_data
         }
     
@@ -268,7 +271,16 @@ class MultiYearTableConsolidator:
         
         # Verify all years present
         expected_years = set(original_data.keys())
-        actual_years = set(int(y) for y in transposed['row_headers'])
+        
+        # Extract years from date strings (YYYY-MM-DD)
+        actual_years = set()
+        for date_str in transposed['row_headers']:
+            try:
+                # Expecting YYYY-MM-DD
+                year = int(date_str.split('-')[0])
+                actual_years.add(year)
+            except ValueError:
+                continue
         
         if expected_years != actual_years:
             validation['status'] = 'error'

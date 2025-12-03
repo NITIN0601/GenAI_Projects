@@ -95,7 +95,17 @@ class QueryUnderstanding:
             "average": ["average", "mean", "avg"],
             "sum": ["sum", "total", "aggregate"],
             "growth": ["growth", "increase", "change"],
-            "all": ["all", "every", "each"]
+            "all": ["all", "every", "each"],
+            "consolidate": ["consolidate", "consolidated", "consolidation", "merge", "combine"],
+            "export": ["save", "export", "download", "output", "file"],
+            "transpose": ["transpose", "transposed", "flip", "rotate"]
+        }
+        
+        # Export format keywords
+        self.export_formats = {
+            "csv": ["csv", ".csv"],
+            "excel": ["excel", "xlsx", ".xlsx", "xls", ".xls"],
+            "json": ["json", ".json"]
         }
     
     def parse_query(self, query: str) -> ParsedQuery:

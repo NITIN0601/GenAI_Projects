@@ -2,7 +2,7 @@
 
 from typing import List, Dict, Any, Optional
 from src.models.schemas import TableMetadata
-from src.vector_store.stores.chromadb_store import get_vector_store
+from src.vector_store.manager import get_vectordb_manager  # Use unified manager
 
 
 class Retriever:
@@ -16,9 +16,9 @@ class Retriever:
         Initialize retriever.
         
         Args:
-            vector_store: VectorStore instance (optional)
+            vector_store: VectorDBManager instance (optional)
         """
-        self.vector_store = vector_store or get_vector_store()
+        self.vector_store = vector_store or get_vectordb_manager()
     
     def retrieve(
         self,

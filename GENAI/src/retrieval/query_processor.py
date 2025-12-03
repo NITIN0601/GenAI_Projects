@@ -12,7 +12,7 @@ from src.models.schemas import RAGQuery, RAGResponse
 from src.retrieval.retriever import get_retriever
 from src.llm.manager import get_llm_manager
 from src.cache.backends.redis_cache import get_redis_cache
-from src.vector_store.stores.chromadb_store import VectorStore, get_vector_store
+from src.vector_store.manager import get_vectordb_manager  # Use unified manager
 from src.embeddings.manager import get_embedding_manager
 
 
@@ -24,12 +24,12 @@ class QueryProcessor:
     
     def __init__(
         self,
-        vector_store: Optional[VectorStore] = None,
+        vector_store=None,  # Now accepts VectorDBManager
         query_understanding: Optional[QueryUnderstanding] = None,
         consolidation_engine: Optional[TableConsolidationEngine] = None
     ):
         """Initialize query processor with components."""
-        self.vector_store = vector_store or get_vector_store()
+        self.vector_store = vector_store or get_vectordb_manager()
         self.query_understanding = query_understanding or get_query_understanding()
         self.consolidation_engine = consolidation_engine or get_consolidation_engine()
         self.embedding_manager = get_embedding_manager()

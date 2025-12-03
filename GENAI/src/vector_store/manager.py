@@ -102,7 +102,9 @@ class VectorDBManager:
             )
         elif self.provider_name == "faiss":
             from src.vector_store.stores.faiss_store import FAISSVectorStore
+            embedding_manager = get_embedding_manager()
             self.db = FAISSVectorStore(
+                embedding_function=embedding_manager.langchain_embeddings,
                 dimension=kwargs.get('dimension'),
                 persist_dir=kwargs.get('persist_dir'),
                 index_type=kwargs.get('index_type', 'flat')

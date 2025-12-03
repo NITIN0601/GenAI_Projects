@@ -150,18 +150,21 @@ class QuarterlyTableConsolidator:
             if df.empty:
                 continue
             
-            # Create quarter label
+            # Create quarter label (Time Series Format)
             year = table['year']
             quarter = table['quarter']
-            label = f"{quarter} {year}" if quarter else str(year)
-            quarter_labels.append(label)
+            
+            # Convert to date
+            date_str = self._get_period_date(year, quarter)
+            quarter_labels.append(date_str)
             
             # Set first column as index (row headers)
             if len(df.columns) > 0:
                 df = df.set_index(df.columns[0])
             
-            # Rename columns with quarter label
-            df.columns = [f"{col} ({label})" for col in df.columns]
+            # Rename columns with date label
+            # We use the date as the column name for time series
+            df.columns = [f"{col} ({date_str})" for col in df.columns]
             
             dataframes.append(df)
         
@@ -313,6 +316,36 @@ class QuarterlyTableConsolidator:
         
         return list(groups.values())
     
+    def _get_period_date(self, year: Optional[int], quarter: Optional[str]) -> str:
+        """
+        Get standard period end date for quarter.
+        
+        Args:
+            year: Year (e.g., 2024)
+            quarter: Quarter (e.g., "Q1", "10-K")
+            
+        Returns:
+            Date string YYYY-MM-DD
+        """
+        if not year:
+            return "Unknown"
+            
+        if not quarter:
+            return f"{year}-12-31"  # Default to year end
+            
+        quarter = quarter.upper()
+        
+        if "Q1" in quarter:
+            return f"{year}-03-31"
+        elif "Q2" in quarter:
+            return f"{year}-06-30"
+        elif "Q3" in quarter:
+            return f"{year}-09-30"
+        elif "Q4" in quarter or "10-K" in quarter or "10K" in quarter:
+            return f"{year}-12-31"
+        else:
+            return f"{year}-12-31"  # Default
+
     def _quarter_to_num(self, quarter: Optional[str]) -> int:
         """Convert quarter string to number for sorting."""
         if not quarter:
