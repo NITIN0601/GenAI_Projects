@@ -9,17 +9,53 @@ prompts:
       Question: {question}
 
       Instructions:
-      1. Provide accurate answers based ONLY on the provided context
-      2. If the information is not in the context, say "I don't have that information"
-      3. Always cite the source (table name, page number, and document)
-      4. For numerical data, include the exact values and units
-      5. Be concise but complete
+      1. **PRIORITIZE TABLE OUTPUT**: Whenever possible, present your answer as a markdown table.
+      2. **CONSOLIDATE DATA**: If data comes from multiple periods (e.g., 2024 and 2025), merge them into a single table with columns for each period.
+      3. **ACCURACY**: Provide accurate answers based ONLY on the provided context.
+      4. **CITATIONS**: Always cite the source (table name, page number, and document) below the table.
+      5. **MISSING DATA**: If the information is not in the context, say "I don't have that information".
+
+      Example Output Format:
+      | Metric | Q1 2024 | Q1 2025 | Change |
+      |--------|---------|---------|--------|
+      | Revenue| $100M   | $120M   | +20%   |
+      
+      Source: Table 5, Page 12, 10q0325.pdf
 
       Answer:
     input_variables: ["context", "question"]
 
+  time_series_consolidation:
+    template: |
+      You are an expert at consolidating financial data from multiple time periods into a single view.
+
+      Task: Create a consolidated time-series table from the provided data chunks.
+
+      Data Chunks:
+      {context}
+
+      Instructions:
+      1. **Identify Time Periods from Source**: Look at the "Source" or filename for each data chunk to determine the time period (e.g., `10q0325.pdf` -> "Mar 2025" or "Q1 2025").
+      2. **Identify Key Metrics**: Identify the common metrics across the provided tables (e.g., "Loans", "Non-Accrual Loans", "Borrowings").
+      3. **Create Transposed Table**:
+         - **First Column**: "Index/Date" (The time period, e.g., "Jan 2020", "Apr 2020").
+         - **Subsequent Columns**: The Metric Names.
+         - **Rows**: Each row represents a time period.
+      4. **Sort Chronologically**: Ensure the rows are sorted by date (oldest to newest).
+      5. **Handle Missing Data**: Use "-" for missing values.
+      6. **Preserve Values**: Keep exact numbers and units.
+
+      Example Output Format:
+      | Index/Date | Metric A | Metric B | Metric C |
+      |------------|----------|----------|----------|
+      | Jan 2020   | $100     | $20      | $50      |
+      | Apr 2020   | $110     | $22      | $55      |
+
+      Consolidated Table:
+    input_variables: ["context"]
+
   financial_chat_system:
-    template: "You are a financial analyst assistant. Answer questions based on the provided financial data."
+    template: "You are a financial analyst assistant. You prefer to answer with data tables whenever possible."
     input_variables: []
 
   financial_chat_human:
@@ -29,7 +65,12 @@ prompts:
 
       Question: {question}
 
-      Provide accurate answers based ONLY on the context. Cite sources.
+      Instructions:
+      1. Answer the question using the context.
+      2. **Output a Markdown Table** if the answer involves multiple numbers or comparisons.
+      3. Cite sources.
+
+      Answer:
     input_variables: ["context", "question"]
 
   table_comparison:
@@ -47,7 +88,7 @@ prompts:
       2. New or missing line items
       3. Trends over time
 
-      Comparison:
+      Comparison (use a table for the comparison if possible):
     input_variables: ["table1", "table2"]
 
   metadata_extraction:
