@@ -43,11 +43,15 @@ class Settings(BaseSettings):
     # ============================================================================
     # EMBEDDING PROVIDER SETTINGS
     # ============================================================================
-    EMBEDDING_PROVIDER: Literal["local", "custom"] = "local"  # Default: local (FREE)
+    EMBEDDING_PROVIDER: Literal["local", "custom", "openai"] = "local"  # Default: local (FREE)
     
     # Local Embeddings (sentence-transformers - FREE)
     EMBEDDING_MODEL_LOCAL: str = "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_DIMENSION_LOCAL: int = 384
+    
+    # OpenAI Embeddings
+    EMBEDDING_MODEL_OPENAI: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSION_OPENAI: int = 1536
     
     # Custom API Embeddings (YOUR WORKING API)
     EB_URL: Optional[str] = None
@@ -63,25 +67,33 @@ class Settings(BaseSettings):
     @property
     def EMBEDDING_MODEL(self) -> str:
         """Get embedding model based on provider."""
-        if self.EMBEDDING_PROVIDER == "custom":
+        if self.EMBEDDING_PROVIDER == "openai":
+            return self.EMBEDDING_MODEL_OPENAI
+        elif self.EMBEDDING_PROVIDER == "custom":
             return self.EB_MODEL or "custom-embedding-model"
         return self.EMBEDDING_MODEL_LOCAL
     
     @property
     def EMBEDDING_DIMENSION(self) -> int:
         """Get embedding dimension based on provider."""
-        if self.EMBEDDING_PROVIDER == "custom":
+        if self.EMBEDDING_PROVIDER == "openai":
+            return self.EMBEDDING_DIMENSION_OPENAI
+        elif self.EMBEDDING_PROVIDER == "custom":
             return self.EB_DIMENSION or 384  # Use configured dimension or default
         return self.EMBEDDING_DIMENSION_LOCAL
     
     # ============================================================================
     # LLM PROVIDER SETTINGS
     # ============================================================================
-    LLM_PROVIDER: Literal["ollama", "custom"] = "ollama"  # Default: ollama (FREE)
+    LLM_PROVIDER: Literal["ollama", "custom", "openai"] = "ollama"  # Default: ollama (FREE)
     
     # Ollama (Local - FREE)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama2"
+    
+    # OpenAI Settings
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-4-turbo-preview"
     
     # Custom API LLM (YOUR WORKING API)
     LLM_URL: Optional[str] = None
@@ -95,6 +107,10 @@ class Settings(BaseSettings):
     @property
     def LLM_MODEL(self) -> str:
         """Get LLM model based on provider."""
+        if self.LLM_PROVIDER == "openai":
+            return self.OPENAI_MODEL
+        elif self.LLM_PROVIDER == "custom":
+            return self.LLM_MODEL_CUSTOM or "custom-llm-model"
         return self.OLLAMA_MODEL
     
     # ============================================================================
@@ -194,6 +210,12 @@ class Settings(BaseSettings):
     SCHEDULER_AUTO_EXTRACT: bool = True  # Auto-extract after download
     SCHEDULER_LOOKAHEAD_DAYS: int = 180  # Days to look ahead for filings
     SCHEDULER_CHECK_INTERVAL_HOURS: int = 24  # Periodic check interval
+    
+    # ============================================================================
+    # DOWNLOAD SETTINGS
+    # ============================================================================
+    DOWNLOAD_ENABLED: bool = True  # Enable/disable PDF download (Step 1)
+    DOWNLOAD_BASE_URL: str = "https://www.morganstanley.com/content/dam/msdotcom/en/about-us-ir/shareholder"
     
     # ============================================================================
     # TABLE EXPORT SETTINGS

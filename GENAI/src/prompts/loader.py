@@ -2,7 +2,7 @@
 Prompt Loader Module.
 
 Responsible for loading prompt templates and few-shot examples from the YAML configuration.
-Implements a Singleton pattern to ensure prompts are loaded only once.
+Implements a Singleton pattern with caching to ensure prompts are loaded and created only once.
 """
 
 import os
@@ -25,10 +25,19 @@ except ImportError:
 class PromptLoader:
     """
     Singleton class to load and manage prompt templates from configuration.
+    
+    Features:
+    - Loads prompts once from YAML on first access
+    - Caches created PromptTemplate objects for performance
+    - Provides lazy loading of individual prompts
     """
     _instance = None
     _prompts: Dict[str, Any] = {}
     _few_shot_examples: List[Dict[str, str]] = []
+    
+    # Cache for created PromptTemplate objects
+    _template_cache: Dict[str, PromptTemplate] = {}
+    _chat_template_cache: Dict[str, ChatPromptTemplate] = {}
 
     def __new__(cls):
         if cls._instance is None:
@@ -38,18 +47,11 @@ class PromptLoader:
 
     def _load_prompts(self):
         """Load prompts from YAML file."""
-        # Determine path to prompts.yaml
-        # Assuming config/prompts.yaml is relative to the project root
-        # We can try to find it relative to this file or use a setting
-        
-        # Try to find config directory relative to project root
-        # This file is in src/prompts/loader.py -> ../../config/prompts.yaml
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         config_path = os.path.join(base_dir, "config", "prompts.yaml")
         
         if not os.path.exists(config_path):
             logger.error(f"Prompts configuration file not found at {config_path}")
-            # Fallback or raise error? For now, we'll log and keep empty
             return
 
         try:
@@ -66,7 +68,7 @@ class PromptLoader:
 
     def get_prompt_template(self, prompt_name: str) -> Optional[PromptTemplate]:
         """
-        Get a LangChain PromptTemplate by name.
+        Get a LangChain PromptTemplate by name (cached).
         
         Args:
             prompt_name: Name of the prompt in the YAML config
@@ -74,19 +76,26 @@ class PromptLoader:
         Returns:
             PromptTemplate object or None if not found
         """
+        # Check cache first
+        if prompt_name in self._template_cache:
+            return self._template_cache[prompt_name]
+        
         prompt_config = self._prompts.get(prompt_name)
         if not prompt_config:
             logger.warning(f"Prompt '{prompt_name}' not found in configuration")
             return None
-            
-        return PromptTemplate(
+        
+        # Create and cache
+        template = PromptTemplate(
             template=prompt_config['template'],
             input_variables=prompt_config.get('input_variables', [])
         )
+        self._template_cache[prompt_name] = template
+        return template
 
     def get_chat_prompt_template(self, system_prompt_name: str, human_prompt_name: str) -> Optional[ChatPromptTemplate]:
         """
-        Get a LangChain ChatPromptTemplate by combining system and human prompts.
+        Get a LangChain ChatPromptTemplate by combining system and human prompts (cached).
         
         Args:
             system_prompt_name: Name of the system prompt in YAML
@@ -95,17 +104,26 @@ class PromptLoader:
         Returns:
             ChatPromptTemplate object
         """
+        cache_key = f"{system_prompt_name}:{human_prompt_name}"
+        
+        # Check cache first
+        if cache_key in self._chat_template_cache:
+            return self._chat_template_cache[cache_key]
+        
         system_config = self._prompts.get(system_prompt_name)
         human_config = self._prompts.get(human_prompt_name)
         
         if not system_config or not human_config:
             logger.warning(f"Prompts '{system_prompt_name}' or '{human_prompt_name}' not found")
             return None
-            
-        return ChatPromptTemplate.from_messages([
+        
+        # Create and cache
+        template = ChatPromptTemplate.from_messages([
             SystemMessagePromptTemplate.from_template(system_config['template']),
             HumanMessagePromptTemplate.from_template(human_config['template'])
         ])
+        self._chat_template_cache[cache_key] = template
+        return template
 
     def get_raw_prompt(self, prompt_name: str) -> Optional[str]:
         """Get the raw template string."""
@@ -117,6 +135,12 @@ class PromptLoader:
     def get_few_shot_examples(self) -> List[Dict[str, str]]:
         """Get the list of few-shot examples."""
         return self._few_shot_examples
+    
+    def clear_cache(self):
+        """Clear all cached templates (useful for testing/reloading)."""
+        self._template_cache.clear()
+        self._chat_template_cache.clear()
+        logger.info("Prompt template cache cleared")
 
 
 # Global accessor

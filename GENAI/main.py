@@ -2,27 +2,31 @@
 """
 Production-Ready Financial RAG System - Main Entry Point
 
-High-Level Architecture:
-1. Document Extraction:
-   - Download PDFs from URLs
-   - Extract with Docling (10Q, 10K documents)
-   - Store in Vector DB with hierarchical metadata
-   
-2. User Query:
-   - User Query → Cache System → Vector DB → Response
+Pipeline Steps:
+1. download  - Download PDF files (respects DOWNLOAD_ENABLED in .env)
+2. extract   - Extract tables from PDFs with Docling
+3. embed     - Generate embeddings and store in FAISS
+4. view-db   - View FAISS DB contents and schema
+5. search    - Perform search on FAISS (without LLM)
+6. query     - Send to LLM with prompt, get response
+7. consolidate - Get consolidated table as timeseries CSV/Excel
 
 Usage:
-    # Download and process documents
+    # Pipeline steps
     python main.py download --yr 20-25 --m 3
     python main.py extract --source ../raw_data
-    
-    # Query system
+    python main.py embed --source ../raw_data
+    python main.py view-db
+    python main.py search "revenue Q1 2025"
     python main.py query "What was revenue in Q1 2025?"
-    python main.py interactive
+    python main.py consolidate "Balance Sheet" --format both
+    
+    # Full pipeline
+    python main.py pipeline --yr 20-25
     
     # Utilities
     python main.py stats
-    python main.py clear-cache
+    python main.py interactive
 """
 
 import typer
@@ -37,24 +41,34 @@ from datetime import datetime
 import logging
 
 # Configure logging
-# Configure logging
 from src.utils.logger import setup_logging, get_logger
 setup_logging(level="INFO")
 logger = get_logger("main")
 
-# Import our modules (updated for new structure)
-# Import our modules (updated for new structure)
-from scripts.download_documents import download_files, get_file_names_to_download
-from src.extraction.extractor import UnifiedExtractor as Extractor
-from src.embeddings.multi_level import MultiLevelEmbeddingGenerator
-from src.embeddings.manager import get_embedding_manager
+# Import settings
 from config.settings import settings
 
-# Import vector store manager
+# Import pipeline steps
+from src.pipeline.steps import (
+    PipelineStep,
+    PipelineResult,
+    run_download,
+    run_extract,
+    run_embed,
+    run_view_db,
+    run_search,
+    run_query,
+    run_consolidate,
+)
+
+# Import our modules
+from scripts.download_documents import download_files, get_file_names_to_download
+from src.extraction.extractor import UnifiedExtractor as Extractor
+from src.embeddings.manager import get_embedding_manager
 from src.vector_store.manager import get_vectordb_manager
 from src.models.schemas import TableChunk, TableMetadata
 
-# Optional imports for query functionality
+# Optional imports
 try:
     from src.retrieval.query_processor import get_query_processor
     QUERY_AVAILABLE = True
@@ -70,272 +84,449 @@ except ImportError:
     CACHE_AVAILABLE = False
     get_redis_cache = None
 
-app = typer.Typer(help="Financial RAG System - Production Pipeline")
+app = typer.Typer(help="Financial RAG System - Modular Pipeline")
 console = Console()
 
-# Base URL for Morgan Stanley filings
-BASE_URL = "https://www.morganstanley.com/content/dam/msdotcom/en/about-us-ir/shareholder"
+# Base URL moved to settings.DOWNLOAD_BASE_URL
 
 
 def get_pdf_hash(pdf_path: str) -> str:
-    """Get MD5 hash of PDF file for caching."""
+    """Get MD5 hash of PDF file."""
     with open(pdf_path, 'rb') as f:
         return hashlib.md5(f.read()).hexdigest()
 
 
-def is_pdf_in_vectordb(pdf_hash: str) -> bool:
-    """Check if PDF is already processed and in vector DB."""
-    try:
-        vector_store = get_vectordb_manager()
-        # Search returns List[SearchResult]
-        results = vector_store.search(
-            query="test",
-            top_k=1,
-            filters={"document_id": pdf_hash[:12]}
-        )
-        return len(results) > 0
-    except Exception as e:
-        logger.debug(f"Error checking vector DB: {e}")
-        return False
+# ============================================================================
+# STEP 1: DOWNLOAD
+# ============================================================================
 
-# ... (download command remains same) ...
+@app.command()
+def download(
+    yr: str = typer.Option(..., "--yr", help="Year or range (e.g., 25 or 20-25)"),
+    m: Optional[str] = typer.Option(None, "--m", help="Month (03, 06, 09, 12)"),
+    output_dir: str = typer.Option(None, "--output", "-o", help="Output directory"),
+    timeout: int = typer.Option(30, "--timeout", help="Download timeout"),
+    max_retries: int = typer.Option(3, "--retries", help="Max retries")
+):
+    """
+    Step 1: Download PDF files (respects DOWNLOAD_ENABLED in .env).
+    
+    Examples:
+        python main.py download --yr 25 --m 03  # Q1 2025
+        python main.py download --yr 20-25      # All 2020-2025
+    """
+    console.print("\n[bold green]📥 Step 1: Download Files[/bold green]\n")
+    
+    # Check if download is enabled
+    if hasattr(settings, 'DOWNLOAD_ENABLED') and not settings.DOWNLOAD_ENABLED:
+        console.print("[yellow]⚠ Download disabled (DOWNLOAD_ENABLED=False in .env)[/yellow]")
+        console.print("[dim]Set DOWNLOAD_ENABLED=True to enable downloads[/dim]")
+        return
+    
+    result = run_download(
+        year_range=yr,
+        month=m,
+        output_dir=output_dir,
+        timeout=timeout,
+        max_retries=max_retries
+    )
+    
+    if result.success:
+        console.print(f"[green]✓ {result.message}[/green]")
+    else:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
+        raise typer.Exit(code=1)
+
+
+# ============================================================================
+# STEP 2: EXTRACT
+# ============================================================================
 
 @app.command()
 def extract(
-    source: str = typer.Option(None, "--source", "-s", help="Directory with PDF files"),
-    force: bool = typer.Option(False, "--force", "-f", help="Force re-extraction (ignore cache)"),
-    levels: List[str] = typer.Option(["table", "row"], "--levels", "-l", help="Embedding levels")
+    source: str = typer.Option(None, "--source", "-s", help="PDF directory"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force re-extraction")
 ):
     """
-    Extract tables from PDFs using Docling and store in Vector DB.
+    Step 2: Extract tables from PDFs using Docling.
+    
+    Example:
+        python main.py extract --source ../raw_data
     """
-    console.print("\n[bold green]📊 Extracting Tables with Docling[/bold green]\n")
+    console.print("\n[bold green]📄 Step 2: Extract Tables[/bold green]\n")
     
-    # Use settings default if not specified
-    if source is None:
-        source = settings.RAW_DATA_DIR
+    result = run_extract(source_dir=source, force=force)
     
-    # Get PDF files
-    source_path = Path(source)
-    if not source_path.exists():
-        console.print(f"[red]Error: Directory {source} does not exist[/red]")
+    if result.success:
+        console.print(f"[green]✓ {result.message}[/green]")
+        console.print(f"[dim]Processed: {result.metadata.get('processed', 0)} files[/dim]")
+    else:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
+        raise typer.Exit(code=1)
+
+
+# ============================================================================
+# STEP 3 & 4: EMBED (includes storing in FAISS)
+# ============================================================================
+
+@app.command()
+def embed(
+    source: str = typer.Option(None, "--source", "-s", help="PDF directory"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force re-embedding"),
+    local: bool = typer.Option(False, "--local", "-l", help="Use local embeddings (offline mode)")
+):
+    """
+    Steps 3-4: Extract, generate embeddings, and store in VectorDB.
+    
+    Examples:
+        python main.py embed --source ./raw_data
+        python main.py embed --source ./raw_data --local  # Offline mode
+    """
+    console.print("\n[bold green]🔢 Steps 3-4: Extract + Embed + Store[/bold green]\n")
+    
+    # Override embedding provider if --local flag is set
+    if local:
+        console.print("[yellow]📴 Offline mode: Using local embeddings[/yellow]\n")
+        settings.EMBEDDING_PROVIDER = "local"
+    
+    # Step 2: Extract
+    console.print("[cyan]Extracting tables...[/cyan]")
+    extract_result = run_extract(source_dir=source, force=force)
+    
+    if not extract_result.success:
+        console.print(f"[red]✗ Extraction failed: {extract_result.error}[/red]")
         raise typer.Exit(code=1)
     
-    pdf_files = list(source_path.glob("*.pdf"))
-    if not pdf_files:
-        console.print(f"[red]No PDF files found in {source}[/red]")
+    console.print(f"[green]✓ {extract_result.message}[/green]")
+    
+    # Step 4: Embed
+    console.print("[cyan]Generating embeddings...[/cyan]")
+    embed_result = run_embed(extracted_data=extract_result.data)
+    
+    if embed_result.success:
+        console.print(f"[green]✓ {embed_result.message}[/green]")
+    else:
+        console.print(f"[red]✗ Embedding failed: {embed_result.error}[/red]")
+        raise typer.Exit(code=1)
+
+
+# ============================================================================
+# STEP 5: VIEW-DB
+# ============================================================================
+
+@app.command("view-db")
+def view_db(
+    sample: bool = typer.Option(True, "--sample/--no-sample", help="Show samples"),
+    count: int = typer.Option(5, "--count", "-n", help="Sample count"),
+    local: bool = typer.Option(False, "--local", "-l", help="Use local embeddings (offline mode)")
+):
+    """
+    Step 5: View FAISS DB contents and schema.
+    
+    Examples:
+        python main.py view-db
+        python main.py view-db --count 10
+        python main.py view-db --local  # Offline mode
+    """
+    console.print("\n[bold green]🗄️ Step 5: FAISS Database View[/bold green]\n")
+    
+    # Override embedding provider if --local flag is set
+    if local:
+        settings.EMBEDDING_PROVIDER = "local"
+
+    
+    result = run_view_db(show_sample=sample, sample_count=count)
+    
+    if not result.success:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
         raise typer.Exit(code=1)
     
-    console.print(f"Found {len(pdf_files)} PDF files\n")
+    db_info = result.data
     
-    # Initialize components
-    vector_store = get_vectordb_manager()
-    embedding_manager = get_embedding_manager()
+    # Stats table
+    stats_table = RichTable(title="Database Statistics")
+    stats_table.add_column("Metric", style="cyan")
+    stats_table.add_column("Value", style="green")
     
-    # Process each PDF
-    stats = {
-        'processed': 0,
-        'skipped': 0,
-        'failed': 0,
-        'total_tables': 0,
-        'total_embeddings': 0
-    }
+    stats_table.add_row("Total Chunks", str(db_info['total_chunks']))
+    stats_table.add_row("Unique Documents", str(db_info['unique_documents']))
+    stats_table.add_row("Unique Tables", str(db_info['unique_tables']))
+    stats_table.add_row("Years", ', '.join(map(str, db_info['years'])) or 'N/A')
+    stats_table.add_row("Quarters", ', '.join(db_info['quarters']) or 'N/A')
     
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        console=console
-    ) as progress:
+    console.print(stats_table)
+    console.print()
+    
+    # Table titles
+    if db_info['table_titles']:
+        console.print("[bold]Table Titles (first 20):[/bold]")
+        for title in db_info['table_titles']:
+            console.print(f"  • {title}")
+        console.print()
+    
+    # Samples
+    if db_info['samples']:
+        samples_table = RichTable(title="Sample Entries")
+        samples_table.add_column("Title", style="cyan")
+        samples_table.add_column("Year", style="magenta")
+        samples_table.add_column("Quarter", style="yellow")
+        samples_table.add_column("Source", style="green")
         
-        main_task = progress.add_task("Processing PDFs...", total=len(pdf_files))
+        for s in db_info['samples']:
+            samples_table.add_row(
+                str(s['title'])[:40],
+                str(s['year']),
+                str(s['quarter']),
+                str(s['source'])
+            )
         
-        for pdf_path in pdf_files:
-            filename = pdf_path.name
-            pdf_hash = get_pdf_hash(str(pdf_path))
-            
-            # Check cache
-            if not force and is_pdf_in_vectordb(pdf_hash):
-                console.print(f"[yellow]⚡ {filename} - Already in Vector DB (skipped)[/yellow]")
-                stats['skipped'] += 1
-                progress.update(main_task, advance=1)
-                continue
-            
-            try:
-                # Extract with unified system
-                console.print(f"  [cyan]Extracting {pdf_path.name}...[/cyan]")
-                
-                extractor = Extractor(enable_caching=True)
-                result = extractor.extract(str(pdf_path))
-                
-                if not result.is_successful():
-                    console.print(f"  [red]✗ Extraction failed: {result.error}[/red]")
-                    stats['failed'] += 1
-                    progress.update(main_task, advance=1)
-                    continue
-                
-                tables_count = len(result.tables)
-                console.print(f"  [green]✓ Extracted {tables_count} tables (quality: {result.quality_score:.1f})[/green]")
-                
-                if tables_count == 0:
-                    console.print(f"  [yellow]⚠ No tables found[/yellow]")
-                    stats['skipped'] += 1
-                    progress.update(main_task, advance=1)
-                    continue
-                
-                # Generate embeddings and chunks
-                console.print(f"  [cyan]→ Generating embeddings...[/cyan]")
-                
-                chunks_to_store = []
-                
-                for i, table in enumerate(result.tables):
-                    try:
-                        content = table.get('content', '')
-                        if not content:
-                            continue
-                            
-                        # Generate embedding
-                        embedding = embedding_manager.generate_embedding(content)
-                        
-                        # Extract quarter number and month from quarter string
-                        quarter_str = result.metadata.get('quarter')
-                        quarter_number = None
-                        month = None
-                        
-                        if quarter_str:
-                            # Extract quarter number (Q1 -> 1, Q2 -> 2, etc.)
-                            if quarter_str.upper().startswith('Q'):
-                                quarter_number = int(quarter_str[1])
-                                # Map quarter to ending month (Q1=3, Q2=6, Q3=9, Q4=12)
-                                month = quarter_number * 3
-                        
-                        # Create Metadata with embedding info and temporal fields
-                        metadata = TableMetadata(
-                            source_doc=filename,
-                            page_no=table.get('metadata', {}).get('page_no', 1),
-                            table_title=table.get('metadata', {}).get('table_title', f'Table {i+1}'),
-                            year=result.metadata.get('year'),
-                            quarter=quarter_str,
-                            quarter_number=quarter_number,
-                            month=month,
-                            report_type=result.metadata.get('report_type'),
-                            embedding_model=embedding_manager.get_model_name(),
-                            embedded_date=datetime.now()
-                        )
-                        
-                        # Create Chunk
-                        chunk = TableChunk(
-                            chunk_id=f"{pdf_hash}_{i}",
-                            content=content,
-                            embedding=embedding,
-                            metadata=metadata
-                        )
-                        
-                        chunks_to_store.append(chunk)
-                        
-                    except Exception as e:
-                        logger.error(f"Error processing table {i}: {e}")
-                        continue
-                
-                console.print(f"  [green]✓ Generated {len(chunks_to_store)} embeddings[/green]")
-                
-                # Store in Vector DB
-                if chunks_to_store:
-                    try:
-                        vector_store.add_chunks(chunks_to_store)
-                        console.print(f"  [green]✓ Stored {len(chunks_to_store)} chunks in vector DB ({settings.VECTORDB_PROVIDER.upper()})[/green]")
-                        
-                        stats['processed'] += 1
-                        stats['total_tables'] += tables_count
-                        stats['total_embeddings'] += len(chunks_to_store)
-                    except Exception as e:
-                        logger.error(f"Error storing in vector DB: {e}")
-                        console.print(f"  [red]✗ Error storing in vector DB: {e}[/red]")
-                        stats['failed'] += 1
-                else:
-                    console.print(f"  [yellow]⚠ No embeddings generated[/yellow]")
-                    stats['skipped'] += 1
-                
-            except Exception as e:
-                console.print(f"  [red]✗ Error: {e}[/red]")
-                stats['failed'] += 1
-            
-            progress.update(main_task, advance=1)
+        console.print(samples_table)
     
-    # Summary
-    console.print(f"\n[bold]Extraction Summary:[/bold]")
-    console.print(f"  Processed: {stats['processed']}")
-    console.print(f"  Skipped (cached): {stats['skipped']}")
-    console.print(f"  Failed: {stats['failed']}")
-    console.print(f"  Total Tables: {stats['total_tables']}")
-    console.print(f"  Total Embeddings: {stats['total_embeddings']}")
     console.print()
 
+
+# ============================================================================
+# STEP 6: SEARCH
+# ============================================================================
+
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="Search query"),
+    top_k: int = typer.Option(5, "--top-k", "-k", help="Number of results"),
+    year: Optional[int] = typer.Option(None, "--year", "-y", help="Filter by year"),
+    quarter: Optional[str] = typer.Option(None, "--quarter", "-q", help="Filter by quarter"),
+    local: bool = typer.Option(False, "--local", "-l", help="Use local embeddings (offline mode)")
+):
+    """
+    Step 6: Search FAISS directly (without LLM).
+    
+    Examples:
+        python main.py search "revenue"
+        python main.py search "balance sheet" --year 2025 --quarter Q1
+        python main.py search "revenue" --local  # Offline mode
+    """
+    console.print(f"\n[bold green]🔍 Step 6: FAISS Search[/bold green]\n")
+    console.print(f"[cyan]Query:[/cyan] {query}\n")
+    
+    # Override embedding provider if --local flag is set
+    if local:
+        console.print("[yellow]📴 Offline mode: Using local embeddings[/yellow]\n")
+        settings.EMBEDDING_PROVIDER = "local"
+    
+    filters = {}
+    if year:
+        filters['year'] = year
+    if quarter:
+        filters['quarter'] = quarter
+    
+    result = run_search(query=query, top_k=top_k, filters=filters if filters else None)
+    
+    if not result.success:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
+        raise typer.Exit(code=1)
+    
+    console.print(f"[green]Found {len(result.data)} results[/green]\n")
+    
+    results_table = RichTable(title="Search Results")
+    results_table.add_column("#", style="dim")
+    results_table.add_column("Title", style="cyan")
+    results_table.add_column("Year", style="magenta")
+    results_table.add_column("Qtr", style="yellow")
+    results_table.add_column("Score", style="green")
+    results_table.add_column("Content Preview", style="dim")
+    
+    for i, r in enumerate(result.data, 1):
+        content_preview = r['content'][:50] + '...' if len(r['content']) > 50 else r['content']
+        results_table.add_row(
+            str(i),
+            str(r['metadata']['title'])[:30],
+            str(r['metadata']['year']),
+            str(r['metadata']['quarter']),
+            f"{r['score']:.3f}",
+            content_preview.replace('\n', ' ')
+        )
+    
+    console.print(results_table)
+    console.print()
+
+
+# ============================================================================
+# STEP 7: QUERY (with LLM)
+# ============================================================================
 
 @app.command()
 def query(
     question: str = typer.Argument(..., help="Question to ask"),
-    top_k: int = typer.Option(5, "--top-k", "-k", help="Number of results"),
-    no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache")
+    top_k: int = typer.Option(5, "--top-k", "-k", help="Context chunks"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache"),
+    local: bool = typer.Option(False, "--local", "-l", help="Use local embeddings (offline mode)")
 ):
     """
-    Query the financial data using natural language.
+    Step 7: Query with LLM response.
     
     Examples:
         python main.py query "What was revenue in Q1 2025?"
-        python main.py query "Compare revenues Q1 2025 vs Q1 2024"
-        python main.py query "Show all Fair Value tables"
+        python main.py query "What was revenue?" --local  # Offline embeddings
     """
-    console.print(f"\n[bold cyan]Question:[/bold cyan] {question}\n")
+    console.print(f"\n[bold green]🤖 Step 7: LLM Query[/bold green]\n")
+    console.print(f"[cyan]Question:[/cyan] {question}\n")
     
-    try:
-        # Get query processor
-        processor = get_query_processor()
-        
-        # Process query
-        with console.status("[bold green]Processing query..."):
-            result = processor.process_query(question)
-        
-        # Display result
+    # Override embedding provider if --local flag is set
+    if local:
+        console.print("[yellow]📴 Offline mode: Using local embeddings[/yellow]\n")
+        settings.EMBEDDING_PROVIDER = "local"
+    
+    result = run_query(question=question, top_k=top_k, use_cache=not no_cache)
+    
+    if result.success:
         console.print(f"[bold green]Answer:[/bold green]")
-        console.print(result)
-        console.print()
-        
-    except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        console.print(result.data['answer'])
+    else:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
         raise typer.Exit(code=1)
+    
+    console.print()
 
+
+# ============================================================================
+# STEPS 8-9: CONSOLIDATE + EXPORT
+# ============================================================================
+
+@app.command()
+def consolidate(
+    table_title: str = typer.Argument(..., help="Table title to consolidate"),
+    output_dir: str = typer.Option(None, "--output", "-o", help="Output directory"),
+    format: str = typer.Option("both", "--format", "-f", help="csv, excel, or both"),
+    transpose: bool = typer.Option(True, "--transpose/--no-transpose", help="Timeseries format")
+):
+    """
+    Steps 8-9: Consolidate tables and export as timeseries.
+    
+    Examples:
+        python main.py consolidate "Balance Sheet"
+        python main.py consolidate "Revenue" --format excel
+        python main.py consolidate "Fair Value" --output ./exports
+    """
+    console.print(f"\n[bold green]📊 Steps 8-9: Consolidate + Export[/bold green]\n")
+    console.print(f"[cyan]Table:[/cyan] {table_title}\n")
+    
+    result = run_consolidate(
+        table_title=table_title,
+        output_format=format,
+        output_dir=output_dir,
+        transpose=transpose
+    )
+    
+    if not result.success:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
+        raise typer.Exit(code=1)
+    
+    console.print(f"[green]✓ {result.message}[/green]")
+    console.print(f"[dim]Rows: {result.metadata.get('total_rows', 0)}, Columns: {result.metadata.get('total_columns', 0)}[/dim]")
+    console.print(f"[dim]Quarters: {', '.join(result.metadata.get('quarters_included', []))}[/dim]")
+    
+    export_paths = result.data.get('export_paths', {})
+    if export_paths:
+        console.print("\n[bold]Exported Files:[/bold]")
+        for fmt, path in export_paths.items():
+            console.print(f"  {fmt.upper()}: [cyan]{path}[/cyan]")
+    
+    console.print()
+
+
+# ============================================================================
+# INTERACTIVE MODE
+# ============================================================================
 
 @app.command()
 def interactive():
     """Start interactive query mode."""
-    console.print("\n[bold green]🤖 Interactive Query Mode[/bold green]")
-    console.print("[dim]Type 'exit' or 'quit' to exit[/dim]\n")
-    
-    processor = get_query_processor()
+    console.print("\n[bold green]💬 Interactive Query Mode[/bold green]")
+    console.print("[dim]Type 'exit' to quit[/dim]\n")
     
     while True:
         try:
-            question = typer.prompt("\nYour question")
+            question = typer.prompt("Your question")
             
             if question.lower() in ['exit', 'quit', 'q']:
                 console.print("\n[yellow]Goodbye![/yellow]\n")
                 break
             
-            # Process query
-            with console.status("[bold green]Processing..."):
-                result = processor.process_query(question)
+            result = run_query(question=question)
             
-            console.print(f"\n[bold green]Answer:[/bold green]")
-            console.print(result)
+            if result.success:
+                console.print(f"\n[bold green]Answer:[/bold green]")
+                console.print(result.data['answer'])
+            else:
+                console.print(f"\n[red]Error: {result.error}[/red]")
+            
+            console.print()
             
         except KeyboardInterrupt:
-            console.print("\n\n[yellow]Goodbye![/yellow]\n")
+            console.print("\n[yellow]Goodbye![/yellow]\n")
             break
-        except Exception as e:
-            console.print(f"\n[red]Error: {e}[/red]")
 
+
+# ============================================================================
+# FULL PIPELINE
+# ============================================================================
+
+@app.command()
+def pipeline(
+    yr: str = typer.Option(..., "--yr", help="Year or range"),
+    m: Optional[str] = typer.Option(None, "--m", help="Month filter"),
+    source: str = typer.Option(None, "--source", help="PDF directory"),
+    force: bool = typer.Option(False, "--force", help="Force re-processing")
+):
+    """
+    Run complete pipeline: Download → Extract → Embed.
+    
+    Example:
+        python main.py pipeline --yr 20-25
+    """
+    console.print("\n[bold green]🚀 Running Complete Pipeline[/bold green]\n")
+    
+    # Use source or settings default
+    if source is None:
+        source = settings.RAW_DATA_DIR
+    
+    # Step 1: Download
+    console.print("[bold]Step 1: Download[/bold]")
+    download_result = run_download(year_range=yr, month=m, output_dir=source)
+    if download_result.success:
+        console.print(f"  [green]✓ {download_result.message}[/green]")
+    else:
+        console.print(f"  [yellow]⚠ {download_result.error}[/yellow]")
+    
+    # Step 2: Extract
+    console.print("\n[bold]Step 2: Extract[/bold]")
+    extract_result = run_extract(source_dir=source, force=force)
+    if extract_result.success:
+        console.print(f"  [green]✓ {extract_result.message}[/green]")
+    else:
+        console.print(f"  [red]✗ {extract_result.error}[/red]")
+        raise typer.Exit(code=1)
+    
+    # Steps 3-4: Embed
+    console.print("\n[bold]Steps 3-4: Embed + Store[/bold]")
+    embed_result = run_embed(extracted_data=extract_result.data)
+    if embed_result.success:
+        console.print(f"  [green]✓ {embed_result.message}[/green]")
+    else:
+        console.print(f"  [red]✗ {embed_result.error}[/red]")
+        raise typer.Exit(code=1)
+    
+    console.print("\n[bold green]✓ Pipeline Complete![/bold green]")
+    console.print("[cyan]Ready for queries. Try:[/cyan]")
+    console.print("  python main.py view-db")
+    console.print("  python main.py search \"revenue\"")
+    console.print("  python main.py query \"What was revenue in Q1 2025?\"")
+    console.print()
+
+
+# ============================================================================
+# UTILITIES
+# ============================================================================
 
 @app.command()
 def stats():
@@ -343,316 +534,50 @@ def stats():
     console.print("\n[bold]System Statistics[/bold]\n")
     
     # Vector DB stats
-    try:
-        vector_store = get_vectordb_manager()
-        vs_stats = vector_store.get_stats()
-        
+    result = run_view_db(show_sample=False)
+    if result.success:
+        db_info = result.data
         table = RichTable(title="Vector Database")
         table.add_column("Metric", style="cyan")
         table.add_column("Value", style="green")
-        
-        table.add_row("Total Embeddings", str(vs_stats.get('total_chunks', 0)))
-        table.add_row("Unique Documents", str(vs_stats.get('unique_documents', 0)))
-        
+        table.add_row("Total Chunks", str(db_info['total_chunks']))
+        table.add_row("Unique Documents", str(db_info['unique_documents']))
         console.print(table)
-        console.print()
-    except Exception as e:
-        console.print(f"[red]Vector DB Error: {e}[/red]\n")
-    
-    # Cache stats
-    try:
-        cache = get_redis_cache()
-        if cache.enabled:
-            cache_stats = cache.get_stats()
-            
-            table = RichTable(title="Cache")
-            table.add_column("Metric", style="cyan")
-            table.add_column("Value", style="green")
-            
-            table.add_row("Total Keys", str(cache_stats.get('total_keys', 0)))
-            table.add_row("Memory Used", cache_stats.get('memory_used', 'N/A'))
-            
-            console.print(table)
-        else:
-            console.print("[yellow]Cache is disabled[/yellow]")
-    except Exception as e:
-        console.print(f"[yellow]Cache not available: {e}[/yellow]")
+    else:
+        console.print(f"[red]Vector DB Error: {result.error}[/red]")
     
     console.print()
 
 
-@app.command()
+@app.command("clear-cache")
 def clear_cache():
     """Clear Redis cache."""
+    if not CACHE_AVAILABLE:
+        console.print("[yellow]Cache not available[/yellow]")
+        return
+    
     try:
         cache = get_redis_cache()
-        
         if not cache.enabled:
             console.print("[yellow]Cache is not enabled[/yellow]")
             return
         
-        confirm = typer.confirm("Are you sure you want to clear the cache?")
-        if confirm:
+        if typer.confirm("Clear all cache?"):
             cache.clear_all()
             console.print("[green]✓ Cache cleared[/green]")
-        else:
-            console.print("[yellow]Cancelled[/yellow]")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
 
 
-@app.command()
-def pipeline(
-    yr: str = typer.Option(..., "--yr", help="Year or range (e.g., 25 or 20-25)"),
-    m: Optional[str] = typer.Option(None, "--m", help="Month (03, 06, 09, 12)"),
-    source: str = typer.Option("../raw_data", "--source", help="Download directory"),
-    force: bool = typer.Option(False, "--force", help="Force re-extraction")
-):
-    """
-    Run complete pipeline: Download → Extract → Ready for queries.
-    
-    Example:
-        python main.py pipeline --yr 20-25
-    """
-    console.print("\n[bold green]🚀 Running Complete Pipeline[/bold green]\n")
-    
-    # Step 1: Download
-    console.print("[bold]Step 1: Downloading PDFs[/bold]")
-    download(yr=yr, m=m, output_dir=source)
-    
-    # Step 2: Extract
-    console.print("\n[bold]Step 2: Extracting Tables[/bold]")
-    extract(source=source, force=force)
-    
-    console.print("\n[bold green]✓ Pipeline Complete![/bold green]")
-    console.print("[cyan]System is ready for queries. Try:[/cyan]")
-    console.print("  python main.py query \"What was revenue in Q1 2025?\"")
-    console.print("  python main.py interactive")
-    console.print()
-
-
-@app.command()
-def consolidate(
-    query: str = typer.Argument(..., help="Table title to consolidate (e.g., 'Contractual principals and fair value')"),
-    output_dir: str = typer.Option(None, "--output", "-o", help="Output directory"),
-    threshold: float = typer.Option(None, "--threshold", "-t", help="Similarity threshold (0.0-1.0)")
-):
-    """
-    Consolidate tables across all quarters/years and export to CSV/Excel.
-    
-    Searches for tables with matching titles across all PDFs, merges them horizontally,
-    and exports to both CSV and Excel formats for anomaly detection analysis.
-    
-    Examples:
-        python main.py consolidate "Contractual principals and fair value"
-        python main.py consolidate "Balance Sheet" --output custom_dir
-        python main.py consolidate "Revenue" --threshold 0.9
-    """
-    console.print(f"\\n[bold cyan]🔍 Consolidating Tables:[/bold cyan] '{query}'\\n")
-    
-    try:
-        # Import consolidator
-        from src.extraction.consolidation import get_quarterly_consolidator
-        from src.embeddings.manager import get_embedding_manager
-        
-        # Get vector store and embedding manager
-        vector_store = get_vectordb_manager()
-        embedding_manager = get_embedding_manager()
-        
-        # Override settings if provided
-        if output_dir:
-            settings.OUTPUT_DIR = output_dir
-        if threshold:
-            settings.TABLE_SIMILARITY_THRESHOLD = threshold
-        
-        # Initialize consolidator
-        consolidator = get_quarterly_consolidator(vector_store, embedding_manager)
-        
-        # Step 1: Find matching tables
-        with console.status("[bold green]Searching for matching tables..."):
-            tables = consolidator.find_tables_by_title(query, top_k=50)
-        
-        if not tables:
-            console.print("[yellow]⚠ No matching tables found[/yellow]")
-            console.print("[dim]Try adjusting the query or lowering the similarity threshold[/dim]")
-            return
-        
-        console.print(f"[green]✓ Found {len(tables)} matching tables[/green]")
-        
-        # Show found tables
-        found_table = RichTable(title="Found Tables")
-        found_table.add_column("Quarter", style="cyan")
-        found_table.add_column("Year", style="magenta")
-        found_table.add_column("Title", style="green")
-        found_table.add_column("Score", style="yellow")
-        
-        for table in tables[:10]:  # Show first 10
-            found_table.add_row(
-                str(table.get('quarter', 'N/A')),
-                str(table.get('year', 'N/A')),
-                table.get('title', 'Unknown')[:50],
-                f"{table.get('fuzzy_score', 0):.2f}"
-            )
-        
-        console.print(found_table)
-        
-        # Step 2: Consolidate
-        with console.status("[bold green]Consolidating tables..."):
-            df, metadata = consolidator.consolidate_tables(tables, table_name=query)
-        
-        if df.empty:
-            console.print("[yellow]⚠ Failed to consolidate tables[/yellow]")
-            return
-        
-        console.print(f"[green]✓ Consolidated: {metadata['total_rows']} rows x {metadata['total_columns']} columns[/green]")
-        console.print(f"[cyan]Quarters included: {', '.join(metadata['quarters_included'])}[/cyan]")
-        
-        # Step 3: Export
-        with console.status("[bold green]Exporting to CSV and Excel..."):
-            export_paths = consolidator.export(df, query, metadata.get('date_range'))
-        
-        console.print("\\n[bold green]✓ Export Complete![/bold green]")
-        if 'csv' in export_paths:
-            console.print(f"  📄 CSV: [cyan]{export_paths['csv']}[/cyan]")
-        if 'excel' in export_paths:
-            console.print(f"  📊 Excel: [cyan]{export_paths['excel']}[/cyan]")
-        
-        # Step 4: Preview
-        console.print("\\n[bold]Preview (first 10 rows):[/bold]")
-        preview_df = df.head(10)
-        
-        # Create rich table for preview
-        preview_table = RichTable()
-        for col in preview_df.columns:
-            preview_table.add_column(str(col)[:20], style="cyan")
-        
-        for _, row in preview_df.iterrows():
-            preview_table.add_row(*[str(val)[:20] for val in row])
-        
-        console.print(preview_table)
-        console.print()
-        
-        console.print("[dim]Tip: These files are ready for anomaly detection analysis[/dim]")
-        
-    except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
-        logger.error(f"Consolidation failed: {e}", exc_info=True)
-        raise typer.Exit(code=1)
-
-
-@app.command()
-def scheduler(
-    action: str = typer.Argument(..., help="start|stop|list|status"),
-    daemon: bool = typer.Option(False, "--daemon", help="Run in background (blocking)"),
-    days: int = typer.Option(180, "--days", help="Days to look ahead for filings")
-):
-    """
-    Manage automatic filing scheduler.
-    
-    The scheduler monitors for new SEC filings and automatically downloads them.
-    
-    Examples:
-        python main.py scheduler list              # Show upcoming filings
-        python main.py scheduler start             # Start scheduler (foreground)
-        python main.py scheduler start --daemon    # Start and keep running
-        python main.py scheduler status            # Check status
-    """
-    try:
-        from src.scheduler.scheduler import get_scheduler
-        from src.scheduler.filing_calendar import get_filing_calendar
-    except ImportError as e:
-        console.print(f"[red]Scheduler not available: {e}[/red]")
-        console.print("[yellow]Install dependencies: pip install APScheduler>=3.10.0 holidays>=0.45[/yellow]")
-        raise typer.Exit(code=1)
-    
-    if action == "list":
-        # Show upcoming filings
-        console.print("\n[bold]Upcoming SEC Filings[/bold]\n")
-        
-        calendar = get_filing_calendar()
-        upcoming = calendar.get_upcoming_filings(days_ahead=days)
-        
-        if not upcoming:
-            console.print(f"[yellow]No upcoming filings in next {days} days[/yellow]")
-            return
-        
-        table = RichTable(title=f"Next {len(upcoming)} Filings")
-        table.add_column("Report", style="cyan")
-        table.add_column("Quarter/Type", style="magenta")
-        table.add_column("Predicted Date", style="green")
-        table.add_column("Days Until", style="yellow")
-        table.add_column("Window", style="dim")
-        
-        for filing in upcoming:
-            table.add_row(
-                filing["filing_name"],
-                filing["quarter"],
-                filing["predicted_date"].strftime("%Y-%m-%d (%A)"),
-                str(filing["days_until"]),
-                f"{filing['window_start'].strftime('%b %d')}-{filing['window_end'].strftime('%d')}"
-            )
-        
-        console.print(table)
-        console.print()
-        console.print("[dim]Note: Dates are predictions based on historical patterns[/dim]")
-    
-    elif action == "start":
-        # Start scheduler
-        console.print("\n[bold green]🚀 Starting Filing Scheduler[/bold green]\n")
-        
-        sched = get_scheduler()
-        
-        # Schedule upcoming filings
-        sched.schedule_upcoming_filings(days_ahead=days)
-        
-        # Add periodic check
-        sched.add_manual_check(interval_hours=settings.SCHEDULER_CHECK_INTERVAL_HOURS)
-        
-        # Start
-        sched.start(daemon=daemon)
-        
-        if not daemon:
-            console.print("[green]Scheduler started in background[/green]")
-            console.print("[cyan]Run 'python main.py scheduler status' to check status[/cyan]")
-        
-    elif action == "stop":
-        # Stop scheduler
-        sched = get_scheduler()
-        sched.stop()
-        console.print("[yellow]Scheduler stopped[/yellow]")
-    
-    elif action == "status":
-        # Show status
-        sched = get_scheduler()
-        status = sched.get_status()
-        
-        console.print("\n[bold]Scheduler Status[/bold]\n")
-        console.print(f"Running: {'[green]Yes[/green]' if status['running'] else '[red]No[/red]'}")
-        console.print(f"Total Jobs: {status['total_jobs']}")
-        
-        if status['upcoming_jobs']:
-            console.print("\n[bold]Next 10 Jobs:[/bold]")
-            for job in status['upcoming_jobs']:
-                next_run = job['next_run'].strftime("%Y-%m-%d %H:%M") if job['next_run'] else "Not scheduled"
-                console.print(f"  • {job['name']}: {next_run}")
-        
-        console.print()
-    
-    else:
-        console.print(f"[red]Unknown action: {action}[/red]")
-        console.print("[yellow]Valid actions: start, stop, list, status[/yellow]")
-        raise typer.Exit(code=1)
-
-
 if __name__ == "__main__":
-    # Auto-start scheduler if enabled in settings
-    if settings.SCHEDULER_ENABLED:
+    # Auto-start scheduler if enabled
+    if hasattr(settings, 'SCHEDULER_ENABLED') and settings.SCHEDULER_ENABLED:
         try:
             from src.scheduler.scheduler import get_scheduler
-            logger.info("Auto-starting scheduler (SCHEDULER_ENABLED=True)")
+            logger.info("Auto-starting scheduler")
             sched = get_scheduler()
-            sched.schedule_upcoming_filings(days_ahead=settings.SCHEDULER_LOOKAHEAD_DAYS)
-            sched.add_manual_check(interval_hours=settings.SCHEDULER_CHECK_INTERVAL_HOURS)
+            sched.schedule_upcoming_filings(days_ahead=getattr(settings, 'SCHEDULER_LOOKAHEAD_DAYS', 180))
+            sched.add_manual_check(interval_hours=getattr(settings, 'SCHEDULER_CHECK_INTERVAL_HOURS', 6))
             sched.start(daemon=False)
         except Exception as e:
             logger.error(f"Failed to auto-start scheduler: {e}")

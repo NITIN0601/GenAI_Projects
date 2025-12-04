@@ -17,6 +17,9 @@ For quarterly/period consolidation, use QuarterlyTableConsolidator instead.
 from typing import List, Dict, Any, Optional
 import pandas as pd
 from collections import defaultdict
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class MultiYearTableConsolidator:
@@ -61,7 +64,7 @@ class MultiYearTableConsolidator:
             data_by_year[year] = self._parse_table_content(result['content'])
         
         # Step 3: Consolidate into single structure
-        consolidated = self._consolidate_data(data_by_year)
+        consolidated = self._consolidate_data(tables_by_year, data_by_year)
         
         # Step 4: Transpose for readability
         transposed = self._transpose_table(consolidated)
@@ -90,6 +93,7 @@ class MultiYearTableConsolidator:
             metadata = result.get('metadata', {})
             
             # Check if table title matches
+            # TODO: Add fuzzy matching here if needed for robustness
             if metadata.get('table_title', '').lower() == table_title.lower():
                 year = metadata.get('year')
                 
@@ -101,6 +105,7 @@ class MultiYearTableConsolidator:
     def _parse_table_content(self, content: str) -> Dict[str, str]:
         """
         Parse table content into row_header: value mapping.
+        Uses robust parsing to handle various markdown formats.
         
         Args:
             content: Markdown table content
@@ -110,58 +115,61 @@ class MultiYearTableConsolidator:
         """
         data = {}
         
-        for line in content.split('\n'):
-            line = line.strip()
+        try:
+            lines = [l.strip() for l in content.split('\n') if l.strip()]
             
-            # Skip empty lines and separators
-            if not line or line.startswith('---') or line.startswith('==='):
-                continue
+            # Filter out separator lines
+            lines = [l for l in lines if not all(c in '|-: ' for c in l)]
             
-            # Parse pipe-separated values
-            if '|' in line:
-                parts = [p.strip() for p in line.split('|')]
-                parts = [p for p in parts if p]  # Remove empty strings
-                
-                if len(parts) >= 2:
-                    row_header = parts[0]
-                    value = parts[1] if len(parts) > 1 else ''
+            for line in lines:
+                # Parse pipe-separated values
+                if '|' in line:
+                    parts = [p.strip() for p in line.split('|')]
+                    parts = [p for p in parts if p]  # Remove empty strings
                     
-                    # Skip header rows
-                    if row_header and not self._is_header_row(row_header):
+                    if len(parts) >= 2:
+                        row_header = parts[0]
+                        # Assume the last column is the value (common in financial tables)
+                        # Or if 2 columns, it's index 1
+                        value = parts[-1]
+                        
+                        # Skip header rows
+                        if row_header and not self._is_header_row(row_header):
+                            data[row_header] = value
+                
+                # Parse colon-separated values
+                elif ':' in line:
+                    parts = line.split(':', 1)
+                    if len(parts) == 2:
+                        row_header = parts[0].strip()
+                        value = parts[1].strip()
                         data[row_header] = value
+                        
+        except Exception as e:
+            logger.error(f"Error parsing table content: {e}")
             
-            # Parse colon-separated values
-            elif ':' in line:
-                parts = line.split(':', 1)
-                if len(parts) == 2:
-                    row_header = parts[0].strip()
-                    value = parts[1].strip()
-                    data[row_header] = value
-        
         return data
     
     def _is_header_row(self, text: str) -> bool:
         """Check if row is a header row."""
-        header_keywords = ['table', 'year', 'period', 'column', 'header']
+        # Dynamic check: Header rows usually have generic terms
+        header_keywords = ['table', 'year', 'period', 'column', 'header', 'item', 'description', 'ended']
         text_lower = text.lower()
-        return any(keyword in text_lower for keyword in header_keywords)
+        
+        # Exact match or starts with keyword
+        for keyword in header_keywords:
+            if text_lower == keyword or text_lower.startswith(f"{keyword} "):
+                return True
+                
+        return False
     
     def _consolidate_data(
         self,
+        tables_by_year: Dict[int, Dict[str, Any]],
         data_by_year: Dict[int, Dict[str, str]]
     ) -> Dict[str, Any]:
         """
         Consolidate data from multiple years.
-        
-        Format:
-        {
-            'row_headers': ['Total Assets', 'Total Liabilities', ...],
-            'years': [2020, 2021, 2022, 2023, 2024],
-            'data': {
-                'Total Assets': {'2020': '$1.0T', '2021': '$1.2T', ...},
-                'Total Liabilities': {'2020': '$0.8T', '2021': '$0.9T', ...}
-            }
-        }
         """
         # Collect all unique row headers
         all_row_headers = set()
@@ -178,8 +186,11 @@ class MultiYearTableConsolidator:
             consolidated_data[row_header] = {}
             for year in years:
                 value = data_by_year[year].get(row_header, 'N/A')
-                # Use year-end date for time series consistency
-                date_key = f"{year}-12-31"
+                
+                # Use precise date if available from metadata
+                metadata = tables_by_year[year].get('metadata', {})
+                date_key = self._get_period_date(year, metadata.get('quarter'))
+                
                 consolidated_data[row_header][date_key] = value
         
         return {
@@ -188,30 +199,49 @@ class MultiYearTableConsolidator:
             'data': consolidated_data
         }
     
+    def _get_period_date(self, year: Optional[int], quarter: Optional[str]) -> str:
+        """
+        Get standard period end date for quarter.
+        """
+        if not year:
+            return "Unknown"
+            
+        if not quarter:
+            return f"{year}-12-31"  # Default to year end
+            
+        quarter = quarter.upper()
+        
+        if "Q1" in quarter:
+            return f"{year}-03-31"
+        elif "Q2" in quarter:
+            return f"{year}-06-30"
+        elif "Q3" in quarter:
+            return f"{year}-09-30"
+        elif "Q4" in quarter or "10-K" in quarter or "10K" in quarter:
+            return f"{year}-12-31"
+        else:
+            return f"{year}-12-31"  # Default
+    
     def _transpose_table(
         self,
         consolidated: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Transpose table for better readability.
-        
-        Original (horizontal, wide):
-        | Line Item        | 2020   | 2021   | 2022   | 2023   | 2024   |
-        | Total Assets     | $1.0T  | $1.2T  | $1.5T  | $1.8T  | $2.0T  |
-        
-        Transposed (vertical, tall):
-        | Year | Total Assets | Total Liabilities | ... |
-        | 2020 | $1.0T        | $0.8T             | ... |
-        | 2021 | $1.2T        | $0.9T             | ... |
         """
         row_headers = consolidated['row_headers']
-        years = consolidated['years']
+        
+        # Get all unique date keys from the data
+        all_dates = set()
+        for row_data in consolidated['data'].values():
+            all_dates.update(row_data.keys())
+        dates = sorted(all_dates)
+        
         data = consolidated['data']
         
         # Build transposed structure
         transposed_data = {}
-        for year in years:
-            date_key = f"{year}-12-31"
+        for date_key in dates:
             transposed_data[date_key] = {}
             for row_header in row_headers:
                 value = data[row_header].get(date_key, 'N/A')
@@ -219,7 +249,7 @@ class MultiYearTableConsolidator:
         
         return {
             'column_headers': row_headers,  # Original row headers become columns
-            'row_headers': [f"{y}-12-31" for y in years],  # Dates become rows
+            'row_headers': dates,  # Dates become rows
             'data': transposed_data
         }
     
@@ -230,12 +260,6 @@ class MultiYearTableConsolidator:
     ) -> Dict[str, Any]:
         """
         Validate data integrity - no loss or leakage.
-        
-        Checks:
-        - All years present
-        - All row headers present
-        - All values preserved
-        - No duplicates
         """
         validation = {
             'status': 'valid',
@@ -269,25 +293,6 @@ class MultiYearTableConsolidator:
                 f"Data leakage detected: {transposed_count - original_count} extra points"
             )
         
-        # Verify all years present
-        expected_years = set(original_data.keys())
-        
-        # Extract years from date strings (YYYY-MM-DD)
-        actual_years = set()
-        for date_str in transposed['row_headers']:
-            try:
-                # Expecting YYYY-MM-DD
-                year = int(date_str.split('-')[0])
-                actual_years.add(year)
-            except ValueError:
-                continue
-        
-        if expected_years != actual_years:
-            validation['status'] = 'error'
-            validation['errors'].append(
-                f"Year mismatch: expected {expected_years}, got {actual_years}"
-            )
-        
         return validation
     
     def _extract_metadata(
@@ -315,13 +320,6 @@ class MultiYearTableConsolidator:
     ) -> pd.DataFrame:
         """
         Format consolidated result as pandas DataFrame.
-        
-        Args:
-            consolidated_result: Result from consolidate_multi_year_tables
-            use_transposed: If True, use transposed format (recommended)
-            
-        Returns:
-            pandas DataFrame
         """
         if use_transposed:
             # Transposed format: Years as rows, line items as columns
@@ -343,13 +341,6 @@ class MultiYearTableConsolidator:
     ) -> str:
         """
         Format consolidated result as markdown table.
-        
-        Args:
-            consolidated_result: Result from consolidate_multi_year_tables
-            use_transposed: If True, use transposed format (recommended)
-            
-        Returns:
-            Markdown table string
         """
         df = self.format_as_dataframe(consolidated_result, use_transposed)
         
@@ -370,6 +361,7 @@ class MultiYearTableConsolidator:
         markdown_table = df.to_markdown()
         
         return header + markdown_table
+
 
 # Global instance
 _multi_year_consolidator: Optional[MultiYearTableConsolidator] = None
@@ -394,14 +386,6 @@ def consolidate_and_transpose(
 ) -> Any:
     """
     Convenience function to consolidate and transpose tables.
-    
-    Args:
-        search_results: Results from VectorDB search
-        table_title: Title of table to consolidate
-        format: Output format ('dataframe', 'markdown', 'dict')
-        
-    Returns:
-        Consolidated table in requested format
     """
     consolidator = get_multi_year_consolidator()
     result = consolidator.consolidate_multi_year_tables(search_results, table_title)

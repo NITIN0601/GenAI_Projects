@@ -161,8 +161,9 @@ class UnifiedExtractor:
                     success=True,
                     tables_found=len(cached.tables),
                     quality_score=cached.quality_score,
-                    extraction_time=0.0  # Cache hit
+                extraction_time=0.0  # Cache hit
                 )
+                self._save_table_report(cached)
                 return cached
         
         # Extract with fallback
@@ -187,6 +188,10 @@ class UnifiedExtractor:
         if self.cache and result.is_successful():
             self.cache.set(pdf_path, result)
             logger.info(f"Cached extraction result for {pdf_path}")
+            
+        # Save table report
+        self._save_table_report(result)
+
         
         logger.info(
             f"Extraction complete: {len(result.tables)} tables, "
@@ -226,6 +231,67 @@ class UnifiedExtractor:
                 results.append(error_result)
         
         return results
+
+    def _save_table_report(self, result: ExtractionResult):
+        """
+        Save a detailed report of extracted tables to CSV.
+        
+        Args:
+            result: Extraction result
+        """
+        if not result.is_successful() or not result.tables:
+            return
+            
+        try:
+            import csv
+            from datetime import datetime
+            
+            # Create output directory
+            output_dir = Path("outputs/extraction_reports")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate filename
+            source_name = Path(result.pdf_path).stem
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_path = output_dir / f"table_report_{source_name}_{timestamp}.csv"
+            
+            with open(report_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                # Write header
+                writer.writerow(['Page No', 'Table Title', 'Row Headers', 'Source'])
+                
+                # Write rows
+                for table in result.tables:
+                    meta = table.get('metadata', {})
+                    content = table.get('content', '')
+                    
+                    # Extract row headers (first column)
+                    row_headers = []
+                    lines = content.split('\n')
+                    for line in lines:
+                        if '|' in line and '---' not in line:
+                            parts = line.split('|')
+                            if len(parts) > 1:
+                                header = parts[1].strip()
+                                if header:
+                                    row_headers.append(header)
+                    
+                    # Format row headers as string
+                    row_headers_str = '; '.join(row_headers[:10])  # Limit to first 10 for readability
+                    if len(row_headers) > 10:
+                        row_headers_str += f"... (+{len(row_headers)-10} more)"
+                    
+                    writer.writerow([
+                        meta.get('page_no', 'N/A'),
+                        meta.get('table_title', 'N/A'),
+                        row_headers_str,
+                        meta.get('source_doc', 'N/A')
+                    ])
+            
+            logger.info(f"Saved table report to {report_path}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save table report: {e}")
     
     def get_stats(self) -> dict:
         """

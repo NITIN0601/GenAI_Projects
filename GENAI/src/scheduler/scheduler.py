@@ -124,7 +124,7 @@ class FilingScheduler:
             from scripts.download_documents import download_files, get_file_names_to_download
             
             # Get download URLs
-            base_url = "https://www.morganstanley.com/content/dam/msdotcom/en/about-us-ir/shareholder"
+            base_url = settings.DOWNLOAD_BASE_URL
             
             file_urls = get_file_names_to_download(
                 base_url=base_url,

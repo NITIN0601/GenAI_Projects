@@ -2,34 +2,32 @@
 Unified prompt templates module.
 
 This module provides a centralized location for all prompt templates used
-throughout the GENAI system. Prompts are organized by purpose:
+throughout the GENAI system.
 
-- base: Core financial analysis prompts
-- retrieval: Search strategy prompts (HyDE, Multi-Query)
-- advanced: Advanced reasoning techniques (CoT, ReAct)
-- few_shot: Few-shot learning examples and management
+Optimized Structure:
+- loader.py: Loads prompts from YAML with caching
+- templates.py: All prompt template constants (consolidated)
+- few_shot.py: Few-shot learning examples and management
 
 Usage:
     from src.prompts import FINANCIAL_ANALYSIS_PROMPT, HYDE_PROMPT
     from src.prompts import get_few_shot_manager
 """
 
-# Base prompts
-from .base import (
+# Consolidated templates (replaces base.py, advanced.py, search_strategies.py)
+from .templates import (
+    # Financial Analysis
     FINANCIAL_ANALYSIS_PROMPT,
     FINANCIAL_CHAT_PROMPT,
     TABLE_COMPARISON_PROMPT,
     METADATA_EXTRACTION_PROMPT,
-    CITATION_PROMPT
-)
-
-# Retrieval prompts
-from src.prompts.search_strategies import HYDE_PROMPT, MULTI_QUERY_PROMPT
-
-# Advanced prompts
-from .advanced import (
+    CITATION_PROMPT,
+    # Advanced
     COT_PROMPT,
-    REACT_PROMPT
+    REACT_PROMPT,
+    # Search Strategies
+    HYDE_PROMPT,
+    MULTI_QUERY_PROMPT,
 )
 
 # Few-shot learning
@@ -40,26 +38,29 @@ from .few_shot import (
     get_few_shot_manager
 )
 
+# Loader (for advanced usage)
+from .loader import get_prompt_loader, PromptLoader
+
 
 __all__ = [
-    # Base prompts
+    # Templates
     'FINANCIAL_ANALYSIS_PROMPT',
     'FINANCIAL_CHAT_PROMPT',
     'TABLE_COMPARISON_PROMPT',
     'METADATA_EXTRACTION_PROMPT',
     'CITATION_PROMPT',
-    
-    # Retrieval prompts
-    'HYDE_PROMPT',
-    'MULTI_QUERY_PROMPT',
-    
-    # Advanced prompts
     'COT_PROMPT',
     'REACT_PROMPT',
+    'HYDE_PROMPT',
+    'MULTI_QUERY_PROMPT',
     
     # Few-shot learning
     'FINANCIAL_EXAMPLES',
     'EXAMPLE_TEMPLATE',
     'FewShotManager',
     'get_few_shot_manager',
+    
+    # Loader
+    'get_prompt_loader',
+    'PromptLoader',
 ]

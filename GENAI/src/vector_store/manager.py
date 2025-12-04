@@ -104,7 +104,7 @@ class VectorDBManager:
             from src.vector_store.stores.faiss_store import FAISSVectorStore
             embedding_manager = get_embedding_manager()
             self.db = FAISSVectorStore(
-                embedding_function=embedding_manager.langchain_embeddings,
+                embedding_function=embedding_manager,  # Pass full manager for get_dimension()
                 dimension=kwargs.get('dimension'),
                 persist_dir=kwargs.get('persist_dir'),
                 index_type=kwargs.get('index_type', 'flat')

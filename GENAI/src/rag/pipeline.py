@@ -1,7 +1,7 @@
 """Main RAG query engine using LangChain LCEL."""
 
 from typing import Optional, Dict, Any
-from rich.console import Console
+import logging
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 
@@ -14,7 +14,7 @@ from src.prompts.few_shot import get_few_shot_manager
 from config.settings import settings
 from src.prompts import FINANCIAL_CHAT_PROMPT, COT_PROMPT, REACT_PROMPT
 
-console = Console()
+logger = logging.getLogger(__name__)
 
 
 class QueryEngine:
@@ -69,7 +69,7 @@ class QueryEngine:
             | StrOutputParser()
         )
         
-        console.print(f"[green][OK][/green] LangChain Query Engine initialized (mode: {prompt_strategy})")
+        logger.info(f"LangChain Query Engine initialized (mode: {prompt_strategy})")
     
     def _get_prompt_for_strategy(self, strategy: str):
         """Get prompt template based on strategy."""
@@ -126,7 +126,7 @@ class QueryEngine:
         if use_cache and self.cache:
             cached_response = self.cache.get_llm_response(query, context_key)
             if cached_response:
-                console.print("[yellow]Using cached response[/yellow]")
+                logger.info("Using cached response")
                 return RAGResponse(
                     answer=cached_response,
                     sources=[],
@@ -134,7 +134,7 @@ class QueryEngine:
                     retrieved_chunks=0
                 )
         
-        console.print(f"[cyan]Executing LangChain pipeline...[/cyan]")
+        logger.info("Executing LangChain pipeline...")
         
         try:
             # Execute chain
@@ -155,7 +155,7 @@ class QueryEngine:
             )
             
         except Exception as e:
-            console.print(f"[red]Pipeline failed: {e}[/red]")
+            logger.error(f"Pipeline failed: {e}")
             return RAGResponse(
                 answer=f"I encountered an error: {str(e)}",
                 sources=[],

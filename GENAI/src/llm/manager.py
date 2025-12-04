@@ -2,7 +2,7 @@
 
 from typing import Optional, Any, List, Dict
 import logging
-from langchain_ollama import ChatOllama
+from langchain_community.chat_models import ChatOllama
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage, AIMessage
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -101,6 +101,18 @@ class LLMManager:
             custom_provider = get_custom_llm_provider()
             self.llm = CustomLangChainWrapper(provider=custom_provider)
             
+        elif self.provider_type == "openai":
+            self.model_name = model_name or settings.OPENAI_MODEL
+            logger.info(f"Initializing OpenAI LLM: {self.model_name}")
+            
+            from langchain_openai import ChatOpenAI
+            self.llm = ChatOpenAI(
+                model=self.model_name,
+                api_key=settings.OPENAI_API_KEY,
+                temperature=settings.LLM_TEMPERATURE,
+                callbacks=self.callbacks
+            )
+            
         else:
             # Default to Ollama
             self.model_name = model_name or settings.LLM_MODEL or settings.OLLAMA_MODEL
@@ -146,6 +158,15 @@ class LLMManager:
     def get_langchain_model(self) -> BaseChatModel:
         """Return the underlying LangChain model object."""
         return self.llm
+        
+    def check_availability(self) -> bool:
+        """Check if LLM is available."""
+        try:
+            # Simple ping
+            self.llm.invoke("test")
+            return True
+        except Exception:
+            return False
         
     def check_availability(self) -> bool:
         """Check if LLM is available."""

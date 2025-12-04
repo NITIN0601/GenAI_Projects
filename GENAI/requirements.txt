@@ -1,92 +1,94 @@
-# ============================================================================
-# Financial RAG System - Requirements (Python 3.12.x Compatible)
-# ============================================================================
-# Production-ready dependencies optimized for Python 3.12 and Apple Silicon
-# Last updated: 2025-11-26
-# Tested and verified compatible versions
-# ============================================================================
-
 # Core PDF Processing - Docling (Advanced)
 # ============================================================================
-# Let pip resolve compatible versions automatically
 docling>=2.0.0
-docling-core>=2.0.0
+docling-core>=2.0.0,<3.0.0
 docling-ibm-models>=3.0.0
 docling-parse>=4.0.0
 
 # PDF Processing - Legacy (Fallback)
 # ============================================================================
 PyMuPDF>=1.24.0
-pdfplumber>=0.11.0
+pdfplumber>=0.10.0
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
+huggingface_hub>=0.20.0
+pypdfium2>=4.0.0
 
 # Vector Databases
 # ============================================================================
 chromadb>=0.4.0
-faiss-cpu>=1.7.4
+faiss-cpu>=1.7.0
+redisvl>=0.1.0
 
 # Embeddings
+# ============================================================================
 sentence-transformers>=2.2.0
-openai>=1.0.0
 
-# LangChain Ecosystem (Nov 2024 - v0.1.0)
+# LangChain Ecosystem
+# ============================================================================
 langchain>=0.3.0
 langchain-community>=0.3.0
 langchain-core>=0.3.0
-langchain-ollama>=0.2.0
 langchain-huggingface>=0.1.0
 langchain-chroma>=0.1.0
+langchain-openai>=0.2.0
 langgraph>=0.2.0
 langsmith>=0.1.0
 
 # Search & Retrieval
+# ============================================================================
 rank-bm25>=0.2.2
 
 # LLM & RAG
-tiktoken>=0.5.0
-
-# LLM Integration
 # ============================================================================
-ollama>=0.4.0
+tiktoken>=0.5.0
 
 # Data Processing
 # ============================================================================
-pandas>=2.2.0
-numpy>=2.0.0
+pandas>=2.0.0
+numpy>=1.24.0,<2.0.0
 openpyxl>=3.1.0
 
 # Caching & Storage
 # ============================================================================
-redis>=5.0.0
+redis>=5.0.0,<7.0
 
 # CLI & UI
 # ============================================================================
-typer>=0.12.0
+typer>=0.9.0
 rich>=13.0.0
 click>=8.1.0
 
 # HTTP & Networking
 # ============================================================================
-requests>=2.32.0
-urllib3>=2.2.0
-httpx>=0.28.0
+requests>=2.31.0
+urllib3>=2.0.0
+httpx>=0.25.0
 
 # Utilities
 # ============================================================================
 python-dotenv>=1.0.0
-pydantic>=2.10.0
-pydantic-settings>=2.7.0
-tqdm>=4.67.0
-python-dateutil>=2.9.0
-rapidfuzz>=3.10.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+tqdm>=4.60.0
+python-dateutil>=2.8.0
+rapidfuzz>=3.0.0
 
 # Text Processing
 # ===========================================================================
-nltk>=3.9.0
-regex>=2024.11.0
+nltk>=3.8.0
+regex>=2023.0.0
 
 # Scheduler
 # ============================================================================
 APScheduler>=3.10.0
-holidays>=0.45
+holidays>=0.40
+
+# PyTorch (CPU only for offline)
+# ============================================================================
+torch>=2.0.0
+torchvision>=0.15.0
+
+# YAML
+# ============================================================================
+PyYAML>=6.0.0

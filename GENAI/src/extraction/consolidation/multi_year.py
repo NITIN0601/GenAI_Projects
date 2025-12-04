@@ -264,7 +264,7 @@ class TableConsolidationEngine:
             try:
                 # Try to parse as date
                 return parser.parse(period_str)
-            except:
+            except Exception:
                 # Try to extract year and quarter
                 import re
                 quarter_match = re.search(r'Q([1-4])\s*(\d{4})', period_str, re.IGNORECASE)

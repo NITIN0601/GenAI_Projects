@@ -10,8 +10,20 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List
 
-from docling.document_converter import DocumentConverter
-from docling_core.types.doc import DocItemLabel, TableItem
+# Lazy import to avoid downloading models on module import
+DocumentConverter = None
+DocItemLabel = None
+TableItem = None
+
+def _ensure_docling_imported():
+    """Lazy import of docling to avoid model downloads on module import."""
+    global DocumentConverter, DocItemLabel, TableItem
+    if DocumentConverter is None:
+        from docling.document_converter import DocumentConverter as DC
+        from docling_core.types.doc import DocItemLabel as DIL, TableItem as TI
+        DocumentConverter = DC
+        DocItemLabel = DIL
+        TableItem = TI
 
 from src.extraction.base import ExtractionBackend, ExtractionResult, BackendType
 from src.embeddings.chunking import TableChunker
@@ -66,6 +78,9 @@ class DoclingBackend(ExtractionBackend):
         Returns:
             ExtractionResult with tables and metadata
         """
+        # Lazy import docling when actually needed
+        _ensure_docling_imported()
+        
         start_time = time.time()
         result = ExtractionResult(
             backend=BackendType.DOCLING,
@@ -75,7 +90,12 @@ class DoclingBackend(ExtractionBackend):
         try:
             # Convert PDF with Docling
             logger.info(f"Extracting {pdf_path} with Docling...")
-            doc_result = DoclingHelper.convert_pdf(pdf_path)
+            try:
+                doc_result = DoclingHelper.convert_pdf(pdf_path)
+            except Exception as e:
+                # Log full error and re-raise to make failures visible
+                logger.exception(f"Docling conversion failed for {pdf_path}: {e}")
+                raise
             doc = doc_result.document
             
             # Extract tables
@@ -84,13 +104,13 @@ class DoclingBackend(ExtractionBackend):
             
             # Process each table
             all_chunks = []
-            for i, table_item in enumerate(tables, 1):
+            for i, table_item in enumerate(tables):
                 try:
-                    chunks = self._extract_table_chunks(table_item, pdf_path, doc)
+                    chunks = self._extract_table_chunks(table_item, pdf_path, doc, table_index=i)
                     all_chunks.extend(chunks)
                 except Exception as e:
-                    logger.error(f"Error extracting table {i}: {e}")
-                    result.warnings.append(f"Table {i} extraction failed: {str(e)}")
+                    logger.error(f"Error extracting table {i + 1}: {e}")
+                    result.warnings.append(f"Table {i + 1} extraction failed: {str(e)}")
             
             # Convert chunks to table dictionaries
             result.tables = [self._chunk_to_dict(chunk) for chunk in all_chunks]
@@ -111,45 +131,68 @@ class DoclingBackend(ExtractionBackend):
         
         return result
     
-    def _extract_table_chunks(self, table_item: TableItem, pdf_path: str, doc) -> List:
+    def _extract_table_chunks(self, table_item: TableItem, pdf_path: str, doc, table_index: int = 0) -> List:
         """Extract and chunk a single table."""
+        from src.utils.extraction_utils import FootnoteExtractor
+        
         # Get table text with doc argument to avoid deprecation warning
         if hasattr(table_item, 'export_to_markdown'):
-            table_text = table_item.export_to_markdown(doc=doc)
+            raw_table_text = table_item.export_to_markdown(doc=doc)
         else:
-            table_text = str(table_item.text)
+            raw_table_text = str(table_item.text)
+        
+        # Clean footnotes from row labels
+        table_text, footnotes_map = FootnoteExtractor.clean_table_content(raw_table_text)
         
         # Get page number
         page_no = DoclingHelper.get_item_page(table_item)
         
-        # Get caption
-        caption = table_item.caption if hasattr(table_item, 'caption') else f"Table {page_no}"
+        # Get better table title
+        caption = DoclingHelper.extract_table_title(doc, table_item, table_index, page_no)
         
-        # Create metadata
+        # Create metadata with footnotes
         metadata = PDFMetadataExtractor.create_metadata(
             pdf_path=pdf_path,
             page_no=page_no,
-            table_title=caption
+            table_title=caption,
+            footnote_references=list(set(fn for fns in footnotes_map.values() for fn in fns)) if footnotes_map else None
         )
         
-        # Chunk table
+        # Chunk table (use cleaned text for embeddings)
         chunks = self.chunker.chunk_table(table_text, metadata)
+        
+        # Store original (with footnotes) for reference
+        for chunk in chunks:
+            chunk._raw_content = raw_table_text
+            chunk._footnotes_map = footnotes_map
         
         return chunks
     
     def _chunk_to_dict(self, chunk) -> Dict[str, Any]:
         """Convert TableChunk to dictionary."""
-        return {
-            'content': chunk.content,
+        result = {
+            'content': chunk.content,  # Cleaned content without footnote refs
             'metadata': {
                 'source_doc': chunk.metadata.source_doc,
                 'page_no': chunk.metadata.page_no,
                 'table_title': chunk.metadata.table_title,
                 'year': chunk.metadata.year,
                 'quarter': chunk.metadata.quarter,
-                'report_type': chunk.metadata.report_type
+                'report_type': chunk.metadata.report_type,
             }
         }
+        
+        # Add footnotes to metadata if present
+        if hasattr(chunk.metadata, 'footnote_references') and chunk.metadata.footnote_references:
+            result['metadata']['footnote_references'] = chunk.metadata.footnote_references
+        
+        # Store raw content with footnotes for reference
+        if hasattr(chunk, '_raw_content'):
+            result['raw_content'] = chunk._raw_content
+        if hasattr(chunk, '_footnotes_map'):
+            result['footnotes_map'] = chunk._footnotes_map
+        
+        return result
     
     def _extract_metadata(self, pdf_path: str, doc) -> Dict[str, Any]:
         """Extract document metadata."""

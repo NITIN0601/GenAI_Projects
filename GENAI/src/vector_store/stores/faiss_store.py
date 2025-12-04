@@ -42,16 +42,25 @@ class FAISSVectorStore(VectorStore):
         
         Args:
             embedding_function: LangChain embeddings interface
-            dimension: Vector dimension (default from settings)
+            dimension: Vector dimension (auto-detected if not provided)
             persist_dir: Directory to persist index
             index_type: Type of FAISS index (flat, ivf, hnsw)
         """
         self.embedding_function = embedding_function
-        self.dimension = dimension or settings.EMBEDDING_DIMENSION
         self.persist_dir = persist_dir or os.path.join(settings.PROJECT_ROOT, "faiss_index")
         self.index_type = index_type
         
         Path(self.persist_dir).mkdir(parents=True, exist_ok=True)
+        
+        # Auto-detect dimension from embedding manager if not provided
+        if dimension is not None:
+            self.dimension = dimension
+        elif hasattr(embedding_function, 'get_dimension'):
+            # Use dynamic dimension from embedding manager
+            self.dimension = embedding_function.get_dimension()
+        else:
+            # Fallback to settings
+            self.dimension = settings.EMBEDDING_DIMENSION
         
         # Initialize FAISS index
         self.index = self._create_index()
