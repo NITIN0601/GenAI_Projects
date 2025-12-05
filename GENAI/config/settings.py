@@ -230,6 +230,19 @@ class Settings(BaseSettings):
     TABLE_SIMILARITY_THRESHOLD: float = 0.85  # Threshold for table title matching
     
     # ============================================================================
+    # EVALUATION SETTINGS
+    # ============================================================================
+    EVALUATION_ENABLED: bool = True  # Enable/disable evaluation on queries
+    EVALUATION_PROVIDER: Literal["heuristic", "ragas", "hybrid"] = "heuristic"  # Default: heuristic (no LLM)
+    EVALUATION_AUTO_RUN: bool = False  # Auto-evaluate on every query (prod: True)
+    EVALUATION_LOG_SCORES: bool = True  # Log evaluation scores to file
+    EVALUATION_MIN_CONFIDENCE: float = 0.5  # Minimum confidence threshold
+    EVALUATION_BLOCK_HALLUCINATIONS: bool = False  # Block responses with hallucinations
+    
+    # Note: RAGAS uses the system's LLM_PROVIDER setting automatically
+    # (local, custom, openai) - no separate RAGAS config needed
+    
+    # ============================================================================
     # RAG OUTPUT SETTINGS
     # ============================================================================
     SAVE_RAG_TABLES: bool = True  # Save retrieved tables to CSV/Excel

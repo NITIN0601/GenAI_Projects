@@ -1,8 +1,8 @@
 # GENAI Project Structure
 
-**Last Updated**: 2025-12-03  
-**Total Python Files**: 88  
-**Total Directories**: 20+
+**Last Updated**: 2025-12-05  
+**Total Python Files**: 130  
+**Total Directories**: 22+
 
 ---
 
@@ -10,11 +10,14 @@
 
 ```
 /GENAI/
-├── main.py                          # Main CLI entry point
+├── main.py                          # Main CLI entry point (modular)
 ├── quickstart.sh                    # Quick setup script
 ├── run_complete_pipeline.py         # Full pipeline execution
 ├── test_faiss_metadata.py          # FAISS metadata verification
+├── test_local_config.py            # Local config testing
 ├── verify_dimension.py             # Embedding dimension checker
+├── verify_consolidation.py         # Table consolidation checker
+├── verify_table_id.py              # Table ID verification
 ├── requirements.txt                # Full dependencies
 ├── requirements-minimal.txt        # Minimal dependencies
 ├── README.md                       # Project documentation
@@ -78,6 +81,60 @@ src/cache/
 - `redis_cache.py`: Redis-based query result caching for performance
 
 **Purpose**: Query result caching for performance optimization
+
+---
+
+### `/src/evaluation` - RAG Evaluation (NEW)
+
+```
+src/evaluation/
+├── __init__.py
+├── base.py                         # BaseEvaluator, EvaluationScores
+├── manager.py                      # EvaluationManager (provider switching)
+├── heuristic_provider.py           # Fast heuristic evaluation
+├── ragas_provider.py               # RAGAS integration (optional)
+├── retrieval_metrics.py            # Retrieval quality metrics
+├── generation_metrics.py           # Generation quality metrics
+├── faithfulness.py                 # Hallucination detection
+└── evaluator.py                    # Legacy RAGEvaluator
+```
+
+**Files**:
+- `base.py`: Abstract base for providers, EvaluationScores with table display
+- `manager.py`: Unified manager with heuristic/RAGAS/hybrid switching
+- `heuristic_provider.py`: Fast evaluation without LLM (default)
+- `ragas_provider.py`: Industry-standard RAGAS integration (optional)
+- `retrieval_metrics.py`: Context relevance, Precision@K, MRR
+- `generation_metrics.py`: Answer relevance, completeness, conciseness
+- `faithfulness.py`: Hallucination detection, claim verification
+- `evaluator.py`: RAGEvaluator orchestrating all metrics (legacy)
+
+**Purpose**: Modular RAG pipeline evaluation
+- **Heuristic**: Fast, no LLM (default)
+- **RAGAS**: Industry-standard, LLM-based
+- **Hybrid**: Both for comprehensive assessment
+
+---
+
+### `/src/guardrails` - Safety Guardrails (NEW)
+
+```
+src/guardrails/
+├── __init__.py
+├── input_guard.py                  # Input validation & sanitization
+├── output_guard.py                 # Output validation & disclaimers
+└── financial_validator.py          # Financial accuracy checks
+```
+
+**Files**:
+- `input_guard.py`: Prompt injection detection, query classification, filter extraction
+- `output_guard.py`: Response validation, disclaimers, sensitive data filtering
+- `financial_validator.py`: Number verification, calculation checks, currency formatting
+
+**Purpose**: Safety and accuracy guardrails
+- **Input**: Validation, injection detection, off-topic filtering
+- **Output**: Disclaimers, formatting, sensitive data filtering
+- **Financial**: Number accuracy, calculation verification
 
 ---
 
@@ -236,6 +293,7 @@ src/models/
 src/prompts/
 ├── __init__.py
 ├── loader.py                       # Prompt loader (Singleton)
+├── templates.py                    # Consolidated prompt templates
 ├── base.py                         # Base prompts (uses loader)
 ├── advanced.py                     # Advanced prompts (uses loader)
 ├── few_shot.py                     # Few-shot examples (uses loader)
@@ -549,8 +607,8 @@ outputs/
 
 ## 📊 Statistics
 
-- **Total Python Files**: 88
-- **Total Lines of Code**: ~25,000+
+- **Total Python Files**: 122
+- **Total Lines of Code**: ~28,000+
 - **Core Modules**: 13
 - **Supported Vector DBs**: 3 (ChromaDB, FAISS, Redis)
 - **Supported Embedding Providers**: 2 (Local, Custom API)

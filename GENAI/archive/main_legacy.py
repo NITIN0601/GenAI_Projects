@@ -30,9 +30,14 @@ Usage:
 """
 
 import typer
-from typing import Optional
+from typing import Optional, List
 from rich.console import Console
 from rich.table import Table as RichTable
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from pathlib import Path
+import time
+import hashlib
+from datetime import datetime
 import logging
 
 # Configure logging
@@ -45,6 +50,8 @@ from config.settings import settings
 
 # Import pipeline steps
 from src.pipeline.steps import (
+    PipelineStep,
+    PipelineResult,
     run_download,
     run_extract,
     run_embed,
@@ -54,17 +61,12 @@ from src.pipeline.steps import (
     run_consolidate,
 )
 
-# Import CLI helpers
-from src.utils.helpers import (
-    get_table_id,
-    get_table_title,
-    set_local_embedding_mode,
-    check_download_enabled,
-    create_results_table,
-    create_db_stats_table,
-    export_results_to_csv,
-    handle_pipeline_result,
-)
+# Import our modules
+from scripts.download_documents import download_files, get_file_names_to_download
+from src.extraction.extractor import UnifiedExtractor as Extractor
+from src.embeddings.manager import get_embedding_manager
+from src.vector_store.manager import get_vectordb_manager
+from src.models.schemas import TableChunk, TableMetadata
 
 # Optional imports
 try:
@@ -85,6 +87,14 @@ except ImportError:
 app = typer.Typer(help="Financial RAG System - Modular Pipeline")
 console = Console()
 
+# Base URL moved to settings.DOWNLOAD_BASE_URL
+
+
+def get_pdf_hash(pdf_path: str) -> str:
+    """Get MD5 hash of PDF file."""
+    with open(pdf_path, 'rb') as f:
+        return hashlib.md5(f.read()).hexdigest()
+
 
 # ============================================================================
 # STEP 1: DOWNLOAD
@@ -97,7 +107,7 @@ def download(
     output_dir: str = typer.Option(None, "--output", "-o", help="Output directory"),
     timeout: int = typer.Option(30, "--timeout", help="Download timeout"),
     max_retries: int = typer.Option(3, "--retries", help="Max retries")
-) -> None:
+):
     """
     Step 1: Download PDF files (respects DOWNLOAD_ENABLED in .env).
     
@@ -107,7 +117,10 @@ def download(
     """
     console.print("\n[bold green]📥 Step 1: Download Files[/bold green]\n")
     
-    if not check_download_enabled():
+    # Check if download is enabled
+    if hasattr(settings, 'DOWNLOAD_ENABLED') and not settings.DOWNLOAD_ENABLED:
+        console.print("[yellow]⚠ Download disabled (DOWNLOAD_ENABLED=False in .env)[/yellow]")
+        console.print("[dim]Set DOWNLOAD_ENABLED=True to enable downloads[/dim]")
         return
     
     result = run_download(
@@ -118,7 +131,11 @@ def download(
         max_retries=max_retries
     )
     
-    handle_pipeline_result(result, show_metadata=False)
+    if result.success:
+        console.print(f"[green]✓ {result.message}[/green]")
+    else:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
+        raise typer.Exit(code=1)
 
 
 # ============================================================================
@@ -129,7 +146,7 @@ def download(
 def extract(
     source: str = typer.Option(None, "--source", "-s", help="PDF directory"),
     force: bool = typer.Option(False, "--force", "-f", help="Force re-extraction")
-) -> None:
+):
     """
     Step 2: Extract tables from PDFs using Docling.
     
@@ -139,7 +156,13 @@ def extract(
     console.print("\n[bold green]📄 Step 2: Extract Tables[/bold green]\n")
     
     result = run_extract(source_dir=source, force=force)
-    handle_pipeline_result(result)
+    
+    if result.success:
+        console.print(f"[green]✓ {result.message}[/green]")
+        console.print(f"[dim]Processed: {result.metadata.get('processed', 0)} files[/dim]")
+    else:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
+        raise typer.Exit(code=1)
 
 
 # ============================================================================
@@ -151,7 +174,7 @@ def embed(
     source: str = typer.Option(None, "--source", "-s", help="PDF directory"),
     force: bool = typer.Option(False, "--force", "-f", help="Force re-embedding"),
     local: bool = typer.Option(False, "--local", "-l", help="Use local embeddings (offline mode)")
-) -> None:
+):
     """
     Steps 3-4: Extract, generate embeddings, and store in VectorDB.
     
@@ -161,7 +184,10 @@ def embed(
     """
     console.print("\n[bold green]🔢 Steps 3-4: Extract + Embed + Store[/bold green]\n")
     
-    set_local_embedding_mode(local)
+    # Override embedding provider if --local flag is set
+    if local:
+        console.print("[yellow]📴 Offline mode: Using local embeddings[/yellow]\n")
+        settings.EMBEDDING_PROVIDER = "local"
     
     # Step 2: Extract
     console.print("[cyan]Extracting tables...[/cyan]")
@@ -177,7 +203,11 @@ def embed(
     console.print("[cyan]Generating embeddings...[/cyan]")
     embed_result = run_embed(extracted_data=extract_result.data)
     
-    handle_pipeline_result(embed_result)
+    if embed_result.success:
+        console.print(f"[green]✓ {embed_result.message}[/green]")
+    else:
+        console.print(f"[red]✗ Embedding failed: {embed_result.error}[/red]")
+        raise typer.Exit(code=1)
 
 
 # ============================================================================
@@ -189,7 +219,7 @@ def view_db(
     sample: bool = typer.Option(True, "--sample/--no-sample", help="Show samples"),
     count: int = typer.Option(5, "--count", "-n", help="Sample count"),
     local: bool = typer.Option(False, "--local", "-l", help="Use local embeddings (offline mode)")
-) -> None:
+):
     """
     Step 5: View FAISS DB contents and schema.
     
@@ -200,7 +230,10 @@ def view_db(
     """
     console.print("\n[bold green]🗄️ Step 5: FAISS Database View[/bold green]\n")
     
-    set_local_embedding_mode(local)
+    # Override embedding provider if --local flag is set
+    if local:
+        settings.EMBEDDING_PROVIDER = "local"
+
     
     result = run_view_db(show_sample=sample, sample_count=count)
     
@@ -211,18 +244,28 @@ def view_db(
     db_info = result.data
     
     # Stats table
-    console.print(create_db_stats_table(db_info))
+    stats_table = RichTable(title="Database Statistics")
+    stats_table.add_column("Metric", style="cyan")
+    stats_table.add_column("Value", style="green")
+    
+    stats_table.add_row("Total Chunks", str(db_info['total_chunks']))
+    stats_table.add_row("Unique Documents", str(db_info['unique_documents']))
+    stats_table.add_row("Unique Tables", str(db_info['unique_tables']))
+    stats_table.add_row("Years", ', '.join(map(str, db_info['years'])) or 'N/A')
+    stats_table.add_row("Quarters", ', '.join(db_info['quarters']) or 'N/A')
+    
+    console.print(stats_table)
     console.print()
     
     # Table titles
-    if db_info.get('table_titles'):
+    if db_info['table_titles']:
         console.print("[bold]Table Titles (first 20):[/bold]")
         for title in db_info['table_titles']:
             console.print(f"  • {title}")
         console.print()
     
     # Samples
-    if db_info.get('samples'):
+    if db_info['samples']:
         samples_table = RichTable(title="Sample Entries")
         samples_table.add_column("Table ID", style="dim")
         samples_table.add_column("Title", style="cyan")
@@ -256,7 +299,7 @@ def search(
     quarter: Optional[str] = typer.Option(None, "--quarter", "-q", help="Filter by quarter"),
     local: bool = typer.Option(False, "--local", "-l", help="Use local embeddings (offline mode)"),
     export: bool = typer.Option(False, "--export", "-e", help="Export results to CSV")
-) -> None:
+):
     """
     Step 6: Search FAISS directly (without LLM).
     
@@ -269,7 +312,10 @@ def search(
     console.print(f"\n[bold green]🔍 Step 6: FAISS Search[/bold green]\n")
     console.print(f"[cyan]Query:[/cyan] {query}\n")
     
-    set_local_embedding_mode(local)
+    # Override embedding provider if --local flag is set
+    if local:
+        console.print("[yellow]📴 Offline mode: Using local embeddings[/yellow]\n")
+        settings.EMBEDDING_PROVIDER = "local"
     
     filters = {}
     if year:
@@ -285,12 +331,85 @@ def search(
     
     console.print(f"[green]Found {len(result.data)} results[/green]\n")
     
-    # Display results
-    console.print(create_results_table(result.data))
+    results_table = RichTable(title="Search Results")
+    results_table.add_column("Table ID", style="dim")
+    results_table.add_column("Table Title", style="cyan", max_width=35)
+    results_table.add_column("Year", style="magenta")
+    results_table.add_column("Qtr", style="yellow")
+    results_table.add_column("Page", style="green")
+    results_table.add_column("Score", style="blue")
+    results_table.add_column("Content Preview", style="dim", max_width=40)
+    
+    for i, r in enumerate(result.data, 1):
+        content_preview = r['content'][:40] + '...' if len(r['content']) > 40 else r['content']
+        # Get table_title from metadata
+        table_title = (
+            r['metadata'].get('table_title') or 
+            r['metadata'].get('actual_table_title') or
+            r['metadata'].get('title') or
+            'N/A'
+        )
+        # Get or generate table_id
+        table_id = r['metadata'].get('table_id')
+        if not table_id:
+            # Fallback for existing data
+            doc = r['metadata'].get('source_doc', 'unknown')
+            page = r['metadata'].get('page_no', '0')
+            table_id = f"{doc}_p{page}_{i}"
+            
+        results_table.add_row(
+            str(table_id),
+            str(table_title)[:35],
+            str(r['metadata'].get('year', 'N/A')),
+            str(r['metadata'].get('quarter', 'N/A')),
+            str(r['metadata'].get('page_no', 'N/A')),
+            f"{r['score']:.3f}",
+            content_preview.replace('\n', ' ')
+        )
+    
+    console.print(results_table)
     
     # Export to CSV if requested
     if export:
-        csv_path = export_results_to_csv(result.data, query)
+        import csv
+        from datetime import datetime
+        
+        output_dir = Path(settings.OUTPUT_DIR)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_path = output_dir / f"search_results_{timestamp}.csv"
+        
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            # Header with Table ID and Table Title
+            writer.writerow(['Table ID', 'Table Title', 'Year', 'Quarter', 'Source', 'Page', 'Score', 'Content'])
+            
+            for i, r in enumerate(result.data, 1):
+                table_title = (
+                    r['metadata'].get('table_title') or 
+                    r['metadata'].get('actual_table_title') or
+                    r['metadata'].get('title') or
+                    'N/A'
+                )
+                # Get or generate table_id
+                table_id = r['metadata'].get('table_id')
+                if not table_id:
+                    doc = r['metadata'].get('source_doc', 'unknown')
+                    page = r['metadata'].get('page_no', '0')
+                    table_id = f"{doc}_p{page}_{i}"
+                    
+                writer.writerow([
+                    table_id,
+                    table_title,
+                    r['metadata'].get('year', 'N/A'),
+                    r['metadata'].get('quarter', 'N/A'),
+                    r['metadata'].get('source_doc', r['metadata'].get('filename', 'N/A')),
+                    r['metadata'].get('page_no', 'N/A'),
+                    f"{r['score']:.4f}",
+                    r['content']
+                ])
+        
         console.print(f"\n[green]✓ Results exported to: {csv_path}[/green]")
     
     console.print()
@@ -306,7 +425,7 @@ def query(
     top_k: int = typer.Option(5, "--top-k", "-k", help="Context chunks"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache"),
     local: bool = typer.Option(False, "--local", "-l", help="Use local embeddings (offline mode)")
-) -> None:
+):
     """
     Step 7: Query with LLM response.
     
@@ -317,7 +436,10 @@ def query(
     console.print(f"\n[bold green]🤖 Step 7: LLM Query[/bold green]\n")
     console.print(f"[cyan]Question:[/cyan] {question}\n")
     
-    set_local_embedding_mode(local)
+    # Override embedding provider if --local flag is set
+    if local:
+        console.print("[yellow]📴 Offline mode: Using local embeddings[/yellow]\n")
+        settings.EMBEDDING_PROVIDER = "local"
     
     result = run_query(question=question, top_k=top_k, use_cache=not no_cache)
     
@@ -341,7 +463,7 @@ def consolidate(
     output_dir: str = typer.Option(None, "--output", "-o", help="Output directory"),
     format: str = typer.Option("both", "--format", "-f", help="csv, excel, or both"),
     transpose: bool = typer.Option(True, "--transpose/--no-transpose", help="Timeseries format")
-) -> None:
+):
     """
     Steps 8-9: Consolidate tables and export as timeseries.
     
@@ -382,7 +504,7 @@ def consolidate(
 # ============================================================================
 
 @app.command()
-def interactive() -> None:
+def interactive():
     """Start interactive query mode."""
     console.print("\n[bold green]💬 Interactive Query Mode[/bold green]")
     console.print("[dim]Type 'exit' to quit[/dim]\n")
@@ -420,7 +542,7 @@ def pipeline(
     m: Optional[str] = typer.Option(None, "--m", help="Month filter"),
     source: str = typer.Option(None, "--source", help="PDF directory"),
     force: bool = typer.Option(False, "--force", help="Force re-processing")
-) -> None:
+):
     """
     Run complete pipeline: Download → Extract → Embed.
     
@@ -472,14 +594,20 @@ def pipeline(
 # ============================================================================
 
 @app.command()
-def stats() -> None:
+def stats():
     """Show system statistics."""
     console.print("\n[bold]System Statistics[/bold]\n")
     
     # Vector DB stats
     result = run_view_db(show_sample=False)
     if result.success:
-        console.print(create_db_stats_table(result.data))
+        db_info = result.data
+        table = RichTable(title="Vector Database")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+        table.add_row("Total Chunks", str(db_info['total_chunks']))
+        table.add_row("Unique Documents", str(db_info['unique_documents']))
+        console.print(table)
     else:
         console.print(f"[red]Vector DB Error: {result.error}[/red]")
     
@@ -487,7 +615,7 @@ def stats() -> None:
 
 
 @app.command("clear-cache")
-def clear_cache() -> None:
+def clear_cache():
     """Clear Redis cache."""
     if not CACHE_AVAILABLE:
         console.print("[yellow]Cache not available[/yellow]")

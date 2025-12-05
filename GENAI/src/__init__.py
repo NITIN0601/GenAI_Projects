@@ -25,7 +25,12 @@ __all__ = [
     'retrieval',
     'llm',
     'rag',
-    'ingestion',
+    'prompts',
+    'models',
+    'pipeline',
+    'scheduler',
     'cache',
-    'utils'
+    'utils',
+    'evaluation',
+    'guardrails',
 ]

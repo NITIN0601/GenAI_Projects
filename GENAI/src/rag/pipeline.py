@@ -147,11 +147,19 @@ class QueryEngine:
             if use_cache and self.cache:
                 self.cache.set_llm_response(query, response_text, context_key)
             
+            # Run evaluation if enabled (off by default, toggle via EVALUATION_AUTO_RUN)
+            evaluation_result = None
+            confidence = 0.8  # Default confidence
+            
+            if settings.EVALUATION_ENABLED and settings.EVALUATION_AUTO_RUN:
+                evaluation_result, confidence = self._run_evaluation(query, response_text)
+            
             return RAGResponse(
                 answer=response_text,
-                sources=[], # We'd need to extract sources from retrieval step
-                confidence=0.8,
-                retrieved_chunks=0 # Placeholder
+                sources=[],  # We'd need to extract sources from retrieval step
+                confidence=confidence,
+                retrieved_chunks=len(self._last_retrieved_chunks),
+                evaluation=evaluation_result
             )
             
         except Exception as e:
@@ -162,6 +170,36 @@ class QueryEngine:
                 confidence=0.0,
                 retrieved_chunks=0
             )
+    
+    def _run_evaluation(self, query: str, answer: str) -> tuple:
+        """Run evaluation on the response (only called when EVALUATION_AUTO_RUN=True)."""
+        try:
+            from src.evaluation import get_evaluation_manager
+            
+            # Get contexts from last retrieval
+            contexts = []
+            for doc in self._last_retrieved_chunks:
+                if hasattr(doc, 'page_content'):
+                    contexts.append(doc.page_content)
+                elif hasattr(doc, 'content'):
+                    contexts.append(doc.content)
+            
+            if not contexts:
+                logger.debug("No contexts available for evaluation")
+                return None, 0.8
+            
+            # Run evaluation
+            manager = get_evaluation_manager()
+            scores = manager.evaluate(query=query, answer=answer, contexts=contexts)
+            
+            if settings.EVALUATION_LOG_SCORES:
+                logger.info(f"Evaluation scores: {scores.overall_score:.2f}")
+            
+            return scores.to_dict(), scores.overall_score
+            
+        except Exception as e:
+            logger.warning(f"Evaluation failed: {e}")
+            return None, 0.8
 
     def get_last_retrieved_chunks(self):
         """

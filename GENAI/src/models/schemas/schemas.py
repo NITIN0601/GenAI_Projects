@@ -158,6 +158,8 @@ class RAGResponse(BaseModel):
     sources: List[TableMetadata] = Field(default_factory=list, description="Source tables used")
     confidence: float = Field(0.0, description="Confidence score")
     retrieved_chunks: int = Field(0, description="Number of chunks retrieved")
+    evaluation: Optional[Dict[str, Any]] = Field(None, description="Evaluation scores (if enabled)")
+    warnings: Optional[List[str]] = Field(None, description="Guardrail warnings")
     
     class Config:
         json_schema_extra = {
@@ -171,7 +173,9 @@ class RAGResponse(BaseModel):
                     }
                 ],
                 "confidence": 0.95,
-                "retrieved_chunks": 3
+                "retrieved_chunks": 3,
+                "evaluation": {"overall_score": 0.85, "faithfulness": 0.9},
+                "warnings": None
             }
         }
 
