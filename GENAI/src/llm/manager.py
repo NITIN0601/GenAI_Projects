@@ -113,6 +113,29 @@ class LLMManager:
                 callbacks=self.callbacks
             )
             
+        elif self.provider_type == "local":
+            # Local HuggingFace transformer model
+            self.model_name = model_name or settings.LLM_MODEL_LOCAL
+            logger.info(f"Initializing Local HuggingFace LLM: {self.model_name}")
+            
+            from langchain_huggingface import HuggingFacePipeline
+            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
+            
+            # Load tokenizer and model
+            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
+            
+            # Create text generation pipeline
+            pipe = pipeline(
+                "text2text-generation",
+                model=model,
+                tokenizer=tokenizer,
+                max_length=settings.LLM_MAX_TOKENS,
+                temperature=settings.LLM_TEMPERATURE,
+            )
+            
+            self.llm = HuggingFacePipeline(pipeline=pipe)
+            
         else:
             # Default to Ollama
             self.model_name = model_name or settings.LLM_MODEL or settings.OLLAMA_MODEL
@@ -150,6 +173,9 @@ class LLMManager:
             
         try:
             response = self.llm.invoke(messages)
+            # HuggingFacePipeline returns a string directly, chat models return response objects
+            if isinstance(response, str):
+                return response
             return response.content
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")

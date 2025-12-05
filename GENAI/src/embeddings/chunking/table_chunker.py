@@ -41,6 +41,9 @@ class TableChunker:
         # Separate header from data rows
         header_lines, data_lines = self._separate_header_and_data(lines)
         
+        # Store original title for reporting (before adding row ranges)
+        original_title = metadata.table_title if hasattr(metadata, 'table_title') else ""
+        
         # If table is small, return as single chunk
         if len(data_lines) <= self.chunk_size:
             chunk_lines = header_lines + data_lines
@@ -71,7 +74,10 @@ class TableChunker:
             # Add context about chunk position
             chunk_metadata = metadata.copy() if hasattr(metadata, 'copy') else metadata
             if hasattr(chunk_metadata, 'table_title'):
-                chunk_metadata.table_title = f"{metadata.table_title} (Rows {i+1}-{i+len(chunk_data)})"
+                # Store original title for clean reporting
+                chunk_metadata.original_table_title = original_title
+                # Add row range for chunk identification
+                chunk_metadata.table_title = f"{original_title} (Rows {i+1}-{i+len(chunk_data)})"
             
             chunks.append(TableChunk(
                 content=chunk_text,

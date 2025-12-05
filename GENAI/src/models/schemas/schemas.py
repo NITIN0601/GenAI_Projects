@@ -10,10 +10,12 @@ class TableMetadata(BaseModel):
     """Metadata for extracted financial tables with comprehensive structure information."""
     
     # === Core Document Info ===
+    table_id: str = Field(..., description="Unique identifier for the table (e.g. filename_tableIndex)")
     source_doc: str = Field(..., description="Source PDF filename")
     chunk_reference_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique chunk ID")
     page_no: int = Field(..., description="Page number in PDF")
-    table_title: str = Field(..., description="Extracted table title")
+    table_title: str = Field(..., description="Extracted table title (may include row ranges for chunks)")
+    original_table_title: Optional[str] = Field(None, description="Original table title without row ranges")
 
     # === Company Info ===
     company_name: Optional[str] = Field(None, description="Company name (e.g., Morgan Stanley)")

@@ -242,8 +242,17 @@ def run_embed(
                     quarter_number = int(quarter_str[1])
                     month = quarter_number * 3
                 
+                # Get or generate table_id
+                table_meta = table.get('metadata', {})
+                table_id = table_meta.get('table_id')
+                if not table_id:
+                    # Generate stable ID
+                    page = table_meta.get('page_no', 1)
+                    table_id = f"{filename}_p{page}_{i}"
+
                 # Create metadata
                 metadata = TableMetadata(
+                    table_id=table_id,
                     source_doc=filename,
                     page_no=table.get('metadata', {}).get('page_no', 1),
                     table_title=table.get('metadata', {}).get('table_title', f'Table {i+1}'),
@@ -323,6 +332,7 @@ def run_view_db(
                 for r in results:
                     samples.append({
                         'chunk_id': r.chunk_id,
+                        'table_id': r.metadata.table_id if r.metadata and hasattr(r.metadata, 'table_id') else 'N/A',
                         'title': r.metadata.table_title if r.metadata else 'N/A',
                         'year': r.metadata.year if r.metadata else 'N/A',
                         'quarter': r.metadata.quarter if r.metadata else 'N/A',

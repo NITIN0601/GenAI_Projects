@@ -258,33 +258,60 @@ class UnifiedExtractor:
             with open(report_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 # Write header
-                writer.writerow(['Page No', 'Table Title', 'Row Headers', 'Source'])
+                writer.writerow(['Page No', 'Table Title', 'Row Headers', 'Subsections', 'Source'])
                 
                 # Write rows
                 for table in result.tables:
                     meta = table.get('metadata', {})
                     content = table.get('content', '')
                     
-                    # Extract row headers (first column)
-                    row_headers = []
-                    lines = content.split('\n')
-                    for line in lines:
-                        if '|' in line and '---' not in line:
-                            parts = line.split('|')
-                            if len(parts) > 1:
-                                header = parts[1].strip()
-                                if header:
-                                    row_headers.append(header)
+                    # Use TableStructureFormatter for proper extraction
+                    from src.extraction.formatters.table_formatter import TableStructureFormatter
+                    parsed = TableStructureFormatter.parse_markdown_table(content)
                     
-                    # Format row headers as string
-                    row_headers_str = '; '.join(row_headers[:10])  # Limit to first 10 for readability
-                    if len(row_headers) > 10:
-                        row_headers_str += f"... (+{len(row_headers)-10} more)"
+                    # Get structured row headers
+                    row_headers_structured = parsed.get('row_headers_structured', [])
+                    
+                    # Format row headers with hierarchy indication
+                    formatted_headers = []
+                    for rh in row_headers_structured[:15]:  # Limit to first 15
+                        text = rh.get('text', '')
+                        if not text:
+                            continue
+                        indent = '  ' * rh.get('indent_level', 0)
+                        if rh.get('is_subsection'):
+                            formatted_headers.append(f"[{text}]")
+                        elif rh.get('is_total'):
+                            formatted_headers.append(f"**{text}**")
+                        else:
+                            formatted_headers.append(f"{indent}{text}")
+                    
+                    row_headers_str = '; '.join(formatted_headers)
+                    if len(row_headers_structured) > 15:
+                        row_headers_str += f"... (+{len(row_headers_structured)-15} more)"
+                    
+                    # Get subsections
+                    subsections = parsed.get('subsections', [])
+                    subsections_str = '; '.join(subsections[:5]) if subsections else ''
+                    if len(subsections) > 5:
+                        subsections_str += f"... (+{len(subsections)-5} more)"
+                    
+                    # Clean table title - remove section numbers and row ranges
+                    import re
+                    table_title = meta.get('original_table_title') or meta.get('table_title', 'N/A')
+                    # Remove leading section numbers like "17." or "17 "
+                    table_title = re.sub(r'^\d+[\.\:\s]+\s*', '', table_title)
+                    # Remove Note/Table prefixes
+                    table_title = re.sub(r'^Note\s+\d+\.?\s*[-–:]?\s*', '', table_title, flags=re.IGNORECASE)
+                    table_title = re.sub(r'^Table\s+\d+\.?\s*[-–:]?\s*', '', table_title, flags=re.IGNORECASE)
+                    # Remove row range patterns
+                    table_title = re.sub(r'\s*\(Rows?\s*\d+[-–]\d+\)\s*$', '', table_title, flags=re.IGNORECASE)
                     
                     writer.writerow([
                         meta.get('page_no', 'N/A'),
-                        meta.get('table_title', 'N/A'),
+                        table_title.strip(),
                         row_headers_str,
+                        subsections_str,
                         meta.get('source_doc', 'N/A')
                     ])
             

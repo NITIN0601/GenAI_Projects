@@ -20,47 +20,176 @@ class TableStructureFormatter:
         """
         Parse markdown table into structured format.
         
+        Properly handles complex financial tables with:
+        - Multi-level column headers (3+ levels)
+        - Hierarchical row headers with parent-child relationships
+        - Subsection rows (section headers within data)
+        
         Args:
             markdown_content: Markdown table string
             
         Returns:
-            Dictionary with table structure information
+            Dictionary with table structure information including:
+            - columns: List of column headers (from last header row)
+            - header_levels: List of all header rows for multi-level headers
+            - main_headers: Combined spanning headers
+            - has_multi_level_headers: Boolean
+            - rows: List of data rows
+            - row_headers_structured: Hierarchical row headers with indent/parent info
+            - subsections: List of detected subsection titles
         """
         lines = [line.strip() for line in markdown_content.split('\n') if line.strip()]
         
-        # Find header and data rows
-        header_row = None
-        data_rows = []
+        # Find separator line index
+        separator_idx = -1
+        for i, line in enumerate(lines):
+            if '|' in line and ('---' in line or '===' in line):
+                separator_idx = i
+                break
         
-        for line in lines:
+        # Separate header lines from data lines
+        header_lines = []
+        data_lines = []
+        
+        for i, line in enumerate(lines):
             if '|' not in line:
                 continue
-            if line.startswith('|---') or line.startswith('---'):
+            if '---' in line or '===' in line:
                 continue  # Skip separator
             
-            if header_row is None:
-                header_row = line
+            if separator_idx == -1:
+                # No separator found, treat first line as header
+                if not header_lines:
+                    header_lines.append(line)
+                else:
+                    data_lines.append(line)
             else:
-                data_rows.append(line)
+                # Use separator to determine header vs data
+                if i < separator_idx:
+                    header_lines.append(line)
+                elif i > separator_idx:
+                    data_lines.append(line)
         
-        # Parse columns
+        # Parse header rows into header_levels
+        header_levels = []
+        for header_line in header_lines:
+            parts = header_line.split('|')
+            # Remove empty first and last elements
+            if parts and not parts[0].strip():
+                parts = parts[1:]
+            if parts and not parts[-1].strip():
+                parts = parts[:-1]
+            cols = [col.strip() for col in parts]
+            header_levels.append(cols)
+        
+        # Determine column headers and main headers
         columns = []
-        if header_row:
-            columns = [col.strip() for col in header_row.split('|') if col.strip()]
+        main_headers = []
+        has_multi_level = False
         
-        # Parse data
+        if len(header_levels) == 0:
+            columns = []
+        elif len(header_levels) == 1:
+            # Single header row - these are the column headers
+            columns = header_levels[0]
+        else:
+            # Multi-line headers:
+            # - Last row = actual column headers (sub_headers)
+            # - Previous rows = main/spanning headers
+            has_multi_level = True
+            columns = header_levels[-1]  # Last row is the column headers
+            main_headers = header_levels[:-1]  # All preceding rows are main headers
+        
+        # Parse data rows and detect hierarchical structure
         parsed_rows = []
-        for row in data_rows:
-            cells = [cell.strip() for cell in row.split('|') if cell.strip() or cell == '']
-            # Handle empty cells (spanning)
-            cells = [cell if cell else '' for cell in cells]
+        row_headers_structured = []
+        subsections = []
+        current_parent = None
+        current_subsection = None
+        
+        for row_line in data_lines:
+            # Split by pipe and filter out leading/trailing empty cells
+            parts = row_line.split('|')
+            # Remove empty first and last elements (from | at start/end)
+            if parts and not parts[0].strip():
+                parts = parts[1:]
+            if parts and not parts[-1].strip():
+                parts = parts[:-1]
+            cells = [cell.strip() for cell in parts]
             parsed_rows.append(cells)
+            
+            if not cells:
+                continue
+            
+            first_cell = cells[0]
+            
+            # Check if this is a subsection row (only first cell has content, rest empty or dashes)
+            other_cells = cells[1:] if len(cells) > 1 else []
+            is_subsection = first_cell and all(
+                not c or c in ['-', '—', '–', ''] for c in other_cells
+            ) and len(other_cells) > 0
+            
+            # Detect indentation level
+            # Level 0: Main category (has data, or is a subsection header)
+            # Level 1: Sub-item (follows a parent that ended with : or was a subsection)
+            indent_level = 0
+            parent_row = None
+            
+            if is_subsection:
+                # This is a subsection/category header
+                subsections.append(first_cell)
+                current_subsection = first_cell
+                current_parent = first_cell
+                indent_level = 0
+            elif current_parent:
+                # Check if this looks like a sub-item
+                # Patterns: "U.S.", "Non-U.S.", items under a parent ending with ":"
+                if first_cell in ['U.S.', 'Non-U.S.', 'U.S', 'Non-U.S']:
+                    indent_level = 1
+                    parent_row = current_parent
+                elif current_parent.endswith(':') or current_parent.endswith(':1') or 'Total' in first_cell:
+                    # Item following a parent with colon
+                    if 'Total' in first_cell:
+                        indent_level = 0
+                        current_parent = None
+                    else:
+                        indent_level = 1
+                        parent_row = current_parent.rstrip(':').rstrip(':1')
+                else:
+                    # New main category
+                    if first_cell.endswith(':'):
+                        current_parent = first_cell
+                    indent_level = 0
+            else:
+                # First item or after a Total row
+                if first_cell.endswith(':'):
+                    current_parent = first_cell
+                indent_level = 0
+            
+            # Determine if this is a total/subtotal row
+            is_total = 'total' in first_cell.lower() if first_cell else False
+            is_subtotal = 'subtotal' in first_cell.lower() if first_cell else False
+            
+            row_headers_structured.append({
+                'text': first_cell,
+                'indent_level': indent_level,
+                'parent_row': parent_row,
+                'is_subsection': is_subsection,
+                'is_total': is_total,
+                'is_subtotal': is_subtotal,
+                'subsection': current_subsection
+            })
         
         return {
             'columns': columns,
             'column_count': len(columns),
+            'header_levels': header_levels,
+            'main_headers': main_headers,
+            'has_multi_level_headers': has_multi_level,
             'rows': parsed_rows,
-            'row_count': len(parsed_rows)
+            'row_count': len(parsed_rows),
+            'row_headers_structured': row_headers_structured,
+            'subsections': subsections
         }
     
     @staticmethod

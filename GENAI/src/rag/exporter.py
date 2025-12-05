@@ -150,6 +150,14 @@ class RAGExporter:
                 
                 if not df.empty:
                     # Add source columns
+                    # Get or generate table_id
+                    table_id = chunk.metadata.table_id
+                    if not table_id:
+                        doc = chunk.metadata.source_doc or 'unknown'
+                        page = chunk.metadata.page_no or 0
+                        table_id = f"{doc}_p{page}_{i}"
+
+                    df['_table_id'] = table_id
                     df['_source'] = chunk.metadata.source_doc
                     df['_page'] = chunk.metadata.page_no
                     df['_table'] = chunk.metadata.table_title

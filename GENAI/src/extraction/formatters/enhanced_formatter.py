@@ -32,7 +32,8 @@ class EnhancedTableFormatter:
         
         # Find header rows (before separator line)
         for i, line in enumerate(lines):
-            if line.strip().startswith('|---') or line.strip().startswith('---'):
+            # Check for separator line (can be |---|---| or just ---|)
+            if '|' in line and ('---' in line or '===' in line):
                 break
             if '|' in line:
                 header_rows.append(line)

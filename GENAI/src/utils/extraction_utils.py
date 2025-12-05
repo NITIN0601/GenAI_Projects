@@ -93,15 +93,30 @@ class DoclingHelper:
             Extracted table title
         """
         def clean_title(text: str) -> str:
-            """Clean footnotes and extra whitespace from title."""
+            """Clean footnotes, row ranges, section numbers, and extra whitespace from title."""
             if not text:
                 return ""
+            
+            # Remove leading section numbers like "17." or "17 " or "17:"
+            text = re.sub(r'^\d+[\.\:\s]+\s*', '', text)
+            
+            # Remove "Note X" or "Note X." prefix 
+            text = re.sub(r'^Note\s+\d+\.?\s*[-–:]?\s*', '', text, flags=re.IGNORECASE)
+            
+            # Remove "Table X" prefix
+            text = re.sub(r'^Table\s+\d+\.?\s*[-–:]?\s*', '', text, flags=re.IGNORECASE)
+            
+            # Remove row ranges like "(Rows 1-10)" or "(Rows 8-17)"
+            text = re.sub(r'\s*\(Rows?\s*\d+[-–]\d+\)\s*$', '', text, flags=re.IGNORECASE)
             
             # Clean footnotes
             # Trailing number: "Text 2"
             text = re.sub(r'\s+\d+\s*$', '', text)
             # Parenthesized: "Text (1)"
             text = re.sub(r'\s*\(\d+\)\s*$', '', text)
+            
+            # Remove superscript characters
+            text = re.sub(r'[¹²³⁴⁵⁶⁷⁸⁹⁰]+', '', text)
             
             return text.strip()[:100]
 

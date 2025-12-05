@@ -85,7 +85,10 @@ class Settings(BaseSettings):
     # ============================================================================
     # LLM PROVIDER SETTINGS
     # ============================================================================
-    LLM_PROVIDER: Literal["ollama", "custom", "openai"] = "ollama"  # Default: ollama (FREE)
+    LLM_PROVIDER: Literal["local", "ollama", "custom", "openai"] = "local"  # Default: local (FREE)
+    
+    # Local LLM (HuggingFace transformers - FREE)
+    LLM_MODEL_LOCAL: str = "google/flan-t5-base"  # Lightweight model for CPU
     
     # Ollama (Local - FREE)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -111,6 +114,8 @@ class Settings(BaseSettings):
             return self.OPENAI_MODEL
         elif self.LLM_PROVIDER == "custom":
             return self.LLM_MODEL_CUSTOM or "custom-llm-model"
+        elif self.LLM_PROVIDER == "local":
+            return self.LLM_MODEL_LOCAL
         return self.OLLAMA_MODEL
     
     # ============================================================================

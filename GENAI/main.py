@@ -267,6 +267,7 @@ def view_db(
     # Samples
     if db_info['samples']:
         samples_table = RichTable(title="Sample Entries")
+        samples_table.add_column("Table ID", style="dim")
         samples_table.add_column("Title", style="cyan")
         samples_table.add_column("Year", style="magenta")
         samples_table.add_column("Quarter", style="yellow")
@@ -274,6 +275,7 @@ def view_db(
         
         for s in db_info['samples']:
             samples_table.add_row(
+                str(s.get('table_id', 'N/A')),
                 str(s['title'])[:40],
                 str(s['year']),
                 str(s['quarter']),
@@ -295,7 +297,8 @@ def search(
     top_k: int = typer.Option(5, "--top-k", "-k", help="Number of results"),
     year: Optional[int] = typer.Option(None, "--year", "-y", help="Filter by year"),
     quarter: Optional[str] = typer.Option(None, "--quarter", "-q", help="Filter by quarter"),
-    local: bool = typer.Option(False, "--local", "-l", help="Use local embeddings (offline mode)")
+    local: bool = typer.Option(False, "--local", "-l", help="Use local embeddings (offline mode)"),
+    export: bool = typer.Option(False, "--export", "-e", help="Export results to CSV")
 ):
     """
     Step 6: Search FAISS directly (without LLM).
@@ -304,6 +307,7 @@ def search(
         python main.py search "revenue"
         python main.py search "balance sheet" --year 2025 --quarter Q1
         python main.py search "revenue" --local  # Offline mode
+        python main.py search "revenue" --export  # Export to CSV
     """
     console.print(f"\n[bold green]🔍 Step 6: FAISS Search[/bold green]\n")
     console.print(f"[cyan]Query:[/cyan] {query}\n")
@@ -328,25 +332,86 @@ def search(
     console.print(f"[green]Found {len(result.data)} results[/green]\n")
     
     results_table = RichTable(title="Search Results")
-    results_table.add_column("#", style="dim")
-    results_table.add_column("Title", style="cyan")
+    results_table.add_column("Table ID", style="dim")
+    results_table.add_column("Table Title", style="cyan", max_width=35)
     results_table.add_column("Year", style="magenta")
     results_table.add_column("Qtr", style="yellow")
-    results_table.add_column("Score", style="green")
-    results_table.add_column("Content Preview", style="dim")
+    results_table.add_column("Page", style="green")
+    results_table.add_column("Score", style="blue")
+    results_table.add_column("Content Preview", style="dim", max_width=40)
     
     for i, r in enumerate(result.data, 1):
-        content_preview = r['content'][:50] + '...' if len(r['content']) > 50 else r['content']
+        content_preview = r['content'][:40] + '...' if len(r['content']) > 40 else r['content']
+        # Get table_title from metadata
+        table_title = (
+            r['metadata'].get('table_title') or 
+            r['metadata'].get('actual_table_title') or
+            r['metadata'].get('title') or
+            'N/A'
+        )
+        # Get or generate table_id
+        table_id = r['metadata'].get('table_id')
+        if not table_id:
+            # Fallback for existing data
+            doc = r['metadata'].get('source_doc', 'unknown')
+            page = r['metadata'].get('page_no', '0')
+            table_id = f"{doc}_p{page}_{i}"
+            
         results_table.add_row(
-            str(i),
-            str(r['metadata']['title'])[:30],
-            str(r['metadata']['year']),
-            str(r['metadata']['quarter']),
+            str(table_id),
+            str(table_title)[:35],
+            str(r['metadata'].get('year', 'N/A')),
+            str(r['metadata'].get('quarter', 'N/A')),
+            str(r['metadata'].get('page_no', 'N/A')),
             f"{r['score']:.3f}",
             content_preview.replace('\n', ' ')
         )
     
     console.print(results_table)
+    
+    # Export to CSV if requested
+    if export:
+        import csv
+        from datetime import datetime
+        
+        output_dir = Path(settings.OUTPUT_DIR)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_path = output_dir / f"search_results_{timestamp}.csv"
+        
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            # Header with Table ID and Table Title
+            writer.writerow(['Table ID', 'Table Title', 'Year', 'Quarter', 'Source', 'Page', 'Score', 'Content'])
+            
+            for i, r in enumerate(result.data, 1):
+                table_title = (
+                    r['metadata'].get('table_title') or 
+                    r['metadata'].get('actual_table_title') or
+                    r['metadata'].get('title') or
+                    'N/A'
+                )
+                # Get or generate table_id
+                table_id = r['metadata'].get('table_id')
+                if not table_id:
+                    doc = r['metadata'].get('source_doc', 'unknown')
+                    page = r['metadata'].get('page_no', '0')
+                    table_id = f"{doc}_p{page}_{i}"
+                    
+                writer.writerow([
+                    table_id,
+                    table_title,
+                    r['metadata'].get('year', 'N/A'),
+                    r['metadata'].get('quarter', 'N/A'),
+                    r['metadata'].get('source_doc', r['metadata'].get('filename', 'N/A')),
+                    r['metadata'].get('page_no', 'N/A'),
+                    f"{r['score']:.4f}",
+                    r['content']
+                ])
+        
+        console.print(f"\n[green]✓ Results exported to: {csv_path}[/green]")
+    
     console.print()
 
 
