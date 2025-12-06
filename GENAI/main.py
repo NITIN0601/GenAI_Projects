@@ -487,21 +487,63 @@ def stats() -> None:
 
 
 @app.command("clear-cache")
-def clear_cache() -> None:
-    """Clear Redis cache."""
-    if not CACHE_AVAILABLE:
-        console.print("[yellow]Cache not available[/yellow]")
-        return
+def clear_cache(
+    all: bool = typer.Option(False, "--all", "-a", help="Clear everything including vectordb (DESTRUCTIVE)"),
+    pycache: bool = typer.Option(False, "--pycache", "-p", help="Clear __pycache__ directories"),
+    cache: bool = typer.Option(False, "--cache", "-c", help="Clear application caches"),
+    vectordb: bool = typer.Option(False, "--vectordb", "-v", help="Clear vector databases (DESTRUCTIVE)"),
+    reports: bool = typer.Option(False, "--reports", "-r", help="Clear extraction reports"),
+    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Preview what would be deleted"),
+) -> None:
+    """
+    Clear cache and temporary files.
+    
+    Examples:
+        python main.py clear-cache                    # Clear pycache + app cache
+        python main.py clear-cache --all              # Clear EVERYTHING (destructive!)
+        python main.py clear-cache --pycache          # Only __pycache__
+        python main.py clear-cache --cache            # Only app caches
+        python main.py clear-cache --vectordb         # Only vector databases
+        python main.py clear-cache --dry-run          # Preview without deleting
+    """
+    from src.utils.cleanup import clear_all_cache
+    
+    # If no specific option, default to pycache + app cache
+    if not any([all, pycache, cache, vectordb, reports]):
+        include_pycache = True
+        include_cache = True
+        include_vectordb = False
+        include_reports = False
+    elif all:
+        if not dry_run and not typer.confirm("⚠️  This will delete ALL caches including vectordb. Continue?"):
+            console.print("[yellow]Cancelled[/yellow]")
+            return
+        include_pycache = True
+        include_cache = True
+        include_vectordb = True
+        include_reports = True
+    else:
+        include_pycache = pycache
+        include_cache = cache
+        include_vectordb = vectordb
+        include_reports = reports
+        
+        if include_vectordb and not dry_run:
+            if not typer.confirm("⚠️  This will delete vector databases. Continue?"):
+                console.print("[yellow]Cancelled[/yellow]")
+                return
     
     try:
-        cache = get_redis_cache()
-        if not cache.enabled:
-            console.print("[yellow]Cache is not enabled[/yellow]")
-            return
+        results = clear_all_cache(
+            include_pycache=include_pycache,
+            include_app_cache=include_cache,
+            include_vectordb=include_vectordb,
+            include_reports=include_reports,
+            dry_run=dry_run
+        )
         
-        if typer.confirm("Clear all cache?"):
-            cache.clear_all()
-            console.print("[green]✓ Cache cleared[/green]")
+        if not dry_run:
+            console.print("[green]✓ Cleanup complete[/green]")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
 

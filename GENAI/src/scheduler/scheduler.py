@@ -174,7 +174,7 @@ class FilingScheduler:
         
         try:
             # Import here to avoid circular imports
-            from src.extraction.extractor import UnifiedExtractor
+            from src.infrastructure.extraction.extractor import UnifiedExtractor
             from pathlib import Path
             
             # Get PDF files from raw_data directory

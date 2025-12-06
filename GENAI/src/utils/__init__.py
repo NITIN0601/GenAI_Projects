@@ -3,13 +3,14 @@ Utility modules for GENAI RAG system.
 
 Provides:
 - Centralized logging configuration
-- Custom exceptions
+- Custom exceptions (re-exported from core)
 - Metrics and monitoring
 - Helper functions
+- Cleanup utilities
 """
 
 from src.utils.logger import get_logger, setup_logging
-from src.utils.exceptions import (
+from src.core.exceptions import (
     GENAIException,
     ExtractionError,
     EmbeddingError,
@@ -23,6 +24,13 @@ from src.utils.helpers import (
     ensure_directory,
     format_number,
     truncate_text
+)
+from src.utils.cleanup import (
+    clear_all_cache,
+    clear_pycache,
+    clear_application_cache,
+    quick_clean,
+    full_clean
 )
 
 __all__ = [
@@ -38,5 +46,12 @@ __all__ = [
     'get_pdf_files',
     'ensure_directory',
     'format_number',
-    'truncate_text'
+    'truncate_text',
+    # Cleanup utilities
+    'clear_all_cache',
+    'clear_pycache',
+    'clear_application_cache',
+    'quick_clean',
+    'full_clean'
 ]
+

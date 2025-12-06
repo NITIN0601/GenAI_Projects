@@ -1,0 +1,32 @@
+# ============================================================================
+# DEVELOPMENT ENVIRONMENT CONFIGURATION
+# ============================================================================
+# Overrides for local development
+# Usage: APP_ENV=dev or default
+
+app:
+  name: GENAI-RAG-Dev
+  debug: true
+  log_level: DEBUG
+
+llm:
+  default_provider: local  # Use local models for development
+  
+embeddings:
+  default_provider: local
+
+vectordb:
+  default_provider: faiss
+
+evaluation:
+  enabled: true
+  auto_run: false  # Manual evaluation in dev
+
+cache:
+  enabled: true
+  ttl_multiplier: 0.5  # Shorter cache TTL for dev
+
+logging:
+  level: DEBUG
+  console: true
+  file: true

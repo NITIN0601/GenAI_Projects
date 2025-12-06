@@ -1,0 +1,45 @@
+# ============================================================================
+# TEST ENVIRONMENT CONFIGURATION
+# ============================================================================
+# Settings for automated testing
+# Usage: APP_ENV=test
+
+app:
+  name: GENAI-RAG-Test
+  debug: true
+  log_level: WARNING  # Quieter logs during tests
+
+llm:
+  default_provider: local  # Fast local models for tests
+  
+embeddings:
+  default_provider: local
+
+vectordb:
+  default_provider: faiss
+  
+  providers:
+    faiss:
+      persist_dir: test_faiss_index  # Separate test index
+
+evaluation:
+  enabled: false  # Disable evaluation in tests (unless testing evaluation)
+  auto_run: false
+
+cache:
+  enabled: false  # Disable cache for predictable tests
+
+logging:
+  level: WARNING
+  console: true
+  file: false
+
+# Test-specific paths
+paths:
+  data:
+    root: tests/data
+    cache: tests/data/cache
+  outputs:
+    root: tests/outputs
+  logs:
+    root: tests/logs

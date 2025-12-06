@@ -15,6 +15,11 @@ from src.evaluation.metrics.faithfulness import (
     FaithfulnessMetrics,
     get_faithfulness_evaluator,
 )
+from src.evaluation.metrics.table_extraction import (
+    TableExtractionEvaluator,
+    TableQualityMetrics,
+    get_table_evaluator,
+)
 
 __all__ = [
     # Retrieval
@@ -29,4 +34,8 @@ __all__ = [
     'FaithfulnessEvaluator',
     'FaithfulnessMetrics',
     'get_faithfulness_evaluator',
+    # Table Extraction
+    'TableExtractionEvaluator',
+    'TableQualityMetrics',
+    'get_table_evaluator',
 ]

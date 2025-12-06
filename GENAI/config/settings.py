@@ -249,6 +249,12 @@ class Settings(BaseSettings):
     SAVE_RAG_RESPONSES: bool = True  # Save text responses to log files
     RAG_OUTPUT_DIR: str = "output/rag_queries"  # Directory for RAG outputs
     
+    # ============================================================================
+    # EXTRACTION REPORT SETTINGS
+    # ============================================================================
+    EXTRACTION_REPORT_DIR: str = "outputs/extraction_reports"  # Directory for extraction reports
+    EXTRACTION_REPORT_FORMAT: Literal["csv", "excel", "both"] = "both"  # Report format
+    
     
     class Config:
         env_file = ".env"

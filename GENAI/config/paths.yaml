@@ -1,0 +1,32 @@
+# ============================================================================
+# PATHS CONFIGURATION
+# ============================================================================
+# Directory structure for the application
+# Override in environment-specific configs (dev.yaml, prod.yaml)
+
+data:
+  root: data
+  raw: data/raw
+  processed: data/processed
+  cache: data/cache
+
+cache:
+  extraction: data/cache/extraction
+  embeddings: data/cache/embeddings
+  queries: data/cache/queries
+
+outputs:
+  root: outputs
+  extraction_reports: outputs/extraction_reports
+  consolidated_tables: outputs/consolidated_tables
+  exports: outputs/exports
+  rag_queries: outputs/rag_queries
+
+vectordb:
+  faiss_index: faiss_index
+  chroma_db: chroma_db
+
+logs:
+  root: logs
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

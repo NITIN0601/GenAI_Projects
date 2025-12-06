@@ -1,14 +1,14 @@
 """Main RAG query engine using LangChain LCEL."""
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import logging
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 
-from src.models.schemas import RAGResponse
+from src.models.schemas import RAGResponse, TableMetadata
 from src.retrieval.retriever import get_retriever
-from src.llm.manager import get_llm_manager
-from src.embeddings.manager import get_embedding_manager
+from src.infrastructure.llm.manager import get_llm_manager
+from src.infrastructure.embeddings.manager import get_embedding_manager
 from src.cache.backends.redis_cache import get_redis_cache
 from src.prompts.few_shot import get_few_shot_manager
 from config.settings import settings
@@ -131,23 +131,24 @@ class QueryEngine:
                     answer=cached_response,
                     sources=[],
                     confidence=1.0,
-                    retrieved_chunks=0
+                    retrieved_chunks=0,
+                    from_cache=True
                 )
         
         logger.info("Executing LangChain pipeline...")
         
         try:
             # Execute chain
-            # We can pass filters/top_k if we update the retriever config before running
-            # For now, we assume retriever is configured
-            
             response_text = self.chain.invoke(query)
+            
+            # Extract sources from retrieved chunks
+            sources = self._extract_sources()
             
             # Save to cache
             if use_cache and self.cache:
                 self.cache.set_llm_response(query, response_text, context_key)
             
-            # Run evaluation if enabled (off by default, toggle via EVALUATION_AUTO_RUN)
+            # Run evaluation if enabled
             evaluation_result = None
             confidence = 0.8  # Default confidence
             
@@ -156,7 +157,7 @@ class QueryEngine:
             
             return RAGResponse(
                 answer=response_text,
-                sources=[],  # We'd need to extract sources from retrieval step
+                sources=sources,
                 confidence=confidence,
                 retrieved_chunks=len(self._last_retrieved_chunks),
                 evaluation=evaluation_result
@@ -170,6 +171,55 @@ class QueryEngine:
                 confidence=0.0,
                 retrieved_chunks=0
             )
+    
+    def _extract_sources(self) -> List[TableMetadata]:
+        """Extract source metadata from last retrieved chunks."""
+        sources = []
+        seen_ids = set()  # Deduplicate sources
+        
+        for chunk in self._last_retrieved_chunks:
+            try:
+                # Handle LangChain Document objects
+                if hasattr(chunk, 'metadata'):
+                    meta = chunk.metadata
+                else:
+                    meta = chunk.get('metadata', {}) if isinstance(chunk, dict) else {}
+                
+                # If meta is already a TableMetadata object, use it directly
+                if isinstance(meta, TableMetadata):
+                    source_id = f"{meta.source_doc}_{meta.page_no}_{meta.table_title}"
+                    if source_id not in seen_ids:
+                        seen_ids.add(source_id)
+                        sources.append(meta)
+                    continue
+                
+                # If meta is a dict, build TableMetadata
+                if isinstance(meta, dict):
+                    # Create unique identifier for deduplication
+                    source_id = f"{meta.get('source_doc', '')}_{meta.get('page_no', '')}_{meta.get('table_title', '')}"
+                    
+                    if source_id in seen_ids:
+                        continue
+                    seen_ids.add(source_id)
+                    
+                    # Build TableMetadata for source citation
+                    source = TableMetadata(
+                        table_id=meta.get('table_id', meta.get('chunk_reference_id', source_id)),
+                        source_doc=meta.get('source_doc', 'unknown'),
+                        page_no=int(meta.get('page_no', 0)),
+                        table_title=meta.get('table_title', 'Unknown'),
+                        year=int(meta.get('year', 0)) if meta.get('year') else None,
+                        quarter=meta.get('quarter'),
+                        report_type=meta.get('report_type', 'unknown'),
+                        chunk_reference_id=meta.get('chunk_reference_id')
+                    )
+                    sources.append(source)
+                
+            except Exception as e:
+                logger.debug(f"Could not extract source from chunk: {e}")
+                continue
+        
+        return sources
     
     def _run_evaluation(self, query: str, answer: str) -> tuple:
         """Run evaluation on the response (only called when EVALUATION_AUTO_RUN=True)."""

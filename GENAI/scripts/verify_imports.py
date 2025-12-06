@@ -27,18 +27,18 @@ def verify_imports():
         
         # Embeddings
         logger.info("Importing embeddings...")
-        from src.embeddings.manager import get_embedding_manager
+        from src.infrastructure.embeddings.manager import get_embedding_manager
         
         # Vector Store
         logger.info("Importing vector store...")
-        from src.vector_store.manager import get_vectordb_manager
-        from src.vector_store.stores.chromadb_store import VectorStore
-        from src.vector_store.stores.faiss_store import FAISSVectorStore
-        from src.vector_store.stores.redis_store import RedisVectorStore
+        from src.infrastructure.vectordb.manager import get_vectordb_manager
+        from src.infrastructure.vectordb.stores.chromadb_store import VectorStore
+        from src.infrastructure.vectordb.stores.faiss_store import FAISSVectorStore
+        from src.infrastructure.vectordb.stores.redis_store import RedisVectorStore
         
         # LLM
         logger.info("Importing LLM...")
-        from src.llm.manager import get_llm_manager
+        from src.infrastructure.llm.manager import get_llm_manager
         
         # Prompts
         logger.info("Importing prompts...")
@@ -48,8 +48,8 @@ def verify_imports():
         
         # Extraction
         logger.info("Importing extraction...")
-        from src.extraction import Extractor
-        from src.extraction.consolidation import MultiYearTableConsolidator, QuarterlyTableConsolidator
+        from src.infrastructure.extraction import Extractor
+        from src.infrastructure.extraction.consolidation import MultiYearTableConsolidator, QuarterlyTableConsolidator
         
         # Retrieval
         logger.info("Importing retrieval...")

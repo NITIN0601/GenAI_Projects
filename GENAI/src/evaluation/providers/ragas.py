@@ -74,7 +74,7 @@ class RAGASEvaluator(BaseEvaluator):
         # Auto-use system LLM if not explicitly provided
         if llm is None and use_system_llm:
             try:
-                from src.llm.manager import get_llm_manager
+                from src.infrastructure.llm.manager import get_llm_manager
                 llm_manager = get_llm_manager()
                 self.llm = llm_manager.get_llm()
                 logger.info(f"Using system LLM for RAGAS: {llm_manager.provider}")
@@ -87,7 +87,7 @@ class RAGASEvaluator(BaseEvaluator):
         # Auto-use system embeddings if not explicitly provided
         if embeddings is None and use_system_llm:
             try:
-                from src.embeddings.manager import get_embedding_manager
+                from src.infrastructure.embeddings.manager import get_embedding_manager
                 emb_manager = get_embedding_manager()
                 # Convert to LangChain embeddings if needed
                 self.embeddings = emb_manager.get_langchain_embeddings()

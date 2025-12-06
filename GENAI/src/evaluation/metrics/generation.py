@@ -61,7 +61,7 @@ class GenerationEvaluator:
         
         if self.embedding_manager is None:
             try:
-                from src.embeddings.manager import get_embedding_manager
+                from src.infrastructure.embeddings.manager import get_embedding_manager
                 self.embedding_manager = get_embedding_manager()
             except Exception as e:
                 logger.warning(f"Could not load embedding manager: {e}")

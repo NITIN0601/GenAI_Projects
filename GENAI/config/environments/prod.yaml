@@ -1,0 +1,42 @@
+# ============================================================================
+# PRODUCTION ENVIRONMENT CONFIGURATION
+# ============================================================================
+# Production-optimized settings
+# Usage: APP_ENV=prod
+
+app:
+  name: GENAI-RAG
+  debug: false
+  log_level: INFO
+
+llm:
+  default_provider: custom  # Use production API
+  
+embeddings:
+  default_provider: custom
+
+vectordb:
+  default_provider: faiss  # Or redis for distributed
+
+evaluation:
+  enabled: true
+  auto_run: true  # Auto-evaluate in production
+  block_hallucinations: true
+
+cache:
+  enabled: true
+  ttl_multiplier: 1.0
+
+logging:
+  level: INFO
+  console: true
+  file: true
+  json_format: true  # JSON for log aggregation
+
+# Production-specific paths (can be absolute)
+# Uncomment to override defaults:
+# paths:
+#   data:
+#     root: /var/data/genai
+#   logs:
+#     root: /var/log/genai

@@ -160,6 +160,7 @@ class RAGResponse(BaseModel):
     retrieved_chunks: int = Field(0, description="Number of chunks retrieved")
     evaluation: Optional[Dict[str, Any]] = Field(None, description="Evaluation scores (if enabled)")
     warnings: Optional[List[str]] = Field(None, description="Guardrail warnings")
+    from_cache: bool = Field(False, description="Whether response is from query cache")
     
     class Config:
         json_schema_extra = {

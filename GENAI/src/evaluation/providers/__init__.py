@@ -12,8 +12,11 @@ try:
         get_ragas_evaluator,
         is_ragas_available,
     )
+    # Alias for convenience
+    RagasEvaluator = RAGASEvaluator
 except ImportError:
     RAGASEvaluator = None
+    RagasEvaluator = None
     get_ragas_evaluator = None
     is_ragas_available = lambda: False
 
@@ -21,6 +24,7 @@ __all__ = [
     'HeuristicEvaluator',
     'get_heuristic_evaluator',
     'RAGASEvaluator',
+    'RagasEvaluator',  # Alias
     'get_ragas_evaluator',
     'is_ragas_available',
 ]

@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 
 # Import components
 from config.settings import settings, print_config
-from src.extraction.extractor import UnifiedExtractor
-from src.embeddings.manager import get_embedding_manager
-from src.vector_store.manager import get_vectordb_manager
+from src.infrastructure.extraction.extractor import UnifiedExtractor
+from src.infrastructure.embeddings.manager import get_embedding_manager
+from src.infrastructure.vectordb.manager import get_vectordb_manager
 from src.models.schemas import TableChunk, TableMetadata
 
 

@@ -100,12 +100,22 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import csv
+from dataclasses import dataclass, field
 from rich.console import Console
 from rich.table import Table as RichTable
 import typer
 
 from config.settings import settings
-from src.pipeline.steps import PipelineResult
+
+
+@dataclass
+class PipelineResult:
+    """Result from pipeline step execution."""
+    success: bool
+    message: str = ""
+    error: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
 
 console = Console()
 

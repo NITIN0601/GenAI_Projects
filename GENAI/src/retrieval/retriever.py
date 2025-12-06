@@ -2,7 +2,7 @@
 
 from typing import List, Dict, Any, Optional
 from src.models.schemas import TableMetadata
-from src.vector_store.manager import get_vectordb_manager  # Use unified manager
+from src.infrastructure.vectordb.manager import get_vectordb_manager  # Use unified manager
 
 
 class Retriever:

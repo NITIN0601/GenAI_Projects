@@ -403,6 +403,7 @@ class PDFMetadataExtractor:
         pdf_path: str,
         page_no: int,
         table_title: str,
+        table_index: int = 0,
         **kwargs
     ) -> TableMetadata:
         """
@@ -412,14 +413,23 @@ class PDFMetadataExtractor:
             pdf_path: Path to PDF file
             page_no: Page number
             table_title: Table title/caption
+            table_index: Index of table in document (0-based)
             **kwargs: Additional metadata fields
             
         Returns:
             TableMetadata object
         """
+        import uuid
         filename = Path(pdf_path).name
+        base_name = Path(pdf_path).stem
+        
+        # Generate table_id: filename_pageNo_tableIndex or use provided one
+        table_id = kwargs.pop('table_id', None)
+        if not table_id:
+            table_id = f"{base_name}_p{page_no}_t{table_index}_{uuid.uuid4().hex[:8]}"
         
         return TableMetadata(
+            table_id=table_id,
             source_doc=filename,
             page_no=page_no,
             table_title=table_title,

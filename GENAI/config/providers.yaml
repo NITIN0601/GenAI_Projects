@@ -1,0 +1,94 @@
+# ============================================================================
+# PROVIDERS CONFIGURATION
+# ============================================================================
+# LLM, Embedding, and VectorDB provider settings
+# Secrets should be in .env, not here
+
+llm:
+  # Provider: local, custom, openai, ollama
+  default_provider: local
+  
+  providers:
+    local:
+      model: google/flan-t5-base
+      max_tokens: 512
+      temperature: 0.1
+      device: auto  # auto, cpu, cuda, mps
+    
+    ollama:
+      model: llama3.2
+      base_url: http://localhost:11434
+      max_tokens: 4096
+      temperature: 0.1
+    
+    openai:
+      model: gpt-4o-mini
+      max_tokens: 4096
+      temperature: 0.1
+      # api_key: from .env (OPENAI_API_KEY)
+    
+    custom:
+      # For custom API endpoints (Azure, Anthropic, etc.)
+      # base_url: from .env (CUSTOM_LLM_BASE_URL)
+      # api_key: from .env (CUSTOM_LLM_API_KEY)
+      model: default
+      max_tokens: 4096
+      temperature: 0.1
+
+embeddings:
+  # Provider: local, custom, openai
+  default_provider: local
+  dimension: 384  # Auto-detected for most providers
+  
+  providers:
+    local:
+      model: sentence-transformers/all-MiniLM-L6-v2
+      device: auto
+    
+    openai:
+      model: text-embedding-3-small
+      # api_key: from .env (OPENAI_API_KEY)
+    
+    custom:
+      # base_url: from .env (CUSTOM_EMBEDDING_BASE_URL)
+      # api_key: from .env (CUSTOM_EMBEDDING_API_KEY)
+      model: default
+
+vectordb:
+  # Provider: faiss, chromadb, redis
+  default_provider: faiss
+  
+  providers:
+    faiss:
+      index_type: flat  # flat, ivf, hnsw
+      persist_dir: faiss_index
+    
+    chromadb:
+      persist_dir: chroma_db
+      collection_name: financial_tables
+    
+    redis:
+      # host: from .env (REDIS_HOST)
+      # port: from .env (REDIS_PORT)
+      index_name: financial_tables
+      algorithm: HNSW  # FLAT, HNSW
+
+extraction:
+  # Backends in priority order
+  backends:
+    - docling
+    - pymupdf
+    - pdfplumber
+    - camelot
+  
+  min_quality_score: 60.0
+  enable_caching: true
+  cache_ttl_hours: 720  # 30 days
+
+evaluation:
+  # Provider: heuristic, ragas, hybrid
+  default_provider: heuristic
+  enabled: true
+  auto_run: false
+  min_confidence: 0.5
+  block_hallucinations: false

@@ -7,13 +7,12 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 
 from src.retrieval.query_understanding import QueryUnderstanding, QueryType, ParsedQuery, get_query_understanding
-from src.extraction.consolidation import TableConsolidationEngine, get_consolidation_engine
+from src.infrastructure.extraction.consolidation import TableConsolidationEngine, get_consolidation_engine
 from src.models.schemas import RAGQuery, RAGResponse
 from src.retrieval.retriever import get_retriever
-from src.llm.manager import get_llm_manager
-from src.cache.backends.redis_cache import get_redis_cache
-from src.vector_store.manager import get_vectordb_manager  # Use unified manager
-from src.embeddings.manager import get_embedding_manager
+from src.infrastructure.llm.manager import get_llm_manager
+from src.infrastructure.vectordb.manager import get_vectordb_manager  # Use unified manager
+from src.infrastructure.embeddings.manager import get_embedding_manager
 
 
 class QueryProcessor:

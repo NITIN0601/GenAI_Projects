@@ -421,11 +421,11 @@ def get_search_orchestrator(
     
     if _orchestrator is None:
         if not vector_store:
-            from src.vector_store.manager import get_vectordb_manager  # Use unified manager
+            from src.infrastructure.vectordb.manager import get_vectordb_manager  # Use unified manager
             vector_store = get_vectordb_manager()
         
         if not embedding_manager:
-            from src.embeddings.manager import get_embedding_manager
+            from src.infrastructure.embeddings.manager import get_embedding_manager
             embedding_manager = get_embedding_manager()
         
         _orchestrator = SearchOrchestrator(
