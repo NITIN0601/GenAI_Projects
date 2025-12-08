@@ -1,37 +1,126 @@
 """
-Complete query processing pipeline.
-Orchestrates query understanding, vector search, and table consolidation.
+Query Processor - Complete query processing pipeline.
+
+Provides thread-safe singleton access to query processing with support for:
+- Query understanding and routing
+- 7 query types (specific value, comparison, trend, aggregation, etc.)
+- Table consolidation and formatting
+
+Example:
+    >>> from src.retrieval import get_query_processor
+    >>> 
+    >>> processor = get_query_processor()
+    >>> results = processor.process_query("Compare revenues Q1 vs Q2")
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 import pandas as pd
 
+from src.core.singleton import ThreadSafeSingleton
 from src.retrieval.query_understanding import QueryUnderstanding, QueryType, ParsedQuery, get_query_understanding
 from src.infrastructure.extraction.consolidation import TableConsolidationEngine, get_consolidation_engine
-from src.models.schemas import RAGQuery, RAGResponse
-from src.retrieval.retriever import get_retriever
-from src.infrastructure.llm.manager import get_llm_manager
-from src.infrastructure.vectordb.manager import get_vectordb_manager  # Use unified manager
-from src.infrastructure.embeddings.manager import get_embedding_manager
+from src.domain import RAGQuery, RAGResponse
+from src.utils import get_logger
+
+logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.vectordb.manager import VectorDBManager
 
 
-class QueryProcessor:
+class QueryProcessor(metaclass=ThreadSafeSingleton):
     """
     Complete query processing pipeline.
+    
+    Thread-safe singleton manager for query processing.
+    
     Handles all 7 query types with intelligent routing.
+    
+    Attributes:
+        vector_store: VectorDBManager instance
+        query_understanding: Query understanding component
+        consolidation_engine: Table consolidation component
     """
     
     def __init__(
         self,
-        vector_store=None,  # Now accepts VectorDBManager
+        vector_store: Optional["VectorDBManager"] = None,
         query_understanding: Optional[QueryUnderstanding] = None,
         consolidation_engine: Optional[TableConsolidationEngine] = None
     ):
-        """Initialize query processor with components."""
-        self.vector_store = vector_store or get_vectordb_manager()
-        self.query_understanding = query_understanding or get_query_understanding()
-        self.consolidation_engine = consolidation_engine or get_consolidation_engine()
-        self.embedding_manager = get_embedding_manager()
+        """
+        Initialize query processor with components.
+        
+        Args:
+            vector_store: VectorDBManager instance (auto-created if None)
+            query_understanding: Query understanding component (auto-created if None)
+            consolidation_engine: Table consolidation component (auto-created if None)
+        """
+        self._vector_store = vector_store
+        self._query_understanding = query_understanding
+        self._consolidation_engine = consolidation_engine
+        self._embedding_manager = None
+    
+    @property
+    def vector_store(self) -> "VectorDBManager":
+        """Get vector store (lazy initialization)."""
+        if self._vector_store is None:
+            from src.infrastructure.vectordb.manager import get_vectordb_manager
+            self._vector_store = get_vectordb_manager()
+        return self._vector_store
+    
+    @property
+    def query_understanding(self) -> QueryUnderstanding:
+        """Get query understanding (lazy initialization)."""
+        if self._query_understanding is None:
+            self._query_understanding = get_query_understanding()
+        return self._query_understanding
+    
+    @property
+    def consolidation_engine(self) -> TableConsolidationEngine:
+        """Get consolidation engine (lazy initialization)."""
+        if self._consolidation_engine is None:
+            self._consolidation_engine = get_consolidation_engine()
+        return self._consolidation_engine
+    
+    @property
+    def embedding_manager(self):
+        """Get embedding manager (lazy initialization)."""
+        if self._embedding_manager is None:
+            from src.infrastructure.embeddings.manager import get_embedding_manager
+            self._embedding_manager = get_embedding_manager()
+        return self._embedding_manager
+    
+    @property
+    def name(self) -> str:
+        """Provider name (implements BaseProvider protocol)."""
+        return "query-processor"
+    
+    def is_available(self) -> bool:
+        """Check if processor is available (implements BaseProvider protocol)."""
+        try:
+            return self.vector_store.is_available()
+        except Exception:
+            return False
+    
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Perform health check (implements BaseProvider protocol).
+        
+        Returns:
+            Dict with 'status' and optional details
+        """
+        try:
+            available = self.is_available()
+            return {
+                "status": "ok" if available else "error",
+                "vector_store": self.vector_store.name if self._vector_store else "not initialized",
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+            }
     
     def process_query(
         self,
@@ -77,18 +166,9 @@ class QueryProcessor:
         parsed_query: ParsedQuery,
         top_k: int
     ) -> Dict[str, Any]:
-        """
-        Handle Type 1: Specific Value Query.
-        Example: "What was net revenue in Q1 2025?"
-        """
-        # Build search query
+        """Handle Type 1: Specific Value Query."""
         search_text = " ".join(parsed_query.financial_concepts + parsed_query.time_periods)
         
-        # Search at row level
-        filters = parsed_query.metadata_filters.copy()
-        filters["embedding_level"] = "row"
-        
-        # Search at row level
         filters = parsed_query.metadata_filters.copy()
         filters["embedding_level"] = "row"
         
@@ -98,9 +178,7 @@ class QueryProcessor:
             filter=filters
         )
         
-        # Extract specific values
         values = []
-        # Convert to list of dicts for consistency
         results = []
         for doc, score in results_with_scores:
             metadata = doc.metadata
@@ -116,7 +194,7 @@ class QueryProcessor:
         return {
             "query_type": "specific_value",
             "query": parsed_query.original_query,
-            "values": values[:5],  # Top 5 most relevant
+            "values": values[:5],
             "total_results": len(results)
         }
     
@@ -125,11 +203,7 @@ class QueryProcessor:
         parsed_query: ParsedQuery,
         top_k: int
     ) -> Dict[str, Any]:
-        """
-        Handle Type 2: Comparison Query.
-        Example: "Compare net revenues between Q1 2025 and Q1 2024"
-        """
-        # Search for the metric across periods
+        """Handle Type 2: Comparison Query."""
         search_text = " ".join(parsed_query.financial_concepts)
         
         filters = parsed_query.metadata_filters.copy()
@@ -141,14 +215,11 @@ class QueryProcessor:
             filter=filters
         )
         
-        # Convert to list of dicts
         results = [{"metadata": doc.metadata, "content": doc.page_content} for doc, _ in results_with_scores]
         
-        # Consolidate into comparison table
         df = self.consolidation_engine.consolidate_same_table_different_periods(results)
         
-        # Calculate changes if we have multiple periods
-        if len(df.columns) > 2:  # Row Label + at least 2 periods
+        if len(df.columns) > 2:
             periods = [col for col in df.columns if col != "Row Label"]
             df = self.consolidation_engine.calculate_changes(df, periods)
         
@@ -165,16 +236,11 @@ class QueryProcessor:
         parsed_query: ParsedQuery,
         top_k: int
     ) -> Dict[str, Any]:
-        """
-        Handle Type 3: Trend Query.
-        Example: "Show net revenue trend for last 4 quarters"
-        """
-        # Search for metric across all periods
+        """Handle Type 3: Trend Query."""
         search_text = " ".join(parsed_query.financial_concepts)
         
         filters = parsed_query.metadata_filters.copy()
         filters["embedding_level"] = "row"
-        # Remove specific period filter to get all periods
         filters.pop("period_quarter", None)
         filters.pop("period_label", None)
         
@@ -184,10 +250,8 @@ class QueryProcessor:
             filter=filters
         )
         
-        # Convert to list of dicts
         results = [{"metadata": doc.metadata, "content": doc.page_content} for doc, _ in results_with_scores]
         
-        # Consolidate and sort by period
         df = self.consolidation_engine.consolidate_same_table_different_periods(results)
         
         return {
@@ -203,11 +267,7 @@ class QueryProcessor:
         parsed_query: ParsedQuery,
         top_k: int
     ) -> Dict[str, Any]:
-        """
-        Handle Type 4: Aggregation Query.
-        Example: "What was average revenue across all quarters?"
-        """
-        # Get all values for the metric
+        """Handle Type 4: Aggregation Query."""
         search_text = " ".join(parsed_query.financial_concepts)
         
         filters = parsed_query.metadata_filters.copy()
@@ -219,10 +279,8 @@ class QueryProcessor:
             filter=filters
         )
         
-        # Convert to list of dicts
         results = [{"metadata": doc.metadata, "content": doc.page_content} for doc, _ in results_with_scores]
         
-        # Extract numeric values
         values = []
         for result in results:
             metadata = result.get("metadata", {})
@@ -234,7 +292,6 @@ class QueryProcessor:
                     "metric": metadata.get("row_label")
                 })
         
-        # Calculate aggregations
         numeric_values = [v["value"] for v in values]
         
         aggregations = {}
@@ -260,16 +317,11 @@ class QueryProcessor:
         parsed_query: ParsedQuery,
         top_k: int
     ) -> Dict[str, Any]:
-        """
-        Handle Type 5: Multi-Document Consolidation.
-        Example: "Show net revenues from all documents"
-        """
-        # Search across all documents
+        """Handle Type 5: Multi-Document Consolidation."""
         search_text = " ".join(parsed_query.financial_concepts)
         
         filters = parsed_query.metadata_filters.copy()
         filters["embedding_level"] = "row"
-        # Remove document-specific filters
         filters.pop("document_id", None)
         
         results_with_scores = self.vector_store.similarity_search_with_score(
@@ -278,13 +330,10 @@ class QueryProcessor:
             filter=filters
         )
         
-        # Convert to list of dicts
         results = [{"metadata": doc.metadata, "content": doc.page_content} for doc, _ in results_with_scores]
         
-        # Consolidate by period
         df = self.consolidation_engine.consolidate_same_table_different_periods(results)
         
-        # Get unique documents
         documents = set()
         for result in results:
             metadata = result.get("metadata", {})
@@ -304,11 +353,7 @@ class QueryProcessor:
         parsed_query: ParsedQuery,
         top_k: int
     ) -> Dict[str, Any]:
-        """
-        Handle Type 6: Cross-Table Query.
-        Example: "Show revenues from income statement and cash from cash flow statement"
-        """
-        # Search for each table type separately
+        """Handle Type 6: Cross-Table Query."""
         results_by_table = {}
         
         for table_type in parsed_query.table_types:
@@ -324,12 +369,9 @@ class QueryProcessor:
                 filter=filters
             )
             
-            # Convert to list of dicts
             results = [{"metadata": doc.metadata, "content": doc.page_content} for doc, _ in results_with_scores]
-            
             results_by_table[table_type] = results
         
-        # Consolidate cross-table results
         df = self.consolidation_engine.consolidate_cross_table(results_by_table)
         
         return {
@@ -345,17 +387,12 @@ class QueryProcessor:
         parsed_query: ParsedQuery,
         top_k: int
     ) -> Dict[str, Any]:
-        """
-        Handle Type 7: Hierarchical Query.
-        Example: "Show me all revenue line items and their sub-items"
-        """
-        # Search for parent row
+        """Handle Type 7: Hierarchical Query."""
         search_text = " ".join(parsed_query.financial_concepts)
         
         filters = parsed_query.metadata_filters.copy()
         filters["embedding_level"] = "row"
         
-        # First, find the parent row
         parent_results_with_scores = self.vector_store.similarity_search_with_score(
             query=search_text,
             k=5,
@@ -370,10 +407,8 @@ class QueryProcessor:
                 "error": "No matching parent row found"
             }
         
-        # Get the parent row label
         parent_label = parent_results[0].get("metadata", {}).get("row_label")
         
-        # Now search for all child rows
         filters["parent_row"] = parent_label
         child_results_with_scores = self.vector_store.similarity_search_with_score(
             query=search_text,
@@ -382,10 +417,8 @@ class QueryProcessor:
         )
         child_results = [{"metadata": doc.metadata, "content": doc.page_content} for doc, _ in child_results_with_scores]
         
-        # Combine parent and children
         all_results = parent_results[:1] + child_results
         
-        # Consolidate with hierarchy preserved
         df = self.consolidation_engine.consolidate_hierarchical(all_results)
         
         return {
@@ -398,12 +431,29 @@ class QueryProcessor:
         }
 
 
-# Singleton instance
-_query_processor = None
+def get_query_processor(
+    vector_store: Optional["VectorDBManager"] = None,
+    **kwargs
+) -> QueryProcessor:
+    """
+    Get or create global query processor instance.
+    
+    Thread-safe singleton accessor.
+    
+    Args:
+        vector_store: VectorDBManager instance (only used on first call)
+        **kwargs: Additional arguments
+        
+    Returns:
+        QueryProcessor singleton instance
+    """
+    return QueryProcessor(vector_store=vector_store, **kwargs)
 
-def get_query_processor() -> QueryProcessor:
-    """Get singleton query processor."""
-    global _query_processor
-    if _query_processor is None:
-        _query_processor = QueryProcessor()
-    return _query_processor
+
+def reset_query_processor() -> None:
+    """
+    Reset the query processor singleton.
+    
+    Useful for testing or reconfiguration.
+    """
+    QueryProcessor._reset_instance()

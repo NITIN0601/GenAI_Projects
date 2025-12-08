@@ -12,11 +12,12 @@ Orchestrates:
 from typing import Optional, Dict, Any, List
 from functools import lru_cache
 import logging
+from src.utils import get_logger
 
 from src.domain.queries import RAGQuery, RAGResponse
 from src.infrastructure.cache import QueryCache
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class QueryUseCase:

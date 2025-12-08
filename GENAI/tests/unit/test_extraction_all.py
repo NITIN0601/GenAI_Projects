@@ -65,7 +65,8 @@ def test_extraction():
                 for line in lines:
                     print(f"   {line}")
                 if len(content.split('\n')) > 5:
-                    print(f"   ... ({len(content.split('\n')) - 5} more lines)")
+                    remaining = len(content.split('\n')) - 5
+                    print(f"   ... ({remaining} more lines)")
             
         except Exception as e:
             results.append({

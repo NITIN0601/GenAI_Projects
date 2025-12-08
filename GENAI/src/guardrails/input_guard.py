@@ -10,9 +10,10 @@ Validates and sanitizes user input before processing:
 from typing import Tuple, Dict, Any, Optional, List
 from dataclasses import dataclass
 import logging
+from src.utils import get_logger
 import re
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

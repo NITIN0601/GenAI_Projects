@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
+from src.utils import get_logger
 
 from src.evaluation.metrics.retrieval import (
     RetrievalEvaluator,
@@ -25,7 +26,7 @@ from src.evaluation.metrics.faithfulness import (
     get_faithfulness_evaluator,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ConfidenceLevel(str, Enum):

@@ -3,12 +3,13 @@ Extraction strategy with automatic fallback.
 """
 
 import logging
+from src.utils import get_logger
 from typing import List, Optional
 
 from src.infrastructure.extraction.base import ExtractionBackend, ExtractionResult, ExtractionError
 from src.infrastructure.extraction.quality import QualityAssessor
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ExtractionStrategy:
@@ -141,7 +142,9 @@ class ExtractionStrategy:
         Returns:
             Best extraction result
         """
-        from concurrent.futures import ProcessPoolExecutor, as_completed, TimeoutError
+        import sys
+        import platform
+        from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed, TimeoutError
         
         # Get available backends
         available_backends = [b for b in self.backends if b.is_available()]
@@ -153,8 +156,15 @@ class ExtractionStrategy:
         
         results = []
         
-        # Use ProcessPoolExecutor for true parallelism
-        with ProcessPoolExecutor(max_workers=min(len(available_backends), 4)) as executor:
+        # Windows compatibility: use ThreadPoolExecutor on Windows
+        # ProcessPoolExecutor requires special handling on Windows (freeze_support)
+        use_threads = platform.system() == 'Windows' or sys.platform == 'win32'
+        
+        ExecutorClass = ThreadPoolExecutor if use_threads else ProcessPoolExecutor
+        executor_name = "ThreadPoolExecutor" if use_threads else "ProcessPoolExecutor"
+        logger.debug(f"Using {executor_name} for parallel extraction")
+        
+        with ExecutorClass(max_workers=min(len(available_backends), 4)) as executor:
             # Submit all backends
             future_to_backend = {
                 executor.submit(self._extract_with_backend, backend, pdf_path): backend

@@ -20,8 +20,9 @@ from typing import Dict, Optional, Tuple
 from datetime import datetime
 from functools import lru_cache
 import logging
+from src.utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PDFDeduplicator:

@@ -13,13 +13,14 @@ Reference: sentence-transformers cross-encoders
 
 from typing import List, Optional
 import logging
+from src.utils import get_logger
 
 from sentence_transformers import CrossEncoder
 import numpy as np
 
 from src.retrieval.search.base import SearchResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CrossEncoderReranker:

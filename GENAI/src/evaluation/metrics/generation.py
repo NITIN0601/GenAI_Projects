@@ -10,11 +10,12 @@ Evaluates the quality of LLM-generated responses:
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import logging
+from src.utils import get_logger
 import re
 
 from config.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

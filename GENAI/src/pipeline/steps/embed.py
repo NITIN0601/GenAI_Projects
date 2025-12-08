@@ -1,157 +1,211 @@
 """
-Embed Step - Generate embeddings with model-aware caching.
+Embed Step - Generate embeddings and store in VectorDB.
 
-Enterprise features:
-- Embedding cache (model-aware, invalidates on model change)
-- Batch processing for efficiency
-- Provider-agnostic (supports multiple vector DBs)
+Implements StepInterface following system architecture pattern.
+Uses infrastructure managers (same pattern as rest of system).
 """
 
 import hashlib
-import logging
-from typing import Optional, List, Dict, Any
-from datetime import datetime
+from typing import Dict, Any
+from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
+from src.pipeline.base import StepInterface, StepResult, StepStatus, PipelineContext
+from src.utils import get_logger
+
+logger = get_logger(__name__)
 
 
+class EmbedStep(StepInterface):
+    """
+    Generate embeddings and store in VectorDB.
+    
+    Implements StepInterface (like VectorDBInterface pattern).
+    Uses infrastructure managers (EmbeddingManager, VectorDBManager).
+    
+    Reads: context.extracted_data
+    Writes: context.chunks
+    """
+    
+    name = "embed"
+    
+    def __init__(self, store_in_vectordb: bool = True):
+        self.store_in_vectordb = store_in_vectordb
+    
+    def validate(self, context: PipelineContext) -> bool:
+        """Validate extracted data exists."""
+        if not context.extracted_data:
+            logger.error("No extracted data - run ExtractStep first")
+            return False
+        return True
+    
+    def get_step_info(self) -> Dict[str, Any]:
+        """Get step metadata."""
+        from config.settings import settings
+        return {
+            "name": self.name,
+            "description": "Generate embeddings and store in VectorDB",
+            "reads": ["context.extracted_data"],
+            "writes": ["context.chunks"],
+            "store_in_vectordb": self.store_in_vectordb,
+            "vectordb_provider": settings.VECTORDB_PROVIDER,
+            "embedding_provider": settings.EMBEDDING_PROVIDER
+        }
+    
+    def execute(self, context: PipelineContext) -> StepResult:
+        """Generate embeddings and store."""
+        from config.settings import settings
+        from src.infrastructure.embeddings.manager import get_embedding_manager
+        from src.infrastructure.vectordb.manager import get_vectordb_manager
+        from src.domain.tables import TableChunk, TableMetadata
+        
+        # Use infrastructure managers (standard pattern)
+        embedding_manager = get_embedding_manager()
+        vector_store = get_vectordb_manager() if self.store_in_vectordb else None
+        
+        vectordb_provider = settings.VECTORDB_PROVIDER
+        embedding_model = embedding_manager.get_model_name()
+        embedding_provider = settings.EMBEDDING_PROVIDER
+        
+        all_chunks = []
+        stats = {
+            'total_embeddings': 0,
+            'stored': 0,
+            'vectordb_provider': vectordb_provider,
+            'embedding_model': embedding_model
+        }
+        
+        total_tables = sum(len(doc.get('tables', [])) for doc in context.extracted_data)
+        
+        try:
+            pbar = tqdm(
+                total=total_tables,
+                desc="🔢 Embedding",
+                unit="table",
+                ncols=80,
+                bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
+            )
+            
+            for doc_result in context.extracted_data:
+                filename = doc_result['file']
+                pbar.set_description(f"🔢 {filename[:25]}")
+                
+                pdf_hash = hashlib.md5(filename.encode()).hexdigest()
+                
+                for i, table in enumerate(doc_result.get('tables', [])):
+                    # Handle table formats
+                    if hasattr(table, 'content'):
+                        content = table.content
+                        table_meta = table.metadata if hasattr(table, 'metadata') else {}
+                        if hasattr(table_meta, 'model_dump'):
+                            table_meta = table_meta.model_dump()
+                    else:
+                        content = table.get('content', '')
+                        table_meta = table.get('metadata', {})
+                    
+                    if not content:
+                        pbar.update(1)
+                        continue
+                    
+                    # Use embedding manager
+                    embedding = embedding_manager.generate_embedding(content)
+                    
+                    metadata_dict = doc_result.get('metadata', {})
+                    
+                    metadata = TableMetadata.from_extraction(
+                        table_meta=table_meta,
+                        doc_metadata=metadata_dict,
+                        filename=filename,
+                        table_index=i,
+                        embedding=embedding,
+                        embedding_model=embedding_model,
+                        embedding_provider=embedding_provider,
+                    )
+                    
+                    chunk = TableChunk(
+                        chunk_id=f"{pdf_hash}_{i}",
+                        content=content,
+                        embedding=embedding,
+                        metadata=metadata
+                    )
+                    
+                    all_chunks.append(chunk)
+                    stats['total_embeddings'] += 1
+                    pbar.update(1)
+            
+            pbar.set_description("🔢 Embedding Complete")
+            pbar.close()
+            
+            # Store using vectordb manager
+            if self.store_in_vectordb and all_chunks:
+                store_pbar = tqdm(
+                    total=1,
+                    desc=f"💾 Storing in {vectordb_provider.upper()}",
+                    ncols=80,
+                    bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt}'
+                )
+                vector_store.add_chunks(all_chunks)
+                stats['stored'] = len(all_chunks)
+                store_pbar.update(1)
+                store_pbar.set_description(f"💾 Stored {len(all_chunks)} chunks")
+                store_pbar.close()
+            
+            # Write to context
+            context.chunks = all_chunks
+            
+            return StepResult(
+                step_name=self.name,
+                status=StepStatus.SUCCESS,
+                data=all_chunks,
+                message=f"Generated {stats['total_embeddings']} embeddings, stored {stats['stored']}",
+                metadata=stats
+            )
+            
+        except Exception as e:
+            logger.error(f"Embedding failed: {e}")
+            return StepResult(
+                step_name=self.name,
+                status=StepStatus.FAILED,
+                error=str(e)
+            )
+
+
+# Backward-compatible function for main.py
 def run_embed(
-    extracted_data: List[Dict[str, Any]],
-    store_in_vectordb: bool = True,
-    embedding_cache=None,
+    extracted_data: list = None,
+    source_dir: str = None,
+    store_in_vectordb: bool = True
 ):
-    """
-    Step 3: Generate embeddings and store in VectorDB.
-    
-    Args:
-        extracted_data: List of extraction results from run_extract
-        store_in_vectordb: Whether to store in vector DB
-        embedding_cache: EmbeddingCache instance (optional)
-        
-    Returns:
-        PipelineResult with embedding stats
-    """
+    """Legacy wrapper for backward compatibility with main.py CLI."""
     from src.pipeline import PipelineStep, PipelineResult
-    from config.settings import settings
-    from src.infrastructure.embeddings.manager import get_embedding_manager
-    from src.infrastructure.vectordb.manager import get_vectordb_manager
-    from src.domain.tables import TableChunk, TableMetadata
+    from src.pipeline.steps.extract import ExtractStep
     
-    embedding_manager = get_embedding_manager()
-    vector_store = get_vectordb_manager() if store_in_vectordb else None
-    
-    vectordb_provider = settings.VECTORDB_PROVIDER if store_in_vectordb else "none"
-    embedding_provider = settings.EMBEDDING_PROVIDER
-    embedding_model = embedding_manager.get_model_name()
-    
-    all_chunks = []
-    stats = {
-        'total_embeddings': 0,
-        'cache_hits': 0,
-        'stored': 0,
-        'vectordb_provider': vectordb_provider,
-        'embedding_provider': embedding_provider,
-        'embedding_model': embedding_model
-    }
-    
-    try:
-        for doc_result in extracted_data:
-            filename = doc_result['file']
-            content_hash = doc_result.get('content_hash')
-            
-            # Check embedding cache
-            if embedding_cache and content_hash:
-                cached_chunks = embedding_cache.get_embeddings(content_hash)
-                if cached_chunks:
-                    logger.info(f"Embedding cache hit: {filename}")
-                    all_chunks.extend(cached_chunks)
-                    stats['cache_hits'] += len(cached_chunks)
-                    stats['total_embeddings'] += len(cached_chunks)
-                    continue
-            
-            # Generate new embeddings
-            doc_chunks = []
-            pdf_hash = hashlib.md5(filename.encode()).hexdigest()
-            
-            for i, table in enumerate(doc_result.get('tables', [])):
-                content = table.get('content', '')
-                if not content:
-                    continue
-                
-                # Generate embedding
-                embedding = embedding_manager.generate_embedding(content)
-                
-                # Extract temporal info
-                metadata_dict = doc_result.get('metadata', {})
-                quarter_str = metadata_dict.get('quarter')
-                quarter_number = None
-                month = None
-                
-                if quarter_str and quarter_str.upper().startswith('Q'):
-                    try:
-                        quarter_number = int(quarter_str[1])
-                        month = quarter_number * 3
-                    except (ValueError, IndexError):
-                        pass
-                
-                # Get or generate table_id
-                table_meta = table.get('metadata', {})
-                table_id = table_meta.get('table_id')
-                if not table_id:
-                    page = table_meta.get('page_no', 1)
-                    table_id = f"{filename}_p{page}_{i}"
-                
-                # Create metadata using domain entity
-                metadata = TableMetadata(
-                    table_id=table_id,
-                    source_doc=filename,
-                    page_no=table_meta.get('page_no', 1),
-                    table_title=table_meta.get('table_title', f'Table {i+1}'),
-                    year=metadata_dict.get('year'),
-                    quarter=quarter_str,
-                    quarter_number=quarter_number,
-                    month=month,
-                    report_type=metadata_dict.get('report_type'),
-                    embedding_model=embedding_model,
-                    embedding_provider=embedding_provider,
-                    embedded_date=datetime.now()
+    # If no extracted_data, run extract first
+    ctx = PipelineContext(source_dir=source_dir)
+    if extracted_data:
+        ctx.extracted_data = extracted_data
+    else:
+        extract_step = ExtractStep()
+        if extract_step.validate(ctx):
+            extract_result = extract_step.execute(ctx)
+            if extract_result.failed:
+                return PipelineResult(
+                    step=PipelineStep.EMBED,
+                    success=False,
+                    error=f"Extract failed: {extract_result.error}"
                 )
-                
-                chunk = TableChunk(
-                    chunk_id=f"{pdf_hash}_{i}",
-                    content=content,
-                    embedding=embedding,
-                    metadata=metadata
-                )
-                
-                doc_chunks.append(chunk)
-                stats['total_embeddings'] += 1
-            
-            # Cache embeddings for this document
-            if embedding_cache and content_hash and doc_chunks:
-                embedding_cache.set_embeddings(content_hash, doc_chunks)
-            
-            all_chunks.extend(doc_chunks)
-        
-        # Store in vector DB
-        if store_in_vectordb and all_chunks:
-            vector_store.add_chunks(all_chunks)
-            stats['stored'] = len(all_chunks)
-        
-        return PipelineResult(
-            step=PipelineStep.EMBED,
-            success=True,
-            data=all_chunks,
-            message=(
-                f"Generated {stats['total_embeddings']} embeddings "
-                f"({stats['cache_hits']} cached), stored {stats['stored']} in {vectordb_provider.upper()}"
-            ),
-            metadata=stats
-        )
-    except Exception as e:
-        logger.error(f"Embedding failed: {e}")
-        return PipelineResult(
-            step=PipelineStep.EMBED,
-            success=False,
-            error=str(e)
-        )
+    
+    step = EmbedStep(store_in_vectordb=store_in_vectordb)
+    result = step.execute(ctx) if step.validate(ctx) else StepResult(
+        step_name="embed",
+        status=StepStatus.FAILED,
+        error="No extracted data available"
+    )
+    
+    return PipelineResult(
+        step=PipelineStep.EMBED,
+        success=result.success,
+        data=result.data,
+        message=result.message,
+        error=result.error,
+        metadata=result.metadata
+    )

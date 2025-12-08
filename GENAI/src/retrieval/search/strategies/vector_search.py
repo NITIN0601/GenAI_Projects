@@ -2,10 +2,11 @@
 
 from typing import List, Dict, Any, Optional
 import logging
+from src.utils import get_logger
 
 from src.retrieval.search.base import BaseSearchStrategy, SearchResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class VectorSearchStrategy(BaseSearchStrategy):

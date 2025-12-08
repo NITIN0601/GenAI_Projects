@@ -8,11 +8,12 @@ are grounded in the retrieved contexts.
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 import logging
+from src.utils import get_logger
 import re
 
 from config.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

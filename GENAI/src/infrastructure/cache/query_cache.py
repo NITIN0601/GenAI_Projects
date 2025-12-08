@@ -12,10 +12,11 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
 import logging
+from src.utils import get_logger
 
 from src.infrastructure.cache.base import BaseCache
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class QueryCache(BaseCache[Any]):

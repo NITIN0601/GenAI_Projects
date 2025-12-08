@@ -5,7 +5,7 @@ Provides chunking functionality for tables to create manageable embedding units.
 """
 
 from typing import List, Optional, Dict, Any
-from src.models.schemas import TableChunk, TableMetadata
+from src.domain.tables import TableChunk, TableMetadata
 
 
 class TableChunker:
@@ -44,19 +44,27 @@ class TableChunker:
         # Store original title for reporting (before adding row ranges)
         original_title = metadata.table_title if hasattr(metadata, 'table_title') else ""
         
-        # If table is small, return as single chunk
+        # Get base table_id for chunk referencing
+        base_table_id = metadata.table_id if hasattr(metadata, 'table_id') else "table"
+        
+        # If table is small, return as single chunk (no chunking needed)
         if len(data_lines) <= self.chunk_size:
             chunk_lines = header_lines + data_lines
             chunk_text = '\n'.join(chunk_lines)
             
+            # Single chunk = chunk index 1
+            chunk_metadata = metadata.model_copy() if hasattr(metadata, 'model_copy') else metadata
+            chunk_metadata.chunk_reference_id = f"{base_table_id}_chunk1"
+            
             return [TableChunk(
                 content=chunk_text,
-                metadata=metadata,
+                metadata=chunk_metadata,
                 embedding=None
             )]
         
         # Create overlapping chunks
         chunks = []
+        chunk_index = 0
         
         # Sliding window with overlap
         for i in range(0, len(data_lines), self.chunk_size - self.overlap):
@@ -67,12 +75,16 @@ class TableChunker:
             if len(chunk_data) < self.min_chunk_size:
                 break
             
+            chunk_index += 1
+            
             # Combine header + chunk data
             chunk_lines = header_lines + chunk_data
             chunk_text = '\n'.join(chunk_lines)
             
-            # Add context about chunk position
-            chunk_metadata = metadata.copy() if hasattr(metadata, 'copy') else metadata
+            # Create chunk metadata with sequential reference ID
+            chunk_metadata = metadata.model_copy() if hasattr(metadata, 'model_copy') else metadata
+            chunk_metadata.chunk_reference_id = f"{base_table_id}_chunk{chunk_index}"
+            
             if hasattr(chunk_metadata, 'table_title'):
                 # Store original title for clean reporting
                 chunk_metadata.original_table_title = original_title

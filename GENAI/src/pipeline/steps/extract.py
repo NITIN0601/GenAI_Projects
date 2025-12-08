@@ -1,141 +1,153 @@
 """
-Extract Step - PDF table extraction with caching and deduplication.
+Extract Step - PDF table extraction.
 
-Enterprise features:
-- Content-hash deduplication (skip already processed PDFs)
-- Extraction cache (avoid re-extracting same content)
-- Parallel processing support (future)
+Implements StepInterface following system architecture pattern.
 """
 
-import logging
-from typing import Optional, List, Dict, Any
 from pathlib import Path
+from typing import Dict, Any
+from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
+from src.pipeline.base import StepInterface, StepResult, StepStatus, PipelineContext
+from src.utils import get_logger
+
+logger = get_logger(__name__)
 
 
-def run_extract(
-    source_dir: Optional[str] = None,
-    force: bool = False,
-    deduplicator=None,
-    extraction_cache=None,
-):
+class ExtractStep(StepInterface):
     """
-    Step 2: Extract tables from PDFs with caching.
+    Extract tables from PDF files.
     
-    Args:
-        source_dir: Directory with PDF files
-        force: Force re-extraction (ignore cache)
-        deduplicator: PDFDeduplicator instance (optional)
-        extraction_cache: ExtractionCache instance (optional)
-        
-    Returns:
-        PipelineResult with extracted tables
+    Implements StepInterface (like VectorDBInterface pattern).
+    
+    Reads: context.source_dir
+    Writes: context.extracted_data
     """
-    from src.pipeline import PipelineStep, PipelineResult
-    from config.settings import settings
-    from src.infrastructure.extraction.extractor import UnifiedExtractor as Extractor
     
-    if source_dir is None:
-        source_dir = settings.RAW_DATA_DIR
+    name = "extract"
     
-    source_path = Path(source_dir)
-    if not source_path.exists():
-        return PipelineResult(
-            step=PipelineStep.EXTRACT,
-            success=False,
-            error=f"Directory {source_dir} does not exist"
-        )
+    def __init__(self, enable_caching: bool = True):
+        self.enable_caching = enable_caching
     
-    pdf_files = list(source_path.glob("*.pdf"))
-    if not pdf_files:
-        return PipelineResult(
-            step=PipelineStep.EXTRACT,
-            success=False,
-            error=f"No PDF files found in {source_dir}"
-        )
-    
-    all_results = []
-    stats = {
-        'processed': 0,
-        'skipped_duplicate': 0,
-        'cache_hits': 0,
-        'failed': 0,
-        'total_tables': 0
-    }
-    
-    try:
-        extractor = Extractor(enable_caching=True)
+    def validate(self, context: PipelineContext) -> bool:
+        """Validate source directory exists."""
+        from config.settings import settings
         
-        for pdf_path in pdf_files:
-            # Check deduplication
-            if deduplicator and not force:
-                is_dup, original = deduplicator.is_duplicate(pdf_path)
-                if is_dup:
-                    logger.info(f"Skipping duplicate: {pdf_path.name} (matches {original})")
-                    stats['skipped_duplicate'] += 1
-                    continue
+        source_dir = context.source_dir or settings.RAW_DATA_DIR
+        source_path = Path(source_dir)
+        
+        if not source_path.exists():
+            logger.error(f"Source directory does not exist: {source_dir}")
+            return False
+        
+        pdf_files = list(source_path.glob("*.pdf"))
+        if not pdf_files:
+            logger.error(f"No PDF files in {source_dir}")
+            return False
+        
+        return True
+    
+    def get_step_info(self) -> Dict[str, Any]:
+        """Get step metadata."""
+        return {
+            "name": self.name,
+            "description": "Extract tables from PDF files using Docling",
+            "reads": ["context.source_dir"],
+            "writes": ["context.extracted_data"],
+            "caching_enabled": self.enable_caching
+        }
+    
+    def execute(self, context: PipelineContext) -> StepResult:
+        """Extract tables from PDFs."""
+        from config.settings import settings
+        from src.infrastructure.extraction.extractor import UnifiedExtractor
+        
+        source_dir = context.source_dir or settings.RAW_DATA_DIR
+        source_path = Path(source_dir)
+        pdf_files = list(source_path.glob("*.pdf"))
+        
+        all_results = []
+        stats = {
+            'processed': 0,
+            'failed': 0,
+            'total_tables': 0
+        }
+        
+        try:
+            extractor = UnifiedExtractor(enable_caching=self.enable_caching)
             
-            # Check extraction cache
-            content_hash = None
-            if extraction_cache and not force:
-                cached_result = extraction_cache.get_by_content(pdf_path)
-                if cached_result:
-                    logger.info(f"Extraction cache hit: {pdf_path.name}")
-                    stats['cache_hits'] += 1
+            pbar = tqdm(
+                total=len(pdf_files),
+                desc="📄 Extracting",
+                unit="file",
+                ncols=80,
+                bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
+            )
+            
+            for pdf_path in pdf_files:
+                pbar.set_description(f"📄 {pdf_path.name[:25]}")
+                
+                result = extractor.extract(str(pdf_path))
+                
+                if result.is_successful():
                     all_results.append({
                         'file': pdf_path.name,
-                        'tables': cached_result.tables,
-                        'metadata': cached_result.metadata,
-                        'quality_score': cached_result.quality_score,
-                        'from_cache': True
+                        'tables': result.tables,
+                        'metadata': result.metadata,
+                        'quality_score': result.quality_score,
                     })
-                    stats['total_tables'] += len(cached_result.tables)
-                    continue
-            
-            # Extract
-            result = extractor.extract(str(pdf_path))
-            
-            if result.is_successful():
-                # Cache the result
-                if extraction_cache:
-                    content_hash = extraction_cache.set_by_content(pdf_path, result)
+                    stats['processed'] += 1
+                    stats['total_tables'] += len(result.tables)
+                else:
+                    stats['failed'] += 1
+                    logger.error(f"Failed: {pdf_path.name}: {result.error}")
                 
-                # Register with deduplicator
-                if deduplicator:
-                    deduplicator.register(pdf_path, {
-                        'content_hash': content_hash,
-                        'tables': len(result.tables)
-                    })
-                
-                all_results.append({
-                    'file': pdf_path.name,
-                    'tables': result.tables,
-                    'metadata': result.metadata,
-                    'quality_score': result.quality_score,
-                    'content_hash': content_hash,
-                    'from_cache': False
-                })
-                stats['processed'] += 1
-                stats['total_tables'] += len(result.tables)
-            else:
-                stats['failed'] += 1
-                logger.error(f"Failed to extract {pdf_path.name}: {result.error}")
-        
-        return PipelineResult(
-            step=PipelineStep.EXTRACT,
-            success=True,
-            data=all_results,
-            message=(
-                f"Extracted {stats['total_tables']} tables from {stats['processed']} files "
-                f"({stats['cache_hits']} cached, {stats['skipped_duplicate']} skipped)"
-            ),
-            metadata=stats
-        )
-    except Exception as e:
-        logger.error(f"Extraction failed: {e}")
-        return PipelineResult(
-            step=PipelineStep.EXTRACT,
-            success=False,
-            error=str(e)
-        )
+                pbar.update(1)
+            
+            pbar.set_description("📄 Extraction Complete")
+            pbar.close()
+            
+            # Write to context for next step
+            context.extracted_data = all_results
+            
+            return StepResult(
+                step_name=self.name,
+                status=StepStatus.SUCCESS,
+                data=all_results,
+                message=f"Extracted {stats['total_tables']} tables from {stats['processed']} files",
+                metadata=stats
+            )
+            
+        except Exception as e:
+            logger.error(f"Extraction failed: {e}")
+            return StepResult(
+                step_name=self.name,
+                status=StepStatus.FAILED,
+                error=str(e)
+            )
+
+
+# Backward-compatible function for main.py
+def run_extract(
+    source_dir: str = None,
+    enable_caching: bool = True
+):
+    """Legacy wrapper for backward compatibility with main.py CLI."""
+    from src.pipeline import PipelineStep, PipelineResult
+    
+    step = ExtractStep(enable_caching=enable_caching)
+    ctx = PipelineContext(source_dir=source_dir)
+    result = step.execute(ctx) if step.validate(ctx) else StepResult(
+        step_name="extract",
+        status=StepStatus.FAILED,
+        error="Source directory validation failed"
+    )
+    
+    return PipelineResult(
+        step=PipelineStep.EXTRACT,
+        success=result.success,
+        data=result.data,
+        message=result.message,
+        error=result.error,
+        metadata=result.metadata
+    )

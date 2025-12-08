@@ -6,9 +6,9 @@ Creates embeddings at table, row, and cell levels with complete metadata.
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import hashlib
-from src.models.schemas.enhanced_schemas import (
+from src.domain.tables import (
     EnhancedFinancialTable, EnhancedDocument, RowHeader, 
-    ColumnHeader, DataCell, Period
+    ColumnHeader, DataCell
 )
 
 

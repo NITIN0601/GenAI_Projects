@@ -4,7 +4,7 @@ Debug why spanning headers aren't being formatted.
 """
 
 from embeddings.table_chunker import TableChunker
-from src.models.schemas import TableMetadata
+from src.domain.tables import TableMetadata
 from datetime import datetime
 
 def debug_chunking():

@@ -17,8 +17,7 @@ def verify_imports():
         
         # Models
         logger.info("Importing models...")
-        from src.models.schemas import TableMetadata, TableChunk
-        from src.models.enhanced_schemas import EnhancedFinancialTable
+        from src.domain.tables import TableMetadata, TableChunk, EnhancedFinancialTable
         
         # Utils
         logger.info("Importing utils...")

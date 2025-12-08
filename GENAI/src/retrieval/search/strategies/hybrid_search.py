@@ -2,13 +2,14 @@
 
 from typing import List, Dict, Any, Optional
 import logging
+from src.utils import get_logger
 
 from src.retrieval.search.base import BaseSearchStrategy, SearchResult
 from src.retrieval.search.strategies.vector_search import VectorSearchStrategy
 from src.retrieval.search.strategies.keyword_search import KeywordSearchStrategy
 from src.retrieval.search.fusion import reciprocal_rank_fusion, weighted_score_fusion
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HybridSearchStrategy(BaseSearchStrategy):

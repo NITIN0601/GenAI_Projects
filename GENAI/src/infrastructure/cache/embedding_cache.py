@@ -9,10 +9,11 @@ TTL: 90 days (embeddings are stable for same model)
 from pathlib import Path
 from typing import Optional, List, Any
 import logging
+from src.utils import get_logger
 
 from src.infrastructure.cache.base import BaseCache
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class EmbeddingCache(BaseCache[List[Any]]):

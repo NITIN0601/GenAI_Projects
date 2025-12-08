@@ -18,8 +18,9 @@ import shutil
 from pathlib import Path
 from typing import List, Dict, Any
 import logging
+from src.utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def clear_pycache(root_dir: str = None, dry_run: bool = False) -> int:
@@ -132,18 +133,24 @@ def clear_faiss_index(dry_run: bool = False) -> bool:
     """
     from config.settings import settings
     
-    faiss_dir = Path(settings.PROJECT_ROOT) / 'faiss_index'
+    cleared = False
     
-    if faiss_dir.exists():
-        if dry_run:
-            print(f"  Would delete: {faiss_dir}")
-            return True
-        else:
-            shutil.rmtree(faiss_dir)
-            logger.info(f"Cleared FAISS index: {faiss_dir}")
-            return True
+    # Check both possible FAISS directories
+    faiss_dirs = [
+        Path(settings.PROJECT_ROOT) / 'faiss_index',
+        Path(settings.FAISS_PERSIST_DIR),  # Usually faiss_db
+    ]
     
-    return False
+    for faiss_dir in faiss_dirs:
+        if faiss_dir.exists():
+            if dry_run:
+                print(f"  Would delete: {faiss_dir}")
+            else:
+                shutil.rmtree(faiss_dir)
+                logger.info(f"Cleared FAISS index: {faiss_dir}")
+            cleared = True
+    
+    return cleared
 
 
 def clear_chroma_db(dry_run: bool = False) -> bool:
@@ -200,6 +207,57 @@ def clear_extraction_reports(dry_run: bool = False) -> int:
     return count
 
 
+def clear_redis_index(dry_run: bool = False) -> bool:
+    """
+    Clear Redis vector search index.
+    
+    Args:
+        dry_run: If True, only print what would be deleted
+        
+    Returns:
+        True if index was cleared
+    """
+    from config.settings import settings
+    
+    if not settings.REDIS_ENABLED:
+        logger.debug("Redis is disabled in settings")
+        return False
+    
+    try:
+        import redis
+        
+        client = redis.Redis(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            decode_responses=True
+        )
+        
+        # Check if we can connect
+        client.ping()
+        
+        # Get index name from settings
+        index_name = getattr(settings, 'REDIS_VECTOR_INDEX', 'financial_docs')
+        
+        if dry_run:
+            print(f"  Would delete Redis index: {index_name}")
+            return True
+        else:
+            try:
+                client.ft(index_name).dropindex(delete_documents=True)
+                logger.info(f"Cleared Redis index: {index_name}")
+                return True
+            except Exception as e:
+                logger.warning(f"Redis index not found or already deleted: {e}")
+                return False
+                
+    except ImportError:
+        logger.debug("Redis package not installed")
+        return False
+    except Exception as e:
+        logger.error(f"Redis connection error: {e}")
+        return False
+
+
 def clear_all_cache(
     include_pycache: bool = True,
     include_app_cache: bool = True,
@@ -252,8 +310,10 @@ def clear_all_cache(
         print("\n3. Vector Databases (DESTRUCTIVE!):")
         results['faiss'] = clear_faiss_index(dry_run=dry_run)
         results['chromadb'] = clear_chroma_db(dry_run=dry_run)
+        results['redis'] = clear_redis_index(dry_run=dry_run)
         print(f"   FAISS: {'cleared' if results['faiss'] else 'not found'}")
         print(f"   ChromaDB: {'cleared' if results['chromadb'] else 'not found'}")
+        print(f"   Redis: {'cleared' if results['redis'] else 'not found/disabled'}")
     
     # 4. Clear extraction reports (optional)
     if include_reports:

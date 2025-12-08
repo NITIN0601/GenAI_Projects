@@ -7,11 +7,12 @@ Requires LLM calls for accurate assessment.
 
 from typing import List, Dict, Any, Optional
 import logging
+from src.utils import get_logger
 import time
 
 from src.evaluation.core.base import BaseEvaluator, EvaluationScores, MetricScore
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Check if RAGAS is available
 RAGAS_AVAILABLE = False

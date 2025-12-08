@@ -76,7 +76,7 @@ except ImportError as e:
     get_query_processor = None
 
 try:
-    from src.cache.backends.redis_cache import get_redis_cache
+    from src.infrastructure.cache import get_redis_cache
     CACHE_AVAILABLE = True
 except ImportError:
     CACHE_AVAILABLE = False

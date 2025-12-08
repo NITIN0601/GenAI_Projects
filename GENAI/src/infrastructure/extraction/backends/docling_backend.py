@@ -7,6 +7,7 @@ Includes all improvements: chunking, spanning headers, metadata extraction.
 
 import time
 import logging
+from src.utils import get_logger
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -29,7 +30,7 @@ from src.infrastructure.extraction.base import ExtractionBackend, ExtractionResu
 from src.infrastructure.embeddings.chunking import TableChunker
 from src.utils.extraction_utils import PDFMetadataExtractor, DoclingHelper
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DoclingBackend(ExtractionBackend):
@@ -133,7 +134,7 @@ class DoclingBackend(ExtractionBackend):
     
     def _extract_table_chunks(self, table_item: TableItem, pdf_path: str, doc, table_index: int = 0) -> List:
         """Extract and chunk a single table."""
-        from src.utils.extraction_utils import FootnoteExtractor
+        from src.utils.extraction_utils import FootnoteExtractor, CurrencyValueCleaner
         
         # Get table text with doc argument to avoid deprecation warning
         if hasattr(table_item, 'export_to_markdown'):
@@ -141,8 +142,20 @@ class DoclingBackend(ExtractionBackend):
         else:
             raw_table_text = str(table_item.text)
         
+        # Also try to get HTML for better structure preservation
+        html_content = None
+        if hasattr(table_item, 'export_to_html'):
+            try:
+                html_content = table_item.export_to_html(doc=doc)
+            except Exception as e:
+                logger.debug(f"HTML export failed, using markdown: {e}")
+        
+        # Clean currency values (handle split cells like "$10,207 $ 2,762")
+        # This must happen BEFORE footnote cleaning
+        table_text_cleaned = CurrencyValueCleaner.clean_table_rows(raw_table_text)
+        
         # Clean footnotes from row labels
-        table_text, footnotes_map = FootnoteExtractor.clean_table_content(raw_table_text)
+        table_text, footnotes_map = FootnoteExtractor.clean_table_content(table_text_cleaned)
         
         # Get page number
         page_no = DoclingHelper.get_item_page(table_item)
@@ -162,10 +175,13 @@ class DoclingBackend(ExtractionBackend):
         # Chunk table (use cleaned text for embeddings)
         chunks = self.chunker.chunk_table(table_text, metadata)
         
-        # Store original (with footnotes) for reference
+        # Store original content for reference
         for chunk in chunks:
             chunk._raw_content = raw_table_text
             chunk._footnotes_map = footnotes_map
+            # Store HTML if available for structured queries
+            if html_content:
+                chunk._html_content = html_content
         
         return chunks
     
@@ -192,6 +208,10 @@ class DoclingBackend(ExtractionBackend):
             result['raw_content'] = chunk._raw_content
         if hasattr(chunk, '_footnotes_map'):
             result['footnotes_map'] = chunk._footnotes_map
+        
+        # Store HTML content for structured table queries
+        if hasattr(chunk, '_html_content'):
+            result['html_content'] = chunk._html_content
         
         return result
     

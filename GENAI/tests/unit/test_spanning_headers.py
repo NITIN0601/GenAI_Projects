@@ -4,7 +4,7 @@ Test centered spanning headers.
 """
 
 from embeddings.table_chunker import TableChunker
-from src.models.schemas import TableMetadata
+from src.domain.tables import TableMetadata
 from datetime import datetime
 
 def test_spanning_header():

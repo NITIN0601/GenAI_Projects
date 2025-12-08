@@ -7,8 +7,9 @@ Predicts when quarterly and annual reports will be available based on historical
 from datetime import datetime, timedelta
 from typing import List, Dict
 import logging
+from src.utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 try:
     import holidays

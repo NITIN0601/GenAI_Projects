@@ -18,8 +18,9 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 from collections import defaultdict
 import logging
+from src.utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class MultiYearTableConsolidator:
@@ -113,10 +114,15 @@ class MultiYearTableConsolidator:
         Returns:
             Dictionary mapping row headers to values
         """
+        from src.utils.extraction_utils import CurrencyValueCleaner
+        
         data = {}
         
         try:
-            lines = [l.strip() for l in content.split('\n') if l.strip()]
+            # First, clean currency values in the content
+            cleaned_content = CurrencyValueCleaner.clean_table_rows(content)
+            
+            lines = [l.strip() for l in cleaned_content.split('\n') if l.strip()]
             
             # Filter out separator lines
             lines = [l for l in lines if not all(c in '|-: ' for c in l)]
@@ -126,6 +132,9 @@ class MultiYearTableConsolidator:
                 if '|' in line:
                     parts = [p.strip() for p in line.split('|')]
                     parts = [p for p in parts if p]  # Remove empty strings
+                    
+                    # Clean each cell value
+                    parts = CurrencyValueCleaner.clean_currency_cells(parts)
                     
                     if len(parts) >= 2:
                         row_header = parts[0]

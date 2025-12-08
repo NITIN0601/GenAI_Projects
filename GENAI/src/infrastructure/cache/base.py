@@ -16,9 +16,10 @@ from typing import Any, Dict, Generic, Optional, TypeVar, List
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 import logging
+from src.utils import get_logger
 import os
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 T = TypeVar('T')
 

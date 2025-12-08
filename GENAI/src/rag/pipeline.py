@@ -1,65 +1,94 @@
-"""Main RAG query engine using LangChain LCEL."""
+"""
+Main RAG Query Engine using LangChain LCEL.
 
-from typing import Optional, Dict, Any, List
-import logging
+Provides thread-safe singleton access to the RAG pipeline with support for:
+- Multiple prompt strategies (standard, few_shot, cot, react)
+- Caching integration
+- Automatic evaluation
+- Source extraction
+
+Example:
+    >>> from src.rag import get_query_engine
+    >>> 
+    >>> engine = get_query_engine()
+    >>> response = engine.query("What was the revenue in Q1?")
+    >>> print(response.answer)
+"""
+
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
+
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 
-from src.models.schemas import RAGResponse, TableMetadata
-from src.retrieval.retriever import get_retriever
-from src.infrastructure.llm.manager import get_llm_manager
-from src.infrastructure.embeddings.manager import get_embedding_manager
-from src.cache.backends.redis_cache import get_redis_cache
-from src.prompts.few_shot import get_few_shot_manager
 from config.settings import settings
+from src.core.singleton import ThreadSafeSingleton
+from src.domain import RAGResponse, TableMetadata
 from src.prompts import FINANCIAL_CHAT_PROMPT, COT_PROMPT, REACT_PROMPT
+from src.utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from src.retrieval.retriever import Retriever
+    from src.infrastructure.llm.manager import LLMManager
 
 
-class QueryEngine:
+class QueryEngine(metaclass=ThreadSafeSingleton):
     """
     Main RAG pipeline using LangChain LCEL.
+    
+    Thread-safe singleton manager for RAG query processing.
     
     Orchestrates:
     1. Retrieval (using LangChain Retriever)
     2. Prompting (using LangChain Templates)
     3. Generation (using LangChain ChatModel)
+    
+    Attributes:
+        retriever: Document retriever instance
+        llm_manager: LLM manager instance
+        prompt_strategy: Current prompt strategy
     """
     
     def __init__(
         self,
-        retriever=None,
-        llm_manager=None,
-        cache=None,
+        retriever: Optional["Retriever"] = None,
+        llm_manager: Optional["LLMManager"] = None,
+        cache: Any = None,
         prompt_strategy: str = "standard"
     ):
         """
         Initialize query engine.
         
         Args:
-            retriever: Retriever instance
-            llm_manager: LLM manager instance
-            cache: Cache instance
+            retriever: Retriever instance (auto-created if None)
+            llm_manager: LLM manager instance (auto-created if None)
+            cache: Cache instance (auto-created if None)
             prompt_strategy: Prompt strategy ("standard", "few_shot", "cot", "react")
         """
-        self.retriever = retriever or get_retriever()
-        self.llm_manager = llm_manager or get_llm_manager()
-        self.cache = cache or get_redis_cache()
+        # Lazy initialization
+        self._retriever = retriever
+        self._llm_manager = llm_manager
+        self._cache = cache
         self.prompt_strategy = prompt_strategy
         
         # Store last retrieved chunks for export
-        self._last_retrieved_chunks = []
+        self._last_retrieved_chunks: List[Any] = []
         
+        # Initialize components
+        self._initialize_chain()
+        
+        logger.info(f"QueryEngine initialized (mode: {prompt_strategy})")
+    
+    def _initialize_chain(self) -> None:
+        """Initialize the LangChain LCEL chain."""
         # Get LangChain components
         self.llm = self.llm_manager.get_langchain_model()
         
         # Select prompt based on strategy
-        self.prompt = self._get_prompt_for_strategy(prompt_strategy)
+        self.prompt = self._get_prompt_for_strategy(self.prompt_strategy)
         
         # Build LCEL Chain
-        # Context is retrieved using the retriever
-        # Question is passed through
         self.chain = (
             RunnableParallel(
                 {"context": self._get_retriever_runnable, "question": RunnablePassthrough()}
@@ -68,16 +97,71 @@ class QueryEngine:
             | self.llm
             | StrOutputParser()
         )
+    
+    @property
+    def retriever(self) -> "Retriever":
+        """Get retriever (lazy initialization)."""
+        if self._retriever is None:
+            from src.retrieval.retriever import get_retriever
+            self._retriever = get_retriever()
+        return self._retriever
+    
+    @property
+    def llm_manager(self) -> "LLMManager":
+        """Get LLM manager (lazy initialization)."""
+        if self._llm_manager is None:
+            from src.infrastructure.llm.manager import get_llm_manager
+            self._llm_manager = get_llm_manager()
+        return self._llm_manager
+    
+    @property
+    def cache(self) -> Any:
+        """Get cache (lazy initialization)."""
+        if self._cache is None:
+            from src.infrastructure.cache import get_redis_cache
+            self._cache = get_redis_cache()
+        return self._cache
+    
+    @property
+    def name(self) -> str:
+        """Provider name (implements BaseProvider protocol)."""
+        return f"query-engine:{self.prompt_strategy}"
+    
+    def is_available(self) -> bool:
+        """Check if engine is available (implements BaseProvider protocol)."""
+        try:
+            return self.llm_manager.is_available()
+        except Exception:
+            return False
+    
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Perform health check (implements BaseProvider protocol).
         
-        logger.info(f"LangChain Query Engine initialized (mode: {prompt_strategy})")
+        Returns:
+            Dict with 'status' and optional details
+        """
+        try:
+            available = self.is_available()
+            return {
+                "status": "ok" if available else "error",
+                "prompt_strategy": self.prompt_strategy,
+                "llm_available": self.llm_manager.is_available() if self._llm_manager else False,
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+            }
     
     def _get_prompt_for_strategy(self, strategy: str):
         """Get prompt template based on strategy."""
         if strategy == "few_shot":
-            # Get embedding function for semantic similarity
+            from src.infrastructure.embeddings.manager import get_embedding_manager
+            from src.prompts.few_shot import get_few_shot_manager
+            
             embedding_manager = get_embedding_manager()
             few_shot_manager = get_few_shot_manager(embedding_function=embedding_manager)
-            
             return few_shot_manager.get_few_shot_prompt()
         
         elif strategy == "cot":
@@ -89,36 +173,41 @@ class QueryEngine:
         else:  # "standard"
             return FINANCIAL_CHAT_PROMPT
 
-    
-    def _get_retriever_runnable(self, query: str):
+    def _get_retriever_runnable(self, query: str) -> str:
         """Helper to use retriever in LCEL."""
-        # This allows us to pass dynamic config/filters if needed
-        # For now, just return relevant documents
-        # Note: self.retriever needs to be a LangChain retriever
-        # If it's our custom Orchestrator, we need to wrap it or use it directly
         if hasattr(self.retriever, 'get_relevant_documents'):
-            # LangChain Retriever (including our SearchStrategy)
+            # LangChain Retriever
             docs = self.retriever.get_relevant_documents(query)
-            # Note: docs are LangChain Documents, not SearchResults
-            self._last_retrieved_chunks = docs  # Store for export
+            self._last_retrieved_chunks = docs
             return "\n\n".join([d.page_content for d in docs])
         else:
-            # Fallback for legacy retriever
-            # Note: Legacy retriever uses 'retrieve' method
+            # Legacy retriever
             results = self.retriever.retrieve(query)
-            # Store SearchResult objects
             self._last_retrieved_chunks = results
-            # Handle both dict results and object results if any
-            return "\n\n".join([r.content if hasattr(r, 'content') else r.get('content', '') for r in results])
+            return "\n\n".join([
+                r.content if hasattr(r, 'content') else r.get('content', '') 
+                for r in results
+            ])
 
     def query(
         self,
         query: str,
         filters: Optional[Dict[str, Any]] = None,
-        top_k: int = None,
+        top_k: Optional[int] = None,
         use_cache: bool = True
     ) -> RAGResponse:
-        """Execute RAG query using LangChain."""
+        """
+        Execute RAG query using LangChain.
+        
+        Args:
+            query: User query
+            filters: Optional metadata filters
+            top_k: Number of documents to retrieve
+            use_cache: Whether to use cache
+            
+        Returns:
+            RAGResponse with answer, sources, and metadata
+        """
         top_k = top_k or settings.TOP_K
         
         # Check cache
@@ -150,7 +239,7 @@ class QueryEngine:
             
             # Run evaluation if enabled
             evaluation_result = None
-            confidence = 0.8  # Default confidence
+            confidence = 0.8
             
             if settings.EVALUATION_ENABLED and settings.EVALUATION_AUTO_RUN:
                 evaluation_result, confidence = self._run_evaluation(query, response_text)
@@ -175,7 +264,7 @@ class QueryEngine:
     def _extract_sources(self) -> List[TableMetadata]:
         """Extract source metadata from last retrieved chunks."""
         sources = []
-        seen_ids = set()  # Deduplicate sources
+        seen_ids = set()
         
         for chunk in self._last_retrieved_chunks:
             try:
@@ -185,7 +274,7 @@ class QueryEngine:
                 else:
                     meta = chunk.get('metadata', {}) if isinstance(chunk, dict) else {}
                 
-                # If meta is already a TableMetadata object, use it directly
+                # If meta is already a TableMetadata object
                 if isinstance(meta, TableMetadata):
                     source_id = f"{meta.source_doc}_{meta.page_no}_{meta.table_title}"
                     if source_id not in seen_ids:
@@ -195,14 +284,12 @@ class QueryEngine:
                 
                 # If meta is a dict, build TableMetadata
                 if isinstance(meta, dict):
-                    # Create unique identifier for deduplication
                     source_id = f"{meta.get('source_doc', '')}_{meta.get('page_no', '')}_{meta.get('table_title', '')}"
                     
                     if source_id in seen_ids:
                         continue
                     seen_ids.add(source_id)
                     
-                    # Build TableMetadata for source citation
                     source = TableMetadata(
                         table_id=meta.get('table_id', meta.get('chunk_reference_id', source_id)),
                         source_doc=meta.get('source_doc', 'unknown'),
@@ -222,11 +309,10 @@ class QueryEngine:
         return sources
     
     def _run_evaluation(self, query: str, answer: str) -> tuple:
-        """Run evaluation on the response (only called when EVALUATION_AUTO_RUN=True)."""
+        """Run evaluation on the response."""
         try:
             from src.evaluation import get_evaluation_manager
             
-            # Get contexts from last retrieval
             contexts = []
             for doc in self._last_retrieved_chunks:
                 if hasattr(doc, 'page_content'):
@@ -238,7 +324,6 @@ class QueryEngine:
                 logger.debug("No contexts available for evaluation")
                 return None, 0.8
             
-            # Run evaluation
             manager = get_evaluation_manager()
             scores = manager.evaluate(query=query, answer=answer, contexts=contexts)
             
@@ -251,7 +336,7 @@ class QueryEngine:
             logger.warning(f"Evaluation failed: {e}")
             return None, 0.8
 
-    def get_last_retrieved_chunks(self):
+    def get_last_retrieved_chunks(self) -> List[Any]:
         """
         Get chunks from last query execution.
         
@@ -261,12 +346,35 @@ class QueryEngine:
         return self._last_retrieved_chunks
 
 
-# Global instance
-_query_engine: Optional[QueryEngine] = None
+def get_query_engine(
+    retriever: Optional["Retriever"] = None,
+    llm_manager: Optional["LLMManager"] = None,
+    **kwargs
+) -> QueryEngine:
+    """
+    Get or create global query engine instance.
+    
+    Thread-safe singleton accessor.
+    
+    Args:
+        retriever: Retriever instance (only used on first call)
+        llm_manager: LLM manager (only used on first call)
+        **kwargs: Additional arguments
+        
+    Returns:
+        QueryEngine singleton instance
+    """
+    return QueryEngine(
+        retriever=retriever,
+        llm_manager=llm_manager,
+        **kwargs
+    )
 
-def get_query_engine() -> QueryEngine:
-    """Get global query engine."""
-    global _query_engine
-    if _query_engine is None:
-        _query_engine = QueryEngine()
-    return _query_engine
+
+def reset_query_engine() -> None:
+    """
+    Reset the query engine singleton.
+    
+    Useful for testing or reconfiguration.
+    """
+    QueryEngine._reset_instance()

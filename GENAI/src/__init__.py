@@ -3,41 +3,41 @@ GENAI RAG System - Source Package
 
 Enterprise-level RAG system for financial document processing.
 
-Main modules:
-- core: Shared kernel (paths, deduplication, exceptions, interfaces)
-- extraction: PDF extraction with multiple backends
-- embeddings: Embedding generation with multiple providers
-- vector_store: Vector database management
-- retrieval: Query processing and retrieval
-- llm: LLM integration and management
-- rag: End-to-end RAG pipeline
-- evaluation: RAG quality evaluation
-- guardrails: Input/output safety
-- cache: Caching layer
-- utils: Shared utilities
+Architecture:
+- domain/: Core business entities (TableMetadata, RAGQuery, etc.)
+- infrastructure/: External integrations (vectordb, embeddings, llm, cache)
+- application/: Use cases (query, ingest)
+- core/: Shared kernel (paths, exceptions, interfaces)
+- rag/: RAG pipeline orchestration
+- retrieval/: Query processing and search
+- pipeline/: Data processing steps
+- evaluation/: Quality metrics
+- guardrails/: Safety filters
+- prompts/: Prompt templates
+- scheduler/: Filing calendar
+- utils/: Shared utilities
 """
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 __author__ = "GENAI Team"
 
 __all__ = [
+    # Core layers
     'core',
     'domain',
     'infrastructure',
     'application',
-    'extraction',
-    'embeddings',
-    'vector_store',
-    'retrieval',
-    'llm',
+    # RAG components
     'rag',
-    'prompts',
-    'models',
+    'retrieval',
     'pipeline',
-    'scheduler',
-    'cache',
-    'utils',
+    # Support
     'evaluation',
     'guardrails',
+    'prompts',
+    'scheduler',
+    'utils',
+    # Legacy re-exports
+    'models',
+    'cache',
 ]
-

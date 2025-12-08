@@ -7,6 +7,7 @@ keyword matching, and rule-based checks.
 
 from typing import List, Dict, Any, Optional
 import logging
+from src.utils import get_logger
 import time
 
 from src.evaluation.core.base import BaseEvaluator, EvaluationScores, MetricScore
@@ -14,7 +15,7 @@ from src.evaluation.metrics.retrieval import RetrievalEvaluator, get_retrieval_e
 from src.evaluation.metrics.generation import GenerationEvaluator, get_generation_evaluator
 from src.evaluation.metrics.faithfulness import FaithfulnessEvaluator, get_faithfulness_evaluator
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HeuristicEvaluator(BaseEvaluator):

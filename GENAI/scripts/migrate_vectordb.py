@@ -20,7 +20,7 @@ import argparse
 from pathlib import Path
 from embeddings.unified_vectordb import get_unified_vectordb
 from embeddings.redis_vector_backend import RedisVectorBackend
-from src.models.vectordb_schemas import TableChunk, TableMetadata
+from src.domain.tables import TableChunk, TableMetadata
 import json
 
 

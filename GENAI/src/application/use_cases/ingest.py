@@ -13,12 +13,13 @@ from typing import List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+from src.utils import get_logger
 
 from src.core.deduplication import get_deduplicator
 from src.infrastructure.cache import ExtractionCache, EmbeddingCache
 from src.domain.documents import DocumentProcessingResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

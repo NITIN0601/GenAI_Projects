@@ -11,6 +11,7 @@ Uses rank-bm25 library for efficient BM25 implementation.
 
 from typing import List, Dict, Any, Optional
 import logging
+from src.utils import get_logger
 import pickle
 from pathlib import Path
 
@@ -19,7 +20,7 @@ import numpy as np
 
 from src.retrieval.search.base import BaseSearchStrategy, SearchResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class KeywordSearchStrategy(BaseSearchStrategy):

@@ -2,20 +2,22 @@
 Pipeline Module - Enterprise Pipeline Orchestration.
 
 This module provides production-ready pipeline orchestration with:
-- Modular step execution
+- OOP-based step execution (Abstract Interface + Manager pattern)
 - Three-tier caching integration
 - Content-based deduplication
 - Comprehensive error handling
 - Observable metrics
+
+Architecture follows the same pattern as infrastructure/*Manager classes.
 """
 
 from enum import Enum
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 from datetime import datetime
-import logging
+from src.utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PipelineStep(Enum):
@@ -47,7 +49,27 @@ class PipelineResult:
         return not self.success
 
 
-# Import step implementations (backward compatible)
+# Import base classes (unified OOP pattern)
+from src.pipeline.base import (
+    StepStatus,
+    StepResult,
+    PipelineMetrics,
+    PipelineContext,
+    StepInterface,
+    PipelineManager,
+    get_pipeline_manager,
+    get_pipeline,  # Backward compatibility alias
+)
+
+# Import step classes
+from src.pipeline.steps.download import DownloadStep
+from src.pipeline.steps.extract import ExtractStep
+from src.pipeline.steps.embed import EmbedStep
+from src.pipeline.steps.search import SearchStep, ViewDBStep
+from src.pipeline.steps.query import QueryStep
+from src.pipeline.steps.consolidate import ConsolidateStep
+
+# Import step functions (backward compatible)
 from src.pipeline.steps.download import run_download
 from src.pipeline.steps.extract import run_extract
 from src.pipeline.steps.embed import run_embed
@@ -55,14 +77,31 @@ from src.pipeline.steps.search import run_search, run_view_db
 from src.pipeline.steps.query import run_query
 from src.pipeline.steps.consolidate import run_consolidate
 
-# Import orchestrator
-from src.pipeline.orchestrator import PipelineOrchestrator, get_pipeline
-
 __all__ = [
-    # Enums and Results
+    # Enums and Results (legacy)
     'PipelineStep',
     'PipelineResult',
-    # Step functions (backward compatible)
+    
+    # Unified OOP Base Classes
+    'StepStatus',
+    'StepResult',
+    'PipelineMetrics',
+    'PipelineContext',
+    'StepInterface',
+    'PipelineManager',
+    'get_pipeline_manager',
+    'get_pipeline',  # Backward compatibility alias
+    
+    # Step Classes
+    'DownloadStep',
+    'ExtractStep',
+    'EmbedStep',
+    'SearchStep',
+    'ViewDBStep',
+    'QueryStep',
+    'ConsolidateStep',
+    
+    # Step Functions (backward compatible)
     'run_download',
     'run_extract',
     'run_embed',
@@ -70,7 +109,5 @@ __all__ = [
     'run_search',
     'run_query',
     'run_consolidate',
-    # Orchestrator
-    'PipelineOrchestrator',
-    'get_pipeline',
 ]
+

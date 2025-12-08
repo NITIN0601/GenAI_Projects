@@ -1,7 +1,7 @@
 """
 VectorDB-specific schema utilities.
 
-Uses the comprehensive TableMetadata from src/models/schemas as the source of truth.
+Uses the comprehensive TableMetadata from src.domain as the source of truth.
 Provides provider-specific conversion utilities for each VectorDB backend.
 
 Industry Best Practices:
@@ -15,8 +15,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
 
-# Import the comprehensive schema from extraction
-from src.models.schemas import TableMetadata, TableChunk
+# Import the comprehensive schema from domain layer (single source of truth)
+from src.domain.tables import TableMetadata, TableChunk
 
 
 class VectorDBProvider(Enum):

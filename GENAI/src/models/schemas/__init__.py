@@ -1,32 +1,62 @@
 """
 Models - Schemas module.
 
-Data models and Pydantic schemas for the entire system.
+DEPRECATION NOTICE:
+    This module is maintained for backward compatibility.
+    New code should import directly from src.domain:
+    
+        from src.domain import TableMetadata, TableChunk, RAGQuery, RAGResponse
+    
+    All schemas are now in src.domain (single source of truth).
 """
 
-# Import from subdirectory schemas (basic schemas like TableMetadata, etc.)
-from src.models.schemas.schemas import (
-    TableMetadata, TableChunk, FinancialTable, 
-    RAGQuery, RAGResponse, DocumentProcessingResult,
-    SearchResult
+# Import core schemas from domain layer (single source of truth)
+from src.domain.tables import (
+    TableMetadata,
+    TableChunk,
+    FinancialTable,
+    # Enhanced entities (now in domain)
+    ColumnHeader,
+    RowHeader,
+    DataCell,
+    Footnote,
+    EnhancedFinancialTable,
+    EnhancedDocument,
+    ProcessingQueueItem,
 )
 
-# Import enhanced schemas (explicit imports instead of wildcard)
-from src.models.schemas.enhanced_schemas import (
-    ColumnHeader, RowHeader, DataCell, Footnote, Period,
-    DocumentMetadata, EnhancedFinancialTable, PageLayout,
-    EnhancedDocument, ProcessingQueueItem
+from src.domain.queries import (
+    RAGQuery,
+    RAGResponse,
+    SearchResult,
+)
+
+from src.domain.documents import (
+    DocumentMetadata,
+    PageLayout,
+    Period,
+    DocumentProcessingResult,
 )
 
 __all__ = [
-    # Basic schemas
-    "TableMetadata", "TableChunk", "FinancialTable",
-    "RAGQuery", "RAGResponse", "DocumentProcessingResult",
+    # Core schemas (from domain layer)
+    "TableMetadata",
+    "TableChunk",
+    "FinancialTable",
+    "RAGQuery",
+    "RAGResponse",
+    "DocumentProcessingResult",
     "SearchResult",
-    # Enhanced schemas
-    "ColumnHeader", "RowHeader", "DataCell", "Footnote", "Period",
-    "DocumentMetadata", "EnhancedFinancialTable", "PageLayout",
-    "EnhancedDocument", "ProcessingQueueItem"
+    "DocumentMetadata",
+    "PageLayout",
+    "Period",
+    # Enhanced schemas (now also from domain layer)
+    "ColumnHeader",
+    "RowHeader",
+    "DataCell",
+    "Footnote",
+    "EnhancedFinancialTable",
+    "EnhancedDocument",
+    "ProcessingQueueItem",
 ]
-
 

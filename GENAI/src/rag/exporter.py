@@ -12,7 +12,7 @@ from datetime import datetime
 import pandas as pd
 import re
 
-from src.models import RAGResponse, SearchResult
+from src.domain import RAGResponse, SearchResult
 from config.settings import settings
 from src.utils.logger import get_logger
 

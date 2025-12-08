@@ -1,5 +1,5 @@
 """
-Search Orchestrator - coordinates multiple search strategies.
+Search Orchestrator - Coordinates multiple search strategies.
 
 Industry standard: Orchestrator Pattern
 - Manages strategy lifecycle
@@ -8,26 +8,43 @@ Industry standard: Orchestrator Pattern
 - Monitors performance
 - Provides unified interface
 
+Thread-Safe Singleton:
+    Uses ThreadSafeSingleton pattern for consistent instance management.
+
 This is the MAIN ENTRY POINT for search operations.
+
+Example:
+    >>> from src.retrieval.search import get_search_orchestrator
+    >>> 
+    >>> orchestrator = get_search_orchestrator()
+    >>> results = orchestrator.search("revenue in Q1", top_k=5)
 """
 
-from typing import List, Dict, Any, Optional
-import logging
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from datetime import datetime
 
+from src.core.singleton import ThreadSafeSingleton
 from src.retrieval.search.base import (
     SearchStrategy,
     SearchConfig,
     SearchResult
 )
 from src.retrieval.search.factory import SearchStrategyFactory
+from src.utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.vectordb.manager import VectorDBManager
+    from src.infrastructure.embeddings.manager import EmbeddingManager
+    from src.infrastructure.llm.manager import LLMManager
 
 
-class SearchOrchestrator:
+class SearchOrchestrator(metaclass=ThreadSafeSingleton):
     """
     Orchestrates search strategies with caching, reranking, and monitoring.
+    
+    Thread-safe singleton manager for search operations.
     
     This is the main interface for all search operations.
     
@@ -36,46 +53,48 @@ class SearchOrchestrator:
     - Result caching (optional)
     - Re-ranking (optional)
     - Performance monitoring
-    - Multi-strategy ensemble
+    - Multi-strategy ensemble (RRF fusion)
     - Fallback strategies
     
+    Attributes:
+        vector_store: Vector database instance
+        embedding_manager: Embedding manager
+        llm_manager: LLM manager (for HyDE/Multi-Query)
+        default_strategy: Default search strategy
+    
     Usage:
-        orchestrator = SearchOrchestrator(
-            vector_store=vs,
-            embedding_manager=em,
-            default_strategy=SearchStrategy.HYBRID
-        )
-        
-        results = orchestrator.search(
-            query="What was revenue in Q1?",
-            strategy=SearchStrategy.HYBRID,
-            top_k=10
-        )
+        >>> orchestrator = get_search_orchestrator()
+        >>> results = orchestrator.search(
+        ...     query="What was revenue in Q1?",
+        ...     strategy=SearchStrategy.HYBRID,
+        ...     top_k=10
+        ... )
     """
     
     def __init__(
         self,
-        vector_store,
-        embedding_manager=None,
-        llm_manager=None,
+        vector_store: Optional["VectorDBManager"] = None,
+        embedding_manager: Optional["EmbeddingManager"] = None,
+        llm_manager: Optional["LLMManager"] = None,
         default_strategy: SearchStrategy = SearchStrategy.HYBRID,
-        enable_caching: bool = False,  # Disabled by default
-        enable_reranking: bool = False  # Disabled by default
+        enable_caching: bool = False,
+        enable_reranking: bool = False
     ):
         """
         Initialize search orchestrator.
         
         Args:
-            vector_store: Vector store instance (ChromaDB, FAISS, Redis)
-            embedding_manager: Embedding manager
+            vector_store: Vector store instance (auto-created if None)
+            embedding_manager: Embedding manager (auto-created if None)
             llm_manager: LLM manager (optional, for HyDE/Multi-Query)
             default_strategy: Default search strategy
             enable_caching: Enable result caching
             enable_reranking: Enable cross-encoder re-ranking
         """
-        self.vector_store = vector_store
-        self.embedding_manager = embedding_manager
-        self.llm_manager = llm_manager
+        # Lazy initialization of dependencies
+        self._vector_store = vector_store
+        self._embedding_manager = embedding_manager
+        self._llm_manager = llm_manager
         self.default_strategy = default_strategy
         
         # Components
@@ -85,24 +104,14 @@ class SearchOrchestrator:
         
         # Initialize cache if enabled
         if enable_caching:
-            try:
-                from src.cache.backends.redis_cache import get_redis_cache
-                self.cache = get_redis_cache()
-                logger.info("Search caching enabled")
-            except Exception as e:
-                logger.warning(f"Failed to initialize cache: {e}")
+            self._init_cache()
         
         # Initialize reranker if enabled
         if enable_reranking:
-            try:
-                from src.retrieval.reranking.cross_encoder import CrossEncoderReranker
-                self.reranker = CrossEncoderReranker()
-                logger.info("Search re-ranking enabled")
-            except Exception as e:
-                logger.warning(f"Failed to initialize reranker: {e}")
+            self._init_reranker()
         
         # Performance tracking
-        self.metrics = {
+        self.metrics: Dict[str, Any] = {
             "total_searches": 0,
             "cache_hits": 0,
             "cache_misses": 0,
@@ -118,6 +127,79 @@ class SearchOrchestrator:
             f"reranking={enable_reranking}"
         )
     
+    def _init_cache(self) -> None:
+        """Initialize search result cache."""
+        try:
+            from src.infrastructure.cache import get_redis_cache
+            self.cache = get_redis_cache()
+            logger.info("Search caching enabled")
+        except Exception as e:
+            logger.warning(f"Failed to initialize cache: {e}")
+    
+    def _init_reranker(self) -> None:
+        """Initialize cross-encoder reranker."""
+        try:
+            from src.retrieval.reranking.cross_encoder import CrossEncoderReranker
+            self.reranker = CrossEncoderReranker()
+            logger.info("Search re-ranking enabled")
+        except Exception as e:
+            logger.warning(f"Failed to initialize reranker: {e}")
+    
+    @property
+    def vector_store(self) -> "VectorDBManager":
+        """Get vector store (lazy initialization)."""
+        if self._vector_store is None:
+            from src.infrastructure.vectordb import get_vectordb_manager
+            self._vector_store = get_vectordb_manager()
+        return self._vector_store
+    
+    @property
+    def embedding_manager(self) -> "EmbeddingManager":
+        """Get embedding manager (lazy initialization)."""
+        if self._embedding_manager is None:
+            from src.infrastructure.embeddings import get_embedding_manager
+            self._embedding_manager = get_embedding_manager()
+        return self._embedding_manager
+    
+    @property
+    def llm_manager(self) -> Optional["LLMManager"]:
+        """Get LLM manager."""
+        return self._llm_manager
+    
+    @property
+    def name(self) -> str:
+        """Provider name (implements BaseProvider protocol)."""
+        return f"search-orchestrator:{self.default_strategy.value}"
+    
+    def is_available(self) -> bool:
+        """Check if orchestrator is available (implements BaseProvider protocol)."""
+        try:
+            return self.vector_store.is_available()
+        except Exception:
+            return False
+    
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Perform health check (implements BaseProvider protocol).
+        
+        Returns:
+            Dict with 'status' and optional details
+        """
+        try:
+            available = self.is_available()
+            return {
+                "status": "ok" if available else "error",
+                "default_strategy": self.default_strategy.value,
+                "caching_enabled": self.cache is not None,
+                "reranking_enabled": self.reranker is not None,
+                "metrics": self.metrics,
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+            }
+    
     def search(
         self,
         query: str,
@@ -126,35 +208,50 @@ class SearchOrchestrator:
         use_cache: bool = True,
         use_reranking: bool = False,
         top_k: Optional[int] = None,
+        filters: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> List[SearchResult]:
         """
         Execute search with specified strategy.
         
         Args:
-            query: Search query
+            query: Search query text
             strategy: Search strategy (default: self.default_strategy)
             config: Search configuration
             use_cache: Whether to use cache (if available)
             use_reranking: Whether to rerank results (if available)
             top_k: Override default top_k
+            filters: Metadata filters
             **kwargs: Strategy-specific parameters
             
         Returns:
             List of search results sorted by relevance
+            
+        Raises:
+            SearchError: If search fails
         """
         from config.settings import settings
+        
+        # Input validation
+        if not query or not query.strip():
+            logger.warning("Empty query received")
+            return []
+        
+        query = query.strip()
         
         start_time = datetime.now()
         
         strategy = strategy or self.default_strategy
         config = config or SearchConfig()
         
-        # Override top_k if provided
+        # Apply overrides
         if top_k:
             config.top_k = top_k
         elif not config.top_k:
             config.top_k = settings.SEARCH_TOP_K
+        
+        if filters:
+            config.filters = filters
         
         # Update metrics
         self.metrics["total_searches"] += 1
@@ -163,7 +260,7 @@ class SearchOrchestrator:
         
         logger.info(
             f"Search request: query='{query[:50]}...', "
-            f"strategy={strategy}, top_k={config.top_k}"
+            f"strategy={strategy.value}, top_k={config.top_k}"
         )
         
         # Check cache
@@ -225,7 +322,12 @@ class SearchOrchestrator:
             
         except Exception as e:
             logger.error(f"Search failed: {e}", exc_info=True)
-            return []
+            from src.core.exceptions import SearchError
+            raise SearchError(
+                f"Search failed: {e}", 
+                query=query[:50], 
+                strategy=strategy.value
+            )
     
     def multi_strategy_search(
         self,
@@ -302,8 +404,17 @@ class SearchOrchestrator:
         results_list: List[List[SearchResult]],
         k: int = 60
     ) -> List[SearchResult]:
-        """Fuse multiple result lists using RRF."""
-        doc_scores = {}
+        """
+        Fuse multiple result lists using Reciprocal Rank Fusion.
+        
+        Args:
+            results_list: List of result lists from different strategies
+            k: RRF constant (default: 60)
+            
+        Returns:
+            Fused and sorted results
+        """
+        doc_scores: Dict[str, Dict[str, Any]] = {}
         
         for results in results_list:
             for rank, result in enumerate(results, start=1):
@@ -335,7 +446,12 @@ class SearchOrchestrator:
         return fused_results
     
     def get_metrics(self) -> Dict[str, Any]:
-        """Get performance metrics."""
+        """
+        Get performance metrics.
+        
+        Returns:
+            Dict with search performance statistics
+        """
         cache_hit_rate = 0.0
         if self.metrics["total_searches"] > 0:
             cache_hit_rate = (
@@ -349,7 +465,7 @@ class SearchOrchestrator:
             "reranking_enabled": self.reranker is not None
         }
     
-    def reset_metrics(self):
+    def reset_metrics(self) -> None:
         """Reset performance metrics."""
         self.metrics = {
             "total_searches": 0,
@@ -367,7 +483,7 @@ class SearchOrchestrator:
         strategy: SearchStrategy,
         config: SearchConfig
     ) -> str:
-        """Generate cache key."""
+        """Generate cache key for query."""
         import hashlib
         
         key_data = f"{query}_{strategy.value}_{config.top_k}_{config.filters}"
@@ -384,7 +500,7 @@ class SearchOrchestrator:
             logger.error(f"Cache get failed: {e}")
             return None
     
-    def _save_to_cache(self, key: str, results: List[SearchResult]):
+    def _save_to_cache(self, key: str, results: List[SearchResult]) -> None:
         """Save results to cache."""
         if not self.cache:
             return
@@ -395,44 +511,38 @@ class SearchOrchestrator:
             logger.error(f"Cache set failed: {e}")
 
 
-# Global orchestrator instance
-_orchestrator: Optional[SearchOrchestrator] = None
-
-
 def get_search_orchestrator(
-    vector_store=None,
-    embedding_manager=None,
-    llm_manager=None,
+    vector_store: Optional["VectorDBManager"] = None,
+    embedding_manager: Optional["EmbeddingManager"] = None,
+    llm_manager: Optional["LLMManager"] = None,
     **kwargs
 ) -> SearchOrchestrator:
     """
     Get or create global search orchestrator instance.
     
+    Thread-safe singleton accessor.
+    
     Args:
-        vector_store: Vector store instance
-        embedding_manager: Embedding manager
-        llm_manager: LLM manager
+        vector_store: Vector store instance (only used on first call)
+        embedding_manager: Embedding manager (only used on first call)
+        llm_manager: LLM manager (only used on first call)
         **kwargs: Additional orchestrator parameters
         
     Returns:
-        Search orchestrator instance
+        SearchOrchestrator singleton instance
     """
-    global _orchestrator
+    return SearchOrchestrator(
+        vector_store=vector_store,
+        embedding_manager=embedding_manager,
+        llm_manager=llm_manager,
+        **kwargs
+    )
+
+
+def reset_search_orchestrator() -> None:
+    """
+    Reset the search orchestrator singleton.
     
-    if _orchestrator is None:
-        if not vector_store:
-            from src.infrastructure.vectordb.manager import get_vectordb_manager  # Use unified manager
-            vector_store = get_vectordb_manager()
-        
-        if not embedding_manager:
-            from src.infrastructure.embeddings.manager import get_embedding_manager
-            embedding_manager = get_embedding_manager()
-        
-        _orchestrator = SearchOrchestrator(
-            vector_store=vector_store,
-            embedding_manager=embedding_manager,
-            llm_manager=llm_manager,
-            **kwargs
-        )
-    
-    return _orchestrator
+    Useful for testing or reconfiguration.
+    """
+    SearchOrchestrator._reset_instance()

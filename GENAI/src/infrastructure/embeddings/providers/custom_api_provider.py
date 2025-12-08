@@ -8,6 +8,7 @@ Compatible with the existing provider system.
 import os
 import requests
 import logging
+from src.utils import get_logger
 import json
 from typing import List, Dict, Any, Optional, Union
 import urllib3
@@ -19,7 +20,7 @@ from config.settings import settings
 # Disable SSL warnings for custom endpoints
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def model_request(url: str, data: dict, model_type: str, testing: bool = False, headers: Dict[str, str] = None):
@@ -170,6 +171,11 @@ class CustomAPIEmbeddingProvider(EmbeddingProvider):
             "Content-Type": "application/json"
         }
         
+        # Connection pooling for better performance
+        self._session = requests.Session()
+        self._session.headers.update(self.headers)
+        self._session.verify = False  # Match existing behavior
+        
         logger.info(f"Custom API Embedding Provider initialized: {self.model_name}")
     
     def generate_embedding(self, text: str) -> List[float]:
@@ -181,19 +187,46 @@ class CustomAPIEmbeddingProvider(EmbeddingProvider):
             "input": text
         }
         
-        return model_request(self.api_url, data, "EB", testing=False, headers=self.headers)
+        try:
+            response = self._session.post(self.api_url, json=data)
+            response.raise_for_status()
+            return response.json()['data'][0]['embedding']
+        except Exception as e:
+            # Fallback to non-session request
+            return model_request(self.api_url, data, "EB", testing=False, headers=self.headers)
     
     def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """
         Generate embeddings for multiple texts.
-        """
-        # Generate one at a time (can be optimized if API supports batch)
-        embeddings = []
-        for text in texts:
-            embedding = self.generate_embedding(text)
-            embeddings.append(embedding)
         
-        return embeddings
+        Attempts batch API call first, falls back to sequential if not supported.
+        """
+        if not texts:
+            return []
+        
+        # Try batch API call first (many APIs support this)
+        try:
+            data = {
+                "model": self.model_name,
+                "input": texts  # Send all texts at once
+            }
+            response = self._session.post(self.api_url, json=data)
+            response.raise_for_status()
+            result = response.json()
+            
+            # Extract embeddings in order
+            embeddings = [item['embedding'] for item in sorted(result['data'], key=lambda x: x.get('index', 0))]
+            logger.debug(f"Batch embedding succeeded for {len(texts)} texts")
+            return embeddings
+            
+        except Exception as e:
+            logger.debug(f"Batch API not supported, falling back to sequential: {e}")
+            # Fallback to sequential (for APIs that don't support batch)
+            embeddings = []
+            for text in texts:
+                embedding = self.generate_embedding(text)
+                embeddings.append(embedding)
+            return embeddings
     
     def get_embedding_dimension(self) -> int:
         """Get embedding dimension."""

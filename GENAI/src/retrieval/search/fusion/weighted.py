@@ -7,10 +7,11 @@ them using weighted average.
 
 from typing import List
 import logging
+from src.utils import get_logger
 
 from src.retrieval.search.base import SearchResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def weighted_score_fusion(

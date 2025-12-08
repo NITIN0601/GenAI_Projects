@@ -141,13 +141,15 @@ def _download_single_file(full_url, download_dir, timeout, max_retries):
     Returns:
         tuple: (file_name, success: bool, error_message: str or None, file_size: int)
     """
+    from pathlib import Path
+    
     # Extract filename from URL
     file_name = full_url.split("/")[-1].replace(".pdf", "")
-    local_path = os.path.join(download_dir, f"{file_name}.pdf")
+    local_path = Path(download_dir) / f"{file_name}.pdf"
     
     # Skip if file already exists
-    if os.path.exists(local_path):
-        file_size = os.path.getsize(local_path)
+    if local_path.exists():
+        file_size = local_path.stat().st_size
         if file_size > 0:  # Valid file exists
             logger.info(f"⚡ {file_name}.pdf - Already exists ({file_size / 1024 / 1024:.2f} MB)")
             return (file_name, True, "Already exists (skipped)", file_size)
@@ -186,7 +188,7 @@ def _download_single_file(full_url, download_dir, timeout, max_retries):
                             f.write(chunk)
                             pbar.update(len(chunk))
             
-            file_size = os.path.getsize(local_path)
+            file_size = local_path.stat().st_size
             logger.info(f"{file_name}.pdf - Downloaded successfully ({file_size / 1024 / 1024:.2f} MB)")
             return (file_name, True, None, file_size)
             
@@ -223,9 +225,11 @@ def download_files(file_urls, download_dir='./raw_data', timeout=30, max_retries
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     
-    # Ensure the download directory exists
-    if not os.path.exists(download_dir):
-        os.makedirs(download_dir)
+    # Ensure the download directory exists (cross-platform)
+    from pathlib import Path
+    download_path = Path(download_dir)
+    if not download_path.exists():
+        download_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Created directory: {download_dir}")
 
     successful = []

@@ -184,6 +184,54 @@ class ResponseGenerationError(RAGError):
 
 
 # =========================================================================
+# Pipeline Errors
+# =========================================================================
+
+class PipelineError(GENAIException):
+    """Error in pipeline execution."""
+    pass
+
+
+class PipelineStepError(PipelineError):
+    """Error in a specific pipeline step."""
+    pass
+
+
+class PipelineValidationError(PipelineError):
+    """Pipeline context validation failed."""
+    pass
+
+
+class PipelineTimeoutError(PipelineError):
+    """Pipeline step timed out."""
+    pass
+
+
+# =========================================================================
+# Search Errors
+# =========================================================================
+
+class SearchError(GENAIException):
+    """Error during search operations."""
+    pass
+
+
+class SearchStrategyError(SearchError):
+    """Search strategy execution failed."""
+    pass
+
+
+class SearchTimeoutError(SearchError):
+    """Search operation timed out."""
+    pass
+
+
+class NoSearchResultsError(SearchError):
+    """No search results found."""
+    pass
+
+
+# =========================================================================
 # Cache Errors
 # =========================================================================
 

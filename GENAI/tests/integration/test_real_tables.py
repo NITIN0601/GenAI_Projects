@@ -7,7 +7,7 @@ from pathlib import Path
 from docling.document_converter import DocumentConverter
 from docling_core.types.doc import DocItemLabel
 from embeddings.table_chunker import TableChunker
-from src.models.schemas import TableMetadata
+from src.domain.tables import TableMetadata
 from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel

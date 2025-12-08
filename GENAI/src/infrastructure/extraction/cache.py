@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime, timedelta
 import logging
+from src.utils import get_logger
 
 from src.infrastructure.extraction.base import ExtractionResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ExtractionCache:

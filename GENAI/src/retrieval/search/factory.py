@@ -9,6 +9,7 @@ Industry standard: Factory Pattern
 
 from typing import Optional, Dict, Any, Type
 import logging
+from src.utils import get_logger
 
 from src.retrieval.search.base import (
     BaseSearchStrategy,
@@ -16,7 +17,7 @@ from src.retrieval.search.base import (
     SearchConfig
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class SearchStrategyFactory:

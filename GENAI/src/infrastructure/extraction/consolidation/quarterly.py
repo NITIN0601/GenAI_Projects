@@ -13,11 +13,12 @@ from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 from datetime import datetime
 import logging
+from src.utils import get_logger
 from difflib import SequenceMatcher
 
 from config.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class QuarterlyTableConsolidator:

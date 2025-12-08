@@ -1,31 +1,99 @@
-"""Retriever for semantic search and context building."""
+"""
+Retriever for semantic search and context building.
 
-from typing import List, Dict, Any, Optional
-from src.models.schemas import TableMetadata
-from src.infrastructure.vectordb.manager import get_vectordb_manager  # Use unified manager
+Provides thread-safe singleton access to document retrieval with support for:
+- Semantic search via VectorDB
+- Metadata filtering
+- Context building for RAG
+- Query filter parsing
+
+Example:
+    >>> from src.retrieval import get_retriever
+    >>> 
+    >>> retriever = get_retriever()
+    >>> results = retriever.retrieve("revenue Q1 2024", top_k=5)
+"""
+
+import re
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
+
+from src.core.singleton import ThreadSafeSingleton
+from src.domain.tables import TableMetadata
+from src.utils import get_logger
+
+logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.vectordb.manager import VectorDBManager
+    from src.domain import SearchResult
 
 
-class Retriever:
+class Retriever(metaclass=ThreadSafeSingleton):
     """
     Handles retrieval of relevant chunks from vector store.
+    
+    Thread-safe singleton manager for document retrieval.
+    
     Supports semantic search and metadata filtering.
+    
+    Attributes:
+        vector_store: VectorDBManager instance
     """
     
-    def __init__(self, vector_store=None):
+    def __init__(self, vector_store: Optional["VectorDBManager"] = None):
         """
         Initialize retriever.
         
         Args:
-            vector_store: VectorDBManager instance (optional)
+            vector_store: VectorDBManager instance (auto-created if None)
         """
-        self.vector_store = vector_store or get_vectordb_manager()
+        self._vector_store = vector_store
+    
+    @property
+    def vector_store(self) -> "VectorDBManager":
+        """Get vector store (lazy initialization)."""
+        if self._vector_store is None:
+            from src.infrastructure.vectordb.manager import get_vectordb_manager
+            self._vector_store = get_vectordb_manager()
+        return self._vector_store
+    
+    @property
+    def name(self) -> str:
+        """Provider name (implements BaseProvider protocol)."""
+        return "retriever"
+    
+    def is_available(self) -> bool:
+        """Check if retriever is available (implements BaseProvider protocol)."""
+        try:
+            return self.vector_store.is_available()
+        except Exception:
+            return False
+    
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Perform health check (implements BaseProvider protocol).
+        
+        Returns:
+            Dict with 'status' and optional details
+        """
+        try:
+            available = self.is_available()
+            return {
+                "status": "ok" if available else "error",
+                "vector_store": self.vector_store.name if self._vector_store else "not initialized",
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+            }
     
     def retrieve(
         self,
         query: str,
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None,
-        similarity_threshold: float = None
+        similarity_threshold: Optional[float] = None
     ) -> List["SearchResult"]:
         """
         Retrieve relevant chunks for a query.
@@ -40,21 +108,18 @@ class Retriever:
             List of SearchResult objects
         """
         from config.settings import settings
-        from src.models.schemas import SearchResult
         
         if similarity_threshold is None:
             similarity_threshold = settings.SIMILARITY_THRESHOLD
         
         # Perform semantic search using VectorDBManager
-        # Now returns List[SearchResult]
         results = self.vector_store.search(
             query=query,
             top_k=top_k * 2,  # Get more results for filtering
             filters=filters
         )
         
-        # Apply threshold if needed (logic depends on metric)
-        # For now, just return top_k
+        # Apply threshold if needed
         return results[:top_k]
     
     def build_context(
@@ -115,12 +180,11 @@ class Retriever:
             List of TableMetadata objects
         """
         sources = []
-        seen = set()  # Avoid duplicates
+        seen = set()
         
         for chunk in retrieved_chunks:
             metadata = chunk.metadata
             
-            # Create unique key
             key = (
                 metadata.source_doc,
                 metadata.page_no,
@@ -147,7 +211,6 @@ class Retriever:
         query_lower = query.lower()
         
         # Extract year
-        import re
         year_match = re.search(r'20\d{2}', query)
         if year_match:
             filters['year'] = int(year_match.group(0))
@@ -184,13 +247,27 @@ class Retriever:
         return filters
 
 
-# Global retriever instance
-_retriever: Optional[Retriever] = None
+def get_retriever(
+    vector_store: Optional["VectorDBManager"] = None
+) -> Retriever:
+    """
+    Get or create global retriever instance.
+    
+    Thread-safe singleton accessor.
+    
+    Args:
+        vector_store: VectorDBManager instance (only used on first call)
+        
+    Returns:
+        Retriever singleton instance
+    """
+    return Retriever(vector_store=vector_store)
 
 
-def get_retriever() -> Retriever:
-    """Get or create global retriever instance."""
-    global _retriever
-    if _retriever is None:
-        _retriever = Retriever()
-    return _retriever
+def reset_retriever() -> None:
+    """
+    Reset the retriever singleton.
+    
+    Useful for testing or reconfiguration.
+    """
+    Retriever._reset_instance()

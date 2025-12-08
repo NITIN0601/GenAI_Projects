@@ -15,7 +15,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 from config.settings import settings
-from src.models.schemas import TableChunk
+from src.domain.tables import TableChunk
 from src.utils import get_logger
 from src.infrastructure.embeddings.manager import get_embedding_manager
 
@@ -63,33 +63,72 @@ class RedisVectorStore(VectorStore):
             logger.info(f"Using existing index: {self.index_name}")
         except Exception:
             # Index doesn't exist, create it
+            # NOTE: This schema must match TableMetadata fields for full parity
+            from redis.commands.search.field import NumericField
+            
             schema = (
+                # Content
                 TextField("content"),
-                # Identity
+                
+                # === Core Document Info ===
                 TagField("source_doc"),
+                TagField("table_id"),
                 TagField("chunk_reference_id"),
+                NumericField("page_no"),
+                TextField("table_title"),
+                TextField("original_table_title"),
                 
-                # Company
-                TagField("company_ticker"),
+                # === Company Info ===
                 TextField("company_name"),
+                TagField("company_ticker"),
                 
-                # Context
-                TagField("statement_type"),
-                TagField("filing_type"),
-                TagField("fiscal_period_end"),
-                
-                # Table Info
-                TextField("table_title"),  # TextField for full-text search on titles
-                TagField("table_type"),
-                
-                # Time
+                # === Temporal Info ===
                 TagField("year"),
                 TagField("quarter"),
+                TagField("quarter_number"),
+                TagField("month"),
+                TagField("report_type"),
+                TextField("fiscal_period"),
                 
-                # Financials
+                # === Table Classification ===
+                TagField("table_type"),
+                TagField("statement_type"),
+                NumericField("chunk_table_index"),
+                NumericField("table_start_page"),
+                NumericField("table_end_page"),
+                
+                # === Table Structure ===
+                TextField("column_headers"),
+                TextField("row_headers"),
+                NumericField("column_count"),
+                NumericField("row_count"),
+                
+                # === Multi-level Headers ===
+                TagField("has_multi_level_headers"),
+                TextField("main_header"),
+                TextField("sub_headers"),
+                
+                # === Hierarchical Structure ===
+                TextField("parent_section"),
+                TagField("has_hierarchy"),
+                TextField("subsections"),
+                TagField("table_structure"),
+                
+                # === Financial Context ===
                 TagField("units"),
                 TagField("currency"),
-                TagField("is_consolidated"),
+                TagField("has_currency"),
+                NumericField("currency_count"),
+                
+                # === Extraction Info ===
+                TagField("extraction_backend"),
+                NumericField("quality_score"),
+                NumericField("extraction_confidence"),
+                
+                # === Embedding Info ===
+                TagField("embedding_model"),
+                NumericField("embedding_dimension"),
+                TagField("embedding_provider"),
                 
                 # Vector
                 VectorField(
@@ -104,7 +143,7 @@ class RedisVectorStore(VectorStore):
             )
             definition = IndexDefinition(prefix=["doc:"], index_type=IndexType.HASH)
             self.client.ft(self.index_name).create_index(schema, definition=definition)
-            logger.info(f"Created index: {self.index_name} with full metadata schema")
+            logger.info(f"Created index: {self.index_name} with comprehensive TableMetadata schema")
 
     def add_texts(
         self,
@@ -240,7 +279,7 @@ class RedisVectorStore(VectorStore):
         Returns:
             List of SearchResult objects
         """
-        from src.models.schemas import SearchResult, TableMetadata
+        from src.domain import SearchResult, TableMetadata
         
         # Use similarity_search_with_score
         docs_and_scores = self.similarity_search_with_score(
@@ -360,13 +399,47 @@ class RedisVectorStore(VectorStore):
         store.add_texts(texts, metadatas, **kwargs)
         return store
 
-# Global Redis store instance
+# Thread-safe module-level singleton
 _redis_store: Optional[RedisVectorStore] = None
+_redis_lock = None
+
+def _get_redis_lock():
+    """Get or create the singleton lock."""
+    global _redis_lock
+    if _redis_lock is None:
+        import threading
+        _redis_lock = threading.Lock()
+    return _redis_lock
+
 
 def get_redis_store() -> RedisVectorStore:
-    """Get or create global Redis store instance."""
+    """
+    Get or create global Redis store instance.
+    
+    Thread-safe singleton accessor.
+    
+    Returns:
+        RedisVectorStore singleton instance
+    """
     global _redis_store
-    if _redis_store is None:
-        embedding_manager = get_embedding_manager()
-        _redis_store = RedisVectorStore(embedding_function=embedding_manager)
-    return _redis_store
+    
+    if _redis_store is not None:
+        return _redis_store
+    
+    with _get_redis_lock():
+        if _redis_store is None:
+            embedding_manager = get_embedding_manager()
+            _redis_store = RedisVectorStore(embedding_function=embedding_manager)
+        return _redis_store
+
+
+def reset_redis_store() -> None:
+    """
+    Reset the Redis store singleton.
+    
+    Useful for testing or reconfiguration.
+    """
+    global _redis_store
+    with _get_redis_lock():
+        _redis_store = None
+

@@ -11,8 +11,28 @@ from src.domain.tables.entities import (
     FinancialTable,
 )
 
+from src.domain.tables.enhanced import (
+    ColumnHeader,
+    RowHeader,
+    DataCell,
+    Footnote,
+    EnhancedFinancialTable,
+    EnhancedDocument,
+    ProcessingQueueItem,
+)
+
 __all__ = [
+    # Core entities
     'TableMetadata',
     'TableChunk',
     'FinancialTable',
+    # Enhanced entities
+    'ColumnHeader',
+    'RowHeader',
+    'DataCell',
+    'Footnote',
+    'EnhancedFinancialTable',
+    'EnhancedDocument',
+    'ProcessingQueueItem',
 ]
+

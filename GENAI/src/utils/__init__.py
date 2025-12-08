@@ -7,6 +7,8 @@ Provides:
 - Metrics and monitoring
 - Helper functions
 - Cleanup utilities
+
+Note: Tracing/observability is now in src.infrastructure.observability
 """
 
 from src.utils.logger import get_logger, setup_logging
@@ -33,6 +35,14 @@ from src.utils.cleanup import (
     full_clean
 )
 
+# Re-export tracing from infrastructure for convenience
+from src.infrastructure.observability import (
+    setup_tracing,
+    is_tracing_enabled,
+    traceable_function,
+    get_tracing_callbacks,
+)
+
 __all__ = [
     'get_logger',
     'setup_logging',
@@ -52,6 +62,10 @@ __all__ = [
     'clear_pycache',
     'clear_application_cache',
     'quick_clean',
-    'full_clean'
+    'full_clean',
+    # Tracing (re-exported from infrastructure.observability)
+    'setup_tracing',
+    'is_tracing_enabled',
+    'traceable_function',
+    'get_tracing_callbacks',
 ]
-

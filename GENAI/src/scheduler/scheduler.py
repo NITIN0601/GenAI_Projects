@@ -6,6 +6,7 @@ Monitors filing calendar and automatically downloads new filings when they becom
 
 from datetime import datetime, timedelta
 import logging
+from src.utils import get_logger
 from typing import Optional
 from pathlib import Path
 
@@ -20,7 +21,7 @@ except ImportError:
 from src.scheduler.filing_calendar import FilingCalendar
 from config.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class FilingScheduler:

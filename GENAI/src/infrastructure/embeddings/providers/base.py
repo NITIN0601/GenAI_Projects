@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import List
 
 # Import data models
-from src.models import TableChunk, TableMetadata
+from src.domain.tables import TableChunk, TableMetadata
 
 
 class EmbeddingProvider(ABC):

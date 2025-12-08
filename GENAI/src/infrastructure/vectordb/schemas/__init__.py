@@ -18,7 +18,7 @@ from src.infrastructure.vectordb.schemas.vectordb_schemas import (
 )
 
 # Re-export the core schemas from models
-from src.models.schemas import TableMetadata, TableChunk
+from src.domain.tables import TableMetadata, TableChunk
 
 __all__ = [
     # Core schemas (from extraction)

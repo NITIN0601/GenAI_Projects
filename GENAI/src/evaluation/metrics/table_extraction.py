@@ -11,10 +11,11 @@ Evaluates the quality of extracted tabular data:
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 import logging
+from src.utils import get_logger
 import re
 from statistics import mean
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

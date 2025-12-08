@@ -2,7 +2,7 @@
 Domain layer - Business entities and value objects.
 
 This module contains domain models organized by bounded context:
-- tables: Financial table entities (TableMetadata, TableChunk)
+- tables: Financial table entities (TableMetadata, TableChunk, Enhanced*)
 - documents: Document processing entities (DocumentMetadata, PageLayout)
 - queries: RAG query/response entities (RAGQuery, RAGResponse, SearchResult)
 
@@ -14,6 +14,14 @@ from src.domain.tables import (
     TableMetadata,
     TableChunk,
     FinancialTable,
+    # Enhanced entities
+    ColumnHeader,
+    RowHeader,
+    DataCell,
+    Footnote,
+    EnhancedFinancialTable,
+    EnhancedDocument,
+    ProcessingQueueItem,
 )
 
 from src.domain.documents import (
@@ -30,10 +38,18 @@ from src.domain.queries import (
 )
 
 __all__ = [
-    # Tables
+    # Tables - Core
     'TableMetadata',
     'TableChunk',
     'FinancialTable',
+    # Tables - Enhanced
+    'ColumnHeader',
+    'RowHeader',
+    'DataCell',
+    'Footnote',
+    'EnhancedFinancialTable',
+    'EnhancedDocument',
+    'ProcessingQueueItem',
     # Documents
     'DocumentMetadata',
     'PageLayout',
@@ -44,3 +60,4 @@ __all__ = [
     'RAGResponse',
     'SearchResult',
 ]
+

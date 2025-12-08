@@ -13,7 +13,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 from config.settings import settings
-from src.models.schemas import TableChunk
+from src.domain.tables import TableChunk
 from src.infrastructure.embeddings.manager import get_embedding_manager
 from src.utils import get_logger
 
@@ -47,7 +47,7 @@ class FAISSVectorStore(VectorStore):
             index_type: Type of FAISS index (flat, ivf, hnsw)
         """
         self.embedding_function = embedding_function
-        self.persist_dir = persist_dir or os.path.join(settings.PROJECT_ROOT, "faiss_index")
+        self.persist_dir = persist_dir or str(Path(settings.PROJECT_ROOT) / "faiss_index")
         self.index_type = index_type
         
         Path(self.persist_dir).mkdir(parents=True, exist_ok=True)
@@ -235,7 +235,7 @@ class FAISSVectorStore(VectorStore):
         Returns:
             List of SearchResult objects
         """
-        from src.models.schemas import SearchResult, TableMetadata
+        from src.domain import SearchResult, TableMetadata
         
         # Use similarity_search_with_score
         docs_and_scores = self.similarity_search_with_score(
@@ -324,10 +324,33 @@ class FAISSVectorStore(VectorStore):
         return results
     
     def _matches_filters(self, metadata: Dict[str, Any], filters: Dict[str, Any]) -> bool:
-        """Check if metadata matches all filters."""
+        """
+        Check if metadata matches all filters.
+        
+        Supports:
+        - Exact match for numeric fields (year, page_no)
+        - Contains/substring match for text fields (table_title, source_doc)
+        """
+        text_fields = {'table_title', 'source_doc', 'report_type', 'company_name'}
+        
         for key, value in filters.items():
-            if key not in metadata or metadata[key] != value:
+            if key not in metadata:
                 return False
+            
+            meta_value = metadata[key]
+            
+            # For text fields, use case-insensitive contains matching
+            if key in text_fields:
+                if isinstance(meta_value, str) and isinstance(value, str):
+                    if value.lower() not in meta_value.lower():
+                        return False
+                elif meta_value != value:
+                    return False
+            else:
+                # Exact match for other fields (year, page_no, etc.)
+                if meta_value != value:
+                    return False
+        
         return True
     
     @classmethod
@@ -441,14 +464,47 @@ class FAISSVectorStore(VectorStore):
             logger.warning("Starting with empty index")
 
 
-# Global FAISS store instance
+# Thread-safe module-level singleton
 _faiss_store: Optional[FAISSVectorStore] = None
+_faiss_lock = None
+
+def _get_faiss_lock():
+    """Get or create the singleton lock."""
+    global _faiss_lock
+    if _faiss_lock is None:
+        import threading
+        _faiss_lock = threading.Lock()
+    return _faiss_lock
 
 
 def get_faiss_store() -> FAISSVectorStore:
-    """Get or create global FAISS store instance."""
+    """
+    Get or create global FAISS store instance.
+    
+    Thread-safe singleton accessor.
+    
+    Returns:
+        FAISSVectorStore singleton instance
+    """
     global _faiss_store
-    if _faiss_store is None:
-        embedding_manager = get_embedding_manager()
-        _faiss_store = FAISSVectorStore(embedding_function=embedding_manager)
-    return _faiss_store
+    
+    if _faiss_store is not None:
+        return _faiss_store
+    
+    with _get_faiss_lock():
+        if _faiss_store is None:
+            embedding_manager = get_embedding_manager()
+            _faiss_store = FAISSVectorStore(embedding_function=embedding_manager)
+        return _faiss_store
+
+
+def reset_faiss_store() -> None:
+    """
+    Reset the FAISS store singleton.
+    
+    Useful for testing or reconfiguration.
+    """
+    global _faiss_store
+    with _get_faiss_lock():
+        _faiss_store = None
+

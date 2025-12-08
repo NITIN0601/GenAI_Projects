@@ -2,15 +2,16 @@
 Prompt Loader Module.
 
 Responsible for loading prompt templates and few-shot examples from the YAML configuration.
-Implements a Singleton pattern with caching to ensure prompts are loaded and created only once.
+Implements a Singleton pattern using module-level global (consistent with other managers).
 """
 
-import os
 import yaml
-import logging
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 
-logger = logging.getLogger(__name__)
+from src.utils import get_logger
+
+logger = get_logger(__name__)
 
 try:
     from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
@@ -24,33 +25,38 @@ except ImportError:
 
 class PromptLoader:
     """
-    Singleton class to load and manage prompt templates from configuration.
+    Prompt template loader and manager.
     
     Features:
     - Loads prompts once from YAML on first access
     - Caches created PromptTemplate objects for performance
     - Provides lazy loading of individual prompts
-    """
-    _instance = None
-    _prompts: Dict[str, Any] = {}
-    _few_shot_examples: List[Dict[str, str]] = []
     
-    # Cache for created PromptTemplate objects
-    _template_cache: Dict[str, PromptTemplate] = {}
-    _chat_template_cache: Dict[str, ChatPromptTemplate] = {}
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(PromptLoader, cls).__new__(cls)
-            cls._instance._load_prompts()
-        return cls._instance
+    Usage:
+        loader = get_prompt_loader()
+        prompt = loader.get_prompt_template("financial_analysis")
+    """
+    
+    def __init__(self):
+        """Initialize prompt loader and load prompts from YAML."""
+        self._prompts: Dict[str, Any] = {}
+        self._few_shot_examples: List[Dict[str, str]] = []
+        
+        # Cache for created PromptTemplate objects
+        self._template_cache: Dict[str, PromptTemplate] = {}
+        self._chat_template_cache: Dict[str, ChatPromptTemplate] = {}
+        
+        # Load prompts on initialization
+        self._load_prompts()
+        
+        logger.info("PromptLoader initialized")
 
     def _load_prompts(self):
         """Load prompts from YAML file."""
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        config_path = os.path.join(base_dir, "config", "prompts.yaml")
+        base_dir = Path(__file__).resolve().parent.parent.parent
+        config_path = base_dir / "config" / "prompts.yaml"
         
-        if not os.path.exists(config_path):
+        if not config_path.exists():
             logger.error(f"Prompts configuration file not found at {config_path}")
             return
 
@@ -141,9 +147,35 @@ class PromptLoader:
         self._template_cache.clear()
         self._chat_template_cache.clear()
         logger.info("Prompt template cache cleared")
+    
+    def reload(self):
+        """Reload prompts from YAML file."""
+        self.clear_cache()
+        self._prompts = {}
+        self._few_shot_examples = []
+        self._load_prompts()
+        logger.info("Prompts reloaded from configuration")
 
 
-# Global accessor
+# Global instance (singleton pattern - consistent with other managers)
+_prompt_loader: Optional[PromptLoader] = None
+
+
 def get_prompt_loader() -> PromptLoader:
-    """Get the global PromptLoader instance."""
-    return PromptLoader()
+    """
+    Get or create global prompt loader.
+    
+    Follows same pattern as:
+    - get_pipeline_manager()
+    - get_embedding_manager()
+    - get_llm_manager()
+    
+    Returns:
+        PromptLoader singleton instance
+    """
+    global _prompt_loader
+    
+    if _prompt_loader is None:
+        _prompt_loader = PromptLoader()
+    
+    return _prompt_loader

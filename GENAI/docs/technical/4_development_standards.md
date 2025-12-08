@@ -2,114 +2,81 @@
 
 ## Overview
 
-After the restructuring, all imports now follow a consistent pattern using the `src.` prefix. The `models/` directory has been moved to `src/models/` to eliminate circular dependencies.
+The GENAI codebase follows a domain-driven design pattern. All core data models are defined in `src/domain/` as the **single source of truth**.
 
-## New Import Structure
+## Import Structure
 
-### Models and Schemas
+### Domain Layer (Recommended)
 
-All data models are now under `src.models`:
+All core schemas are in `src.domain`:
 
 ```python
-# Table schemas
-from src.models.schemas import TableMetadata, TableChunk, FinancialTable
+# Table schemas (recommended)
+from src.domain.tables import TableMetadata, TableChunk, FinancialTable
 
-# Enhanced schemas
-from src.models.enhanced_schemas import (
+# Query/Response schemas
+from src.domain.queries import RAGQuery, RAGResponse, SearchResult
+
+# Document schemas
+from src.domain.documents import DocumentMetadata, PageLayout, Period, DocumentProcessingResult
+
+# Or import from domain root
+from src.domain import TableMetadata, RAGQuery, RAGResponse
+```
+
+### Models Layer (Convenience Re-exports)
+
+For convenience, `src.models` re-exports from `src.domain`:
+
+```python
+# These work but domain imports are preferred
+from src.models import TableMetadata, RAGQuery, RAGResponse
+from src.models.schemas import TableMetadata, TableChunk
+```
+
+### Enhanced Schemas
+
+Extended schemas not yet migrated to domain:
+
+```python
+from src.models.schemas.enhanced_schemas import (
     EnhancedDocument,
-    DocumentMetadata,
     EnhancedFinancialTable,
     ColumnHeader,
     RowHeader,
     DataCell,
-    Period
-)
-
-# Vector DB schemas
-from src.models.vectordb_schemas import TableChunk, VectorDBStats
-
-# Embedding models
-from src.models.embeddings import (
-    EmbeddingProvider,
-    EmbeddingManager,
-    get_embedding_manager
 )
 ```
 
-### Extraction System
+### Infrastructure Layer
 
 ```python
-# Main extractor
-from src.extraction import Extractor, extract_pdf
+# Extraction
+from src.infrastructure.extraction.extractor import UnifiedExtractor
 
-# Backends
-from src.extraction.backends import (
-    DoclingBackend,
-    PyMuPDFBackend,
-    PDFPlumberBackend,
-    CamelotBackend
-)
+# Embeddings
+from src.infrastructure.embeddings.manager import get_embedding_manager
+from src.infrastructure.embeddings.chunking import TableChunker
 
-# Formatters
-from src.extraction.formatters.table_formatter import (
-    TableStructureFormatter,
-    format_table_structure
-)
+# VectorDB
+from src.infrastructure.vectordb.manager import get_vectordb_manager
+from src.infrastructure.vectordb.stores.faiss_store import FAISSVectorStore
+from src.infrastructure.vectordb.stores.chromadb_store import VectorStore
+from src.infrastructure.vectordb.stores.redis_store import RedisVectorStore
 
-from src.extraction.formatters.enhanced_formatter import (
-    EnhancedTableFormatter,
-    format_enhanced_table
-)
-
-# Quality and caching
-from src.extraction.quality import QualityAssessor
-from src.extraction.cache import ExtractionCache
-from src.extraction.strategy import ExtractionStrategy
+# LLM
+from src.infrastructure.llm.manager import get_llm_manager
 ```
 
-### Embeddings
-
-```python
-# Embedding manager
-from src.embeddings.manager import get_embedding_manager
-
-# Multi-level embeddings
-from src.embeddings.multi_level import MultiLevelEmbeddingGenerator
-
-# Chunking
-from src.embeddings.chunking import TableChunker, get_table_chunker
-
-# Providers
-from src.embeddings.providers import (
-    OpenAIEmbeddingProvider,
-    LocalEmbeddingProvider
-)
-```
-
-### Vector Store
-
-```python
-# Vector store interface
-from src.vector_store.stores.chromadb_store import get_vector_store
-
-# Other stores
-from src.vector_store.stores.faiss_store import FAISSVectorStore
-from src.vector_store.stores.redis_store import RedisVectorStore
-```
-
-### RAG System
+### RAG and Retrieval
 
 ```python
 # Query processing
 from src.retrieval.query_processor import get_query_processor, QueryProcessor
-
-# Retriever
 from src.retrieval.retriever import get_retriever, Retriever
 
 # RAG pipeline
 from src.rag.pipeline import get_query_engine
-from src.rag.query_understanding import QueryUnderstanding, QueryType
-from src.rag.table_consolidation import TableConsolidationEngine
 ```
 
 ### Utilities
@@ -118,182 +85,101 @@ from src.rag.table_consolidation import TableConsolidationEngine
 # Logging
 from src.utils import get_logger, setup_logging
 
-# Exceptions
-from src.utils import (
-    GENAIException,
-    ExtractionError,
-    EmbeddingError,
-    VectorStoreError,
-    LLMError,
-    RAGError
-)
-
-# Helper functions
-from src.utils import (
-    compute_file_hash,
-    get_pdf_files,
-    ensure_directory,
-    format_number,
-    truncate_text
-)
+# Cleanup utilities
+from src.utils.cleanup import clear_all_cache, full_clean, quick_clean
 
 # Extraction utilities
-from src.utils.extraction_utils import (
-    PDFMetadataExtractor,
-    DoclingHelper,
-    TableClassifier
-)
-
-# Metrics
-from src.utils.metrics import get_metrics_collector
-```
-
-### Cache System
-
-```python
-# Redis cache
-from src.cache.backends.redis_cache import get_redis_cache
-```
-
-## Common Import Patterns
-
-### For Scripts
-
-Scripts in the `scripts/` directory should import like this:
-
-```python
-#!/usr/bin/env python3
-import sys
-from pathlib import Path
-
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-# Now import from src
-from src.extraction import Extractor
-from src.models.schemas import TableMetadata
-from src.embeddings.manager import get_embedding_manager
-```
-
-### For Tests
-
-Tests in the `tests/` directory:
-
-```python
-import pytest
-import sys
-from pathlib import Path
-
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-# Import from src
-from src.extraction import Extractor
-from src.models.schemas import TableMetadata
-```
-
-### For Main Application
-
-The `main.py` file:
-
-```python
-from src.extraction.extractor import UnifiedExtractor as Extractor
-from src.embeddings.multi_level import MultiLevelEmbeddingGenerator
-from src.embeddings.manager import get_embedding_manager
-from src.vector_store.stores.chromadb_store import get_vector_store
-from src.retrieval.query_processor import get_query_processor
-from src.cache.backends.redis_cache import get_redis_cache
-from src.models.enhanced_schemas import EnhancedDocument, DocumentMetadata
+from src.utils.extraction_utils import PDFMetadataExtractor, DoclingHelper
 ```
 
 ## Module Organization
 
 ```
 src/
-├── models/              # All data models and schemas
-│   ├── schemas/         # Basic schemas
-│   ├── embeddings/      # Embedding-related models
-│   ├── enhanced_schemas.py
-│   └── vectordb_schemas.py
-├── extraction/          # PDF extraction system
-│   ├── backends/        # Different extraction backends
-│   ├── formatters/      # Table formatters
-│   ├── extractor.py     # Main extractor
-│   ├── quality.py       # Quality assessment
-│   └── cache.py         # Extraction caching
-├── embeddings/          # Embedding generation
-│   ├── chunking/        # Text/table chunking
-│   ├── providers/       # Embedding providers
-│   ├── manager.py       # Embedding manager
-│   └── multi_level.py   # Multi-level embeddings
-├── vector_store/        # Vector database
-│   └── stores/          # Different vector store implementations
+├── domain/              # SINGLE SOURCE OF TRUTH for data models
+│   ├── tables/          # TableMetadata, TableChunk, FinancialTable
+│   ├── queries/         # RAGQuery, RAGResponse, SearchResult
+│   └── documents/       # DocumentMetadata, PageLayout, Period
+├── models/              # Re-exports from domain (convenience)
+│   └── schemas/         # Re-exports + enhanced_schemas
+├── infrastructure/      # External system integrations
+│   ├── extraction/      # PDF extraction backends
+│   ├── embeddings/      # Embedding generation
+│   ├── vectordb/        # Vector database stores
+│   ├── llm/             # LLM providers
+│   └── cache/           # Caching backends
 ├── retrieval/           # Query and retrieval
-│   ├── query_processor.py
-│   └── retriever.py
 ├── rag/                 # RAG pipeline
-│   ├── pipeline.py
-│   ├── query_understanding.py
-│   └── table_consolidation.py
-├── llm/                 # LLM integration
-│   ├── manager.py
-│   └── prompts/
-├── cache/               # Caching system
-│   └── backends/
-└── utils/               # Utilities
-    ├── logger.py
-    ├── exceptions.py
-    ├── helpers.py
-    ├── extraction_utils.py
-    └── metrics.py
+├── pipeline/            # Data processing pipeline
+│   └── steps/           # extract, embed steps
+├── core/                # Core utilities and interfaces
+└── utils/               # Helper utilities
 ```
 
-## Migration from Old Imports
+## Factory Methods
 
-If you have old code using the previous import structure, update as follows:
+### TableMetadata.from_extraction()
 
-### Old → New
+Create TableMetadata from extraction results:
 
 ```python
-# OLD (deprecated)
-from models.schemas import TableMetadata
-from models.enhanced_schemas import EnhancedDocument
-from extraction.extractor import UnifiedExtractor
+from src.domain.tables import TableMetadata
 
-# NEW (correct)
-from src.models.schemas import TableMetadata
-from src.models.enhanced_schemas import EnhancedDocument
-from src.extraction.extractor import UnifiedExtractor
+metadata = TableMetadata.from_extraction(
+    table_meta=table_data,       # Dict or object with table-level metadata
+    doc_metadata=doc_info,       # Dict with document-level metadata
+    filename="10q0625.pdf",
+    table_index=0,
+    embedding=embedding_vector,   # Optional
+    embedding_model="all-MiniLM-L6-v2",
+    embedding_provider="local"
+)
+```
+
+## Common Import Patterns
+
+### For Pipeline Steps
+
+```python
+from src.domain.tables import TableChunk, TableMetadata
+from src.infrastructure.embeddings.manager import get_embedding_manager
+from src.infrastructure.vectordb.manager import get_vectordb_manager
+```
+
+### For Scripts
+
+```python
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.domain import TableMetadata, RAGQuery
+from src.infrastructure.extraction.extractor import UnifiedExtractor
+```
+
+### For Tests
+
+```python
+import pytest
+from src.domain.tables import TableMetadata, TableChunk
 ```
 
 ## Best Practices
 
-1. **Always use absolute imports** from `src.` - no relative imports
-2. **Import specific items** instead of using wildcards (`from module import *`)
-3. **Group imports** logically: stdlib, third-party, then src imports
-4. **Use type hints** with imported types for better IDE support
+1. **Import from `src.domain`** for core schemas (TableMetadata, RAGQuery, etc.)
+2. **Use absolute imports** from `src.` - no relative imports
+3. **Import specific items** instead of wildcards
+4. **Group imports** logically: stdlib, third-party, then src imports
 
-## Troubleshooting
+## Migration Reference
 
-### Import Error: "No module named 'models'"
+```python
+# OLD (deprecated)
+from src.models.schemas import TableMetadata
+from models.schemas import TableMetadata
 
-**Problem**: Old import path being used  
-**Solution**: Update to `from src.models import ...`
-
-### Import Error: "cannot import name 'X'"
-
-**Problem**: Function or class doesn't exist in module  
-**Solution**: Check the module's `__all__` list or view the source file
-
-### Circular Import Error
-
-**Problem**: Two modules importing from each other  
-**Solution**: This should not happen with the new structure. If it does, report it as a bug.
-
-## Summary
-
-- All imports now use `src.` prefix
-- `models/` is now `src/models/`
-- No circular dependencies
-- Consistent import patterns throughout
-- Better IDE support and type checking
+# NEW (correct)
+from src.domain.tables import TableMetadata
+from src.domain import TableMetadata
+```

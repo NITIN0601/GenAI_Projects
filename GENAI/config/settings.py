@@ -31,13 +31,9 @@ class Settings(BaseSettings):
     PROCESSED_DATA_DIR: str = os.path.join(DATA_DIR, "processed")
     CACHE_DATA_DIR: str = os.path.join(DATA_DIR, "cache")
     
-    # Raw data directory (configurable via .env)
-    # Default: raw_data inside GENAI folder (self-contained)
-    RAW_DATA_DIR: str = os.path.join(PROJECT_ROOT, "raw_data")
-    
-    # Legacy paths (for backward compatibility during migration)
-    LEGACY_OUTPUTS_DIR: str = os.path.join(PROJECT_ROOT, "outputs")
-    LEGACY_CACHE_DIR: str = os.path.join(PROJECT_ROOT, ".cache")
+    # Raw data directory (downloaded PDFs)
+    # Now uses data/raw/ for consistent data folder structure
+    RAW_DATA_DIR: str = os.path.join(DATA_DIR, "raw")
 
     
     # ============================================================================
@@ -207,6 +203,16 @@ class Settings(BaseSettings):
     # ============================================================================
     ENVIRONMENT: Literal["dev", "staging", "prod"] = "dev"
     DEBUG: bool = True
+    
+    # ============================================================================
+    # LANGSMITH TRACING (Observability)
+    # ============================================================================
+    LANGSMITH_TRACING: bool = False  # Enable LangSmith tracing
+    LANGSMITH_API_KEY: Optional[str] = None  # Set via LANGSMITH_API_KEY env var
+    LANGSMITH_PROJECT: str = "genai-rag"  # Project name in LangSmith
+    LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
+    # Trace sampling rate (1.0 = all traces, 0.1 = 10% of traces)
+    LANGSMITH_SAMPLE_RATE: float = 1.0
     
     # ============================================================================
     # SCHEDULER SETTINGS

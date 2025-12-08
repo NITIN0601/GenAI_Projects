@@ -10,10 +10,11 @@ individual Rank Learning Methods" (Cormack et al., 2009)
 
 from typing import List, Optional
 import logging
+from src.utils import get_logger
 
 from src.retrieval.search.base import SearchResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def reciprocal_rank_fusion(

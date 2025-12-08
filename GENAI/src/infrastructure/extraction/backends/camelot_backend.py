@@ -7,13 +7,14 @@ or stream (whitespace-separated) detection strategies.
 
 import time
 import logging
+from src.utils import get_logger
 from pathlib import Path
 from typing import Dict, Any, List
 
 from src.infrastructure.extraction.base import ExtractionBackend, ExtractionResult, BackendType
 from src.utils.extraction_utils import PDFMetadataExtractor
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CamelotBackend(ExtractionBackend):
