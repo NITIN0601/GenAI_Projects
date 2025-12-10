@@ -112,7 +112,7 @@ class LLMManager(metaclass=ThreadSafeSingleton):
         
         self._llm = ChatOpenAI(
             model=self.model_name,
-            api_key=settings.OPENAI_API_KEY,
+            api_key=settings.OPENAI_API_KEY.get_secret_value() if settings.OPENAI_API_KEY else None,
             temperature=settings.LLM_TEMPERATURE,
             callbacks=self.callbacks
         )
@@ -393,12 +393,3 @@ def reset_llm_manager() -> None:
     Useful for testing or reconfiguration.
     """
     LLMManager._reset_instance()
-
-
-# Backward compatibility alias
-CustomLangChainWrapper = None  # Moved to langchain_wrapper.py
-
-def _get_custom_wrapper():
-    """Lazy import for backward compatibility."""
-    from src.infrastructure.llm.langchain_wrapper import CustomLangChainWrapper
-    return CustomLangChainWrapper

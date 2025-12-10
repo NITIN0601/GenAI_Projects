@@ -34,6 +34,12 @@ from src.utils.cleanup import (
     quick_clean,
     full_clean
 )
+from src.utils.table_utils import (
+    parse_markdown_table,
+    quarter_to_number,
+    quarter_to_month,
+    get_period_end_date,
+)
 
 # Re-export tracing from infrastructure for convenience
 from src.infrastructure.observability import (
@@ -63,6 +69,11 @@ __all__ = [
     'clear_application_cache',
     'quick_clean',
     'full_clean',
+    # Table utilities
+    'parse_markdown_table',
+    'quarter_to_number',
+    'quarter_to_month',
+    'get_period_end_date',
     # Tracing (re-exported from infrastructure.observability)
     'setup_tracing',
     'is_tracing_enabled',

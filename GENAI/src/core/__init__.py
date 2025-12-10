@@ -28,6 +28,8 @@ from src.core.singleton import (
     ThreadSafeSingleton,
     get_or_create_singleton,
     reset_all_singletons,
+    SingletonRegistry,
+    get_singleton_registry,
 )
 from src.core.registry import (
     ProviderRegistry,
@@ -59,6 +61,8 @@ __all__ = [
     'ThreadSafeSingleton',
     'get_or_create_singleton',
     'reset_all_singletons',
+    'SingletonRegistry',
+    'get_singleton_registry',
     # Registry
     'ProviderRegistry',
     'ProviderNotRegisteredError',

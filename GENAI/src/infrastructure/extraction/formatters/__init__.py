@@ -18,6 +18,11 @@ from src.infrastructure.extraction.formatters.metadata_extractor import (
     MetadataExtractor,
     extract_and_prepare_for_vectordb,
 )
+from src.infrastructure.extraction.formatters.excel_exporter import (
+    ExcelTableExporter,
+    get_excel_exporter,
+    reset_excel_exporter,
+)
 
 __all__ = [
     # Basic formatting
@@ -31,4 +36,9 @@ __all__ = [
     # Metadata extraction
     'MetadataExtractor',
     'extract_and_prepare_for_vectordb',
+    # Excel export with Index sheet
+    'ExcelTableExporter',
+    'get_excel_exporter',
+    'reset_excel_exporter',
 ]
+

@@ -28,6 +28,8 @@ from .templates import (
     # Search Strategies
     HYDE_PROMPT,
     MULTI_QUERY_PROMPT,
+    # Consolidation
+    TIME_SERIES_CONSOLIDATION_PROMPT,
 )
 
 # Few-shot learning
@@ -53,6 +55,7 @@ __all__ = [
     'REACT_PROMPT',
     'HYDE_PROMPT',
     'MULTI_QUERY_PROMPT',
+    'TIME_SERIES_CONSOLIDATION_PROMPT',
     
     # Few-shot learning
     'FINANCIAL_EXAMPLES',

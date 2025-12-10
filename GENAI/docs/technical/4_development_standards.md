@@ -171,6 +171,59 @@ from src.domain.tables import TableMetadata, TableChunk
 2. **Use absolute imports** from `src.` - no relative imports
 3. **Import specific items** instead of wildcards
 4. **Group imports** logically: stdlib, third-party, then src imports
+5. **Use SecretStr** for sensitive fields in Pydantic settings
+6. **Use `field(default_factory=list)`** for mutable dataclass defaults
+
+## Singleton Patterns
+
+The codebase uses two singleton patterns depending on metaclass compatibility:
+
+### Option 1: ThreadSafeSingleton Metaclass (Preferred)
+
+Use for classes without metaclass conflicts:
+
+```python
+from src.core.singleton import ThreadSafeSingleton
+
+class QueryEngine(metaclass=ThreadSafeSingleton):
+    def __init__(self, config=None):
+        self.config = config
+
+# Usage
+engine1 = QueryEngine(config="prod")
+engine2 = QueryEngine()  # Returns same instance
+assert engine1 is engine2
+
+# Reset for testing
+QueryEngine._reset_instance()
+```
+
+### Option 2: SingletonRegistry (For Metaclass Conflicts)
+
+Use when class has conflicting metaclass (e.g., LangChain Embeddings):
+
+```python
+from src.core.singleton import get_singleton_registry
+
+_singleton_registry = get_singleton_registry()
+
+class EmbeddingManager:
+    def __init__(self, model_name=None):
+        self.model_name = model_name
+
+def get_embedding_manager(**kwargs):
+    return _singleton_registry.get_or_create(
+        EmbeddingManager,
+        EmbeddingManager,
+        **kwargs
+    )
+
+def reset_embedding_manager():
+    _singleton_registry.reset(EmbeddingManager)
+```
+
+> [!TIP]
+> Always provide `reset_*` functions for singleton managers to support testing.
 
 ## Migration Reference
 

@@ -335,6 +335,19 @@ class UnifiedExtractor:
                 except ImportError:
                     logger.warning("pandas not available, skipping Excel export")
             
+            # Save Excel with Index sheet (multi-sheet workbook)
+            try:
+                from src.infrastructure.extraction.formatters.excel_exporter import get_excel_exporter
+                excel_exporter = get_excel_exporter()
+                excel_path = excel_exporter.export_pdf_tables(
+                    tables=result.tables,
+                    source_pdf=result.pdf_path
+                )
+                if excel_path:
+                    logger.info(f"Saved Excel with Index sheet to {excel_path}")
+            except Exception as e:
+                logger.warning(f"Failed to export Excel with Index sheet: {e}")
+            
         except Exception as e:
             logger.error(f"Failed to save table report: {e}")
     

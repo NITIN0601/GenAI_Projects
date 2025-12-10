@@ -13,7 +13,7 @@ import re
 import logging
 from src.utils import get_logger
 from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 logger = get_logger(__name__)
@@ -39,12 +39,8 @@ class QueryAnalysis:
     table_name: Optional[str] = None
     year: Optional[int] = None
     quarter: Optional[str] = None
-    metrics: List[str] = None
+    metrics: List[str] = field(default_factory=list)  # Fixed: use field() for mutable defaults
     confidence: float = 0.5
-    
-    def __post_init__(self):
-        if self.metrics is None:
-            self.metrics = []
 
 
 class QueryAnalyzer:
@@ -356,24 +352,36 @@ class IntelligentSearchStrategy:
             "total_found": len(results)
         }
     
-    def _filtered_search(self, analysis: QueryAnalysis, top_k: int) -> List[Any]:
-        """Search with filters as primary strategy."""
+    def _filtered_search(self, analysis: QueryAnalysis, top_k: int) -> List:
+        """Search with filters as primary strategy.
+        
+        Returns:
+            List of search results from vector database
+        """
         return self.vectordb.search(
             query=analysis.cleaned_query,
             top_k=top_k,
             filters=analysis.filters
         )
     
-    def _temporal_search(self, analysis: QueryAnalysis, top_k: int) -> List[Any]:
-        """Search with temporal filters."""
+    def _temporal_search(self, analysis: QueryAnalysis, top_k: int) -> List:
+        """Search with temporal filters.
+        
+        Returns:
+            List of search results from vector database
+        """
         return self.vectordb.search(
             query=analysis.cleaned_query,
             top_k=top_k,
             filters=analysis.filters
         )
     
-    def _comparative_search(self, analysis: QueryAnalysis, top_k: int) -> List[Any]:
-        """Search for comparative analysis (multiple periods)."""
+    def _comparative_search(self, analysis: QueryAnalysis, top_k: int) -> List:
+        """Search for comparative analysis (multiple periods).
+        
+        Returns:
+            List of search results from vector database
+        """
         # Remove specific year/quarter filters to get data from multiple periods
         filters = {k: v for k, v in analysis.filters.items() if k not in ["year", "quarter"]}
         
@@ -383,8 +391,12 @@ class IntelligentSearchStrategy:
             filters=filters if filters else None
         )
     
-    def _semantic_search(self, analysis: QueryAnalysis, top_k: int) -> List[Any]:
-        """Standard semantic search."""
+    def _semantic_search(self, analysis: QueryAnalysis, top_k: int) -> List:
+        """Standard semantic search.
+        
+        Returns:
+            List of search results from vector database
+        """
         filters = analysis.filters if analysis.filters else None
         return self.vectordb.search(
             query=analysis.original_query,

@@ -1,6 +1,6 @@
 # Configuration Guide
 
-> **Version:** 3.0.0 | **Updated:** December 5, 2025
+> **Version:** 3.1.0 | **Updated:** December 9, 2025
 
 ## Overview
 
@@ -182,8 +182,8 @@ API keys and secrets stay in `.env`:
 ```env
 # API Keys (never commit!)
 OPENAI_API_KEY=sk-...
-CUSTOM_LLM_API_KEY=...
-CUSTOM_EMBEDDING_API_KEY=...
+BEARER_TOKEN=your-custom-api-token
+LANGSMITH_API_KEY=ls-...
 
 # Provider choices
 LLM_PROVIDER=local
@@ -193,7 +193,21 @@ VECTORDB_PROVIDER=faiss
 # Redis (optional)
 REDIS_HOST=localhost
 REDIS_PORT=6379
+REDIS_PASSWORD=your-redis-password
 ```
+
+> [!IMPORTANT]
+> **SecretStr Protection**: Sensitive fields use Pydantic's `SecretStr` type which prevents accidental logging. To access the actual value in code, use `.get_secret_value()`:
+>
+> ```python
+> # ✅ Correct - extract secret value when needed
+> api_key = settings.OPENAI_API_KEY.get_secret_value() if settings.OPENAI_API_KEY else None
+> 
+> # ❌ Wrong - SecretStr object, not the actual string
+> api_key = settings.OPENAI_API_KEY  # Returns SecretStr('**********')
+> ```
+>
+> Protected fields: `OPENAI_API_KEY`, `BEARER_TOKEN`, `LANGSMITH_API_KEY`, `REDIS_PASSWORD`
 
 ---
 

@@ -11,14 +11,6 @@ from src.evaluation.core.manager import (
     get_evaluation_manager,
 )
 
-# Legacy exports for backward compatibility
-from src.evaluation.core.legacy import (
-    RAGEvaluator,
-    EvaluationResult,
-    EvaluationConfig,
-    get_rag_evaluator,
-)
-
 __all__ = [
     'BaseEvaluator',
     'EvaluationScores',
@@ -26,9 +18,4 @@ __all__ = [
     'EvaluationProvider',
     'EvaluationManager',
     'get_evaluation_manager',
-    # Legacy
-    'RAGEvaluator',
-    'EvaluationResult',
-    'EvaluationConfig',
-    'get_rag_evaluator',
 ]

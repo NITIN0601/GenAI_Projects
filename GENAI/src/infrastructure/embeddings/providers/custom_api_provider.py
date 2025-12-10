@@ -147,7 +147,13 @@ class CustomAPIEmbeddingProvider(EmbeddingProvider):
         self.api_url = api_url or settings.EB_URL or os.getenv('EB_URL')
         self.model_name = model_name or settings.EB_MODEL or os.getenv('EB_MODEL')
         self.unique_id = unique_id or settings.UNIQUE_ID or os.getenv('UNIQUE_ID')
-        self.bearer_token = bearer_token or settings.BEARER_TOKEN or os.getenv('BEARER_TOKEN')
+        # Handle SecretStr - extract value if from settings, otherwise use directly
+        if bearer_token:
+            self.bearer_token = bearer_token
+        elif settings.BEARER_TOKEN:
+            self.bearer_token = settings.BEARER_TOKEN.get_secret_value()
+        else:
+            self.bearer_token = os.getenv('BEARER_TOKEN')
         
         # Try to get dimension from settings or env, fallback to auto-detect later
         self.dimension = dimension or settings.EB_DIMENSION
@@ -276,7 +282,13 @@ class CustomAPILLMProvider(LLMProvider):
         # Use LLM_MODEL_CUSTOM preference, fallback to LLM_MODEL
         self.model_name = model_name or settings.LLM_MODEL_CUSTOM or os.getenv('LLM_MODEL_CUSTOM') or os.getenv('LLM_MODEL')
         self.unique_id = unique_id or settings.UNIQUE_ID or os.getenv('UNIQUE_ID')
-        self.bearer_token = bearer_token or settings.BEARER_TOKEN or os.getenv('BEARER_TOKEN')
+        # Handle SecretStr - extract value if from settings, otherwise use directly
+        if bearer_token:
+            self.bearer_token = bearer_token
+        elif settings.BEARER_TOKEN:
+            self.bearer_token = settings.BEARER_TOKEN.get_secret_value()
+        else:
+            self.bearer_token = os.getenv('BEARER_TOKEN')
         self.temperature = temperature
         
         if not all([self.api_url, self.model_name, self.unique_id, self.bearer_token]):

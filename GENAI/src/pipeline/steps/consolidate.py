@@ -4,7 +4,7 @@ Consolidate Step - Table consolidation and export.
 Implements StepInterface following system architecture pattern.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from src.pipeline.base import StepInterface, StepResult, StepStatus, PipelineContext
 from src.utils import get_logger
@@ -18,7 +18,7 @@ class ConsolidateStep(StepInterface):
     
     Implements StepInterface (like VectorDBInterface pattern).
     
-    Reads: context.query (table_title)
+    Reads: context.query (table_title), context.filters (optional years/quarters)
     Writes: Exports consolidated tables to files
     """
     
@@ -28,11 +28,15 @@ class ConsolidateStep(StepInterface):
         self,
         output_format: str = "both",
         output_dir: Optional[str] = None,
-        transpose: bool = True
+        transpose: bool = True,
+        years: Optional[List[int]] = None,
+        quarters: Optional[List[str]] = None
     ):
         self.output_format = output_format
         self.output_dir = output_dir
         self.transpose = transpose
+        self.years = years
+        self.quarters = quarters
     
     def validate(self, context: PipelineContext) -> bool:
         """Validate table title is provided."""
@@ -46,7 +50,7 @@ class ConsolidateStep(StepInterface):
         return {
             "name": self.name,
             "description": "Consolidate tables across quarters and export",
-            "reads": ["context.query (table_title)"],
+            "reads": ["context.query (table_title)", "context.filters"],
             "writes": ["CSV/Excel files"],
             "output_format": self.output_format,
             "transpose": self.transpose
@@ -59,19 +63,24 @@ class ConsolidateStep(StepInterface):
         table_title = context.query
         output_dir = self.output_dir or getattr(settings, 'OUTPUT_DIR', 'outputs/consolidated_tables')
         
+        # Get year/quarter filters from context or step config
+        filters = context.filters or {}
+        years = self.years or filters.get('years')
+        quarters = self.quarters or filters.get('quarters')
+        
         try:
-            from src.infrastructure.extraction.consolidation import get_quarterly_consolidator
-            from src.infrastructure.embeddings.manager import get_embedding_manager
-            from src.infrastructure.vectordb.manager import get_vectordb_manager
+            from src.infrastructure.extraction.consolidation import get_table_consolidator
             
-            vector_store = get_vectordb_manager()
-            embedding_manager = get_embedding_manager()
+            # Initialize unified consolidator
+            consolidator = get_table_consolidator()
             
-            # Initialize consolidator
-            consolidator = get_quarterly_consolidator(vector_store, embedding_manager)
-            
-            # Find matching tables
-            tables = consolidator.find_tables_by_title(table_title, top_k=50)
+            # Find matching tables with filters
+            tables = consolidator.find_tables(
+                title=table_title,
+                years=years,
+                quarters=quarters,
+                top_k=50
+            )
             
             if not tables:
                 return StepResult(
@@ -81,9 +90,13 @@ class ConsolidateStep(StepInterface):
                 )
             
             # Consolidate
-            df, metadata = consolidator.consolidate_tables(tables, table_name=table_title)
+            result = consolidator.consolidate(
+                tables,
+                table_name=table_title,
+                transpose=self.transpose
+            )
             
-            if df.empty:
+            if result.dataframe.empty:
                 return StepResult(
                     step_name=self.name,
                     status=StepStatus.FAILED,
@@ -91,21 +104,28 @@ class ConsolidateStep(StepInterface):
                 )
             
             # Export
-            export_paths = consolidator.export(df, table_title, metadata.get('date_range'))
+            export_paths = consolidator.export(
+                result,
+                output_dir=output_dir,
+                format=self.output_format
+            )
             
             return StepResult(
                 step_name=self.name,
                 status=StepStatus.SUCCESS,
                 data={
-                    'dataframe': df,
+                    'dataframe': result.dataframe,
                     'tables_found': len(tables),
-                    'export_paths': export_paths
+                    'export_paths': export_paths,
+                    'validation': result.validation
                 },
                 message=f"Consolidated {len(tables)} tables, exported to {self.output_format}",
                 metadata={
-                    'quarters_included': metadata.get('quarters_included', []),
-                    'total_rows': metadata.get('total_rows', 0),
-                    'total_columns': metadata.get('total_columns', 0)
+                    'periods_included': result.periods_included,
+                    'years': result.years,
+                    'quarters': result.quarters,
+                    'total_rows': result.total_rows,
+                    'total_columns': result.total_columns
                 }
             )
         except ImportError as e:
@@ -128,15 +148,29 @@ def run_consolidate(
     table_title: str,
     output_format: str = "both",
     output_dir: Optional[str] = None,
-    transpose: bool = True
+    transpose: bool = True,
+    years: Optional[List[int]] = None,
+    quarters: Optional[List[str]] = None
 ):
-    """Legacy wrapper for backward compatibility with main.py CLI."""
+    """
+    Legacy wrapper for backward compatibility with main.py CLI.
+    
+    Args:
+        table_title: Title of table to consolidate
+        output_format: "csv", "excel", or "both"
+        output_dir: Output directory
+        transpose: If True, dates become rows
+        years: Optional list of years to filter
+        quarters: Optional list of quarters to filter
+    """
     from src.pipeline import PipelineStep, PipelineResult
     
     step = ConsolidateStep(
         output_format=output_format,
         output_dir=output_dir,
-        transpose=transpose
+        transpose=transpose,
+        years=years,
+        quarters=quarters
     )
     ctx = PipelineContext(query=table_title)
     result = step.execute(ctx) if step.validate(ctx) else StepResult(

@@ -1,6 +1,6 @@
 # GENAI Project Structure
 
-**Last Updated**: 2025-12-05  
+**Last Updated**: 2025-12-09  
 **Total Python Files**: 130  
 **Total Directories**: 22+
 
@@ -594,14 +594,16 @@ outputs/
 - `get_*_manager()`: Singleton factories
 
 ### 5. **Singleton Pattern**
-- Global instances for managers
+- `ThreadSafeSingleton` metaclass for most managers
+- `SingletonRegistry` for classes with metaclass conflicts (LangChain)
 - Consistent state across application
-- **NEW**: PromptLoader for single YAML load
+- **NEW**: `PromptLoader` for single YAML load
 
 ### 6. **Configuration-Driven Design**
 - All prompts in YAML (enterprise standard)
-- Settings in Pydantic models
+- Settings in Pydantic models with `SecretStr` for secrets
 - Environment variable support
+- Centralized provider defaults from `settings.py`
 
 ---
 

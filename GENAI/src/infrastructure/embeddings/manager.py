@@ -25,17 +25,11 @@ from src.utils import get_logger
 
 logger = get_logger(__name__)
 
-# Thread-safe singleton state
-_embedding_manager_instance: Optional["EmbeddingManager"] = None
-_embedding_manager_lock = None
+# Use centralized SingletonRegistry for consistent singleton management
+# This avoids ad-hoc module-level singleton patterns
+from src.core.singleton import get_singleton_registry
 
-def _get_lock():
-    """Get or create the singleton lock."""
-    global _embedding_manager_lock
-    if _embedding_manager_lock is None:
-        import threading
-        _embedding_manager_lock = threading.Lock()
-    return _embedding_manager_lock
+_singleton_registry = get_singleton_registry()
 
 
 class EmbeddingManager:
@@ -115,7 +109,7 @@ class EmbeddingManager:
         
         self._model = OpenAIEmbeddings(
             model=self.model_name,
-            api_key=settings.OPENAI_API_KEY,
+            api_key=settings.OPENAI_API_KEY.get_secret_value() if settings.OPENAI_API_KEY else None,
         )
     
     def _init_local(self, model_name: Optional[str]) -> None:
@@ -311,7 +305,7 @@ def get_embedding_manager(
     """
     Get or create global embedding manager instance.
     
-    Thread-safe singleton accessor.
+    Thread-safe singleton accessor using centralized SingletonRegistry.
     
     Args:
         model_name: Model name (only used on first call)
@@ -321,21 +315,13 @@ def get_embedding_manager(
     Returns:
         EmbeddingManager singleton instance
     """
-    global _embedding_manager_instance
-    
-    # Fast path - instance already exists
-    if _embedding_manager_instance is not None:
-        return _embedding_manager_instance
-    
-    # Slow path - need to create with lock
-    with _get_lock():
-        if _embedding_manager_instance is None:
-            _embedding_manager_instance = EmbeddingManager(
-                model_name=model_name, 
-                device=device, 
-                **kwargs
-            )
-        return _embedding_manager_instance
+    return _singleton_registry.get_or_create(
+        EmbeddingManager,
+        EmbeddingManager,
+        model_name=model_name,
+        device=device,
+        **kwargs
+    )
 
 
 def reset_embedding_manager() -> None:
@@ -344,7 +330,4 @@ def reset_embedding_manager() -> None:
     
     Useful for testing or reconfiguration.
     """
-    global _embedding_manager_instance
-    with _get_lock():
-        _embedding_manager_instance = None
-
+    _singleton_registry.reset(EmbeddingManager)

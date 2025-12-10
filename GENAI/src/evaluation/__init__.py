@@ -1,7 +1,7 @@
 """
 RAG Evaluation Module - Enterprise Edition.
 
-├── core/           # Base classes, manager, legacy
+├── core/           # Base classes, manager
 ├── providers/      # Evaluation providers (heuristic, RAGAS)
 └── metrics/        # Individual metric evaluators
 
@@ -26,11 +26,6 @@ from src.evaluation.core import (
     EvaluationProvider,
     EvaluationManager,
     get_evaluation_manager,
-    # Legacy
-    RAGEvaluator,
-    EvaluationResult,
-    EvaluationConfig,
-    get_rag_evaluator,
 )
 
 # Providers
@@ -83,10 +78,4 @@ __all__ = [
     'FaithfulnessEvaluator',
     'FaithfulnessMetrics',
     'get_faithfulness_evaluator',
-    
-    # Legacy
-    'RAGEvaluator',
-    'EvaluationResult',
-    'EvaluationConfig',
-    'get_rag_evaluator',
 ]

@@ -265,25 +265,32 @@ class ProviderRegistry(Generic[T]):
 # These can be imported and extended by each manager module
 
 def create_llm_registry() -> ProviderRegistry:
-    """Create a pre-configured LLM provider registry."""
+    """Create a pre-configured LLM provider registry.
+    
+    Model defaults are loaded from config/settings.py for consistency.
+    """
+    from config.settings import settings
+    
     registry = ProviderRegistry("llm")
     
     # Register Ollama (default local option)
+    # Model default loaded from settings for consistency
     registry.register_lazy(
         "ollama",
         "src.infrastructure.llm.providers.base",
         "OllamaLLMProvider",
         aliases=["local"],
-        default_kwargs={"model": "llama3.2"}
+        default_kwargs={"model": settings.OLLAMA_MODEL}
     )
     
     # Register OpenAI
+    # Model default loaded from settings for consistency
     registry.register_lazy(
         "openai",
         "src.infrastructure.llm.providers.base",
         "OpenAILLMProvider",
         aliases=["gpt"],
-        default_kwargs={"model": "gpt-3.5-turbo"}
+        default_kwargs={"model": settings.OPENAI_MODEL}
     )
     
     return registry

@@ -46,7 +46,7 @@ class RedisVectorStore(VectorStore):
         self.client = redis.Redis(
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
-            password=settings.REDIS_PASSWORD,
+            password=settings.REDIS_PASSWORD.get_secret_value() if settings.REDIS_PASSWORD else None,
             decode_responses=True
         )
         self.index_name = index_name
@@ -61,8 +61,12 @@ class RedisVectorStore(VectorStore):
         try:
             self.client.ft(self.index_name).info()
             logger.info(f"Using existing index: {self.index_name}")
-        except Exception:
-            # Index doesn't exist, create it
+        except redis.exceptions.ResponseError as e:
+            # Index doesn't exist or response error, create it
+            if "unknown index name" in str(e).lower() or "no such index" in str(e).lower():
+                logger.info(f"Index {self.index_name} not found, creating new index")
+            else:
+                logger.warning(f"Redis response error, attempting to create index: {e}")
             # NOTE: This schema must match TableMetadata fields for full parity
             from redis.commands.search.field import NumericField
             
@@ -399,38 +403,29 @@ class RedisVectorStore(VectorStore):
         store.add_texts(texts, metadatas, **kwargs)
         return store
 
-# Thread-safe module-level singleton
-_redis_store: Optional[RedisVectorStore] = None
-_redis_lock = None
+# Use centralized SingletonRegistry for consistent singleton management
+from src.core.singleton import get_singleton_registry
 
-def _get_redis_lock():
-    """Get or create the singleton lock."""
-    global _redis_lock
-    if _redis_lock is None:
-        import threading
-        _redis_lock = threading.Lock()
-    return _redis_lock
+_singleton_registry = get_singleton_registry()
 
 
 def get_redis_store() -> RedisVectorStore:
     """
     Get or create global Redis store instance.
     
-    Thread-safe singleton accessor.
+    Thread-safe singleton accessor using centralized SingletonRegistry.
     
     Returns:
         RedisVectorStore singleton instance
     """
-    global _redis_store
+    def _create_redis_store():
+        embedding_manager = get_embedding_manager()
+        return RedisVectorStore(embedding_function=embedding_manager)
     
-    if _redis_store is not None:
-        return _redis_store
-    
-    with _get_redis_lock():
-        if _redis_store is None:
-            embedding_manager = get_embedding_manager()
-            _redis_store = RedisVectorStore(embedding_function=embedding_manager)
-        return _redis_store
+    return _singleton_registry.get_or_create(
+        RedisVectorStore,
+        _create_redis_store
+    )
 
 
 def reset_redis_store() -> None:
@@ -439,7 +434,4 @@ def reset_redis_store() -> None:
     
     Useful for testing or reconfiguration.
     """
-    global _redis_store
-    with _get_redis_lock():
-        _redis_store = None
-
+    _singleton_registry.reset(RedisVectorStore)

@@ -9,6 +9,7 @@ Supports:
 """
 
 from pydantic_settings import BaseSettings
+from pydantic import SecretStr
 from typing import Optional, Literal, List
 import os
 
@@ -54,7 +55,7 @@ class Settings(BaseSettings):
     EB_MODEL: Optional[str] = None
     EB_DIMENSION: Optional[int] = None  # Dimension for custom embeddings
     UNIQUE_ID: Optional[str] = None
-    BEARER_TOKEN: Optional[str] = None
+    BEARER_TOKEN: Optional[SecretStr] = None  # SecretStr prevents accidental logging
     
     # Batch settings
     EMBEDDING_BATCH_SIZE: int = 32
@@ -91,7 +92,7 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "llama2"
     
     # OpenAI Settings
-    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[SecretStr] = None  # SecretStr prevents accidental logging
     OPENAI_MODEL: str = "gpt-4-turbo-preview"
     
     # Custom API LLM (YOUR WORKING API)
@@ -162,6 +163,7 @@ class Settings(BaseSettings):
     REDIS_ENABLED: bool = False  # Set to True if Redis installed
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
+    REDIS_PASSWORD: Optional[SecretStr] = None  # SecretStr prevents accidental logging
     REDIS_DB: int = 0
     CACHE_TTL: int = 86400  # 24 hours
     
@@ -185,11 +187,7 @@ class Settings(BaseSettings):
     EXTRACT_TABLES: bool = True
     PDF_MAX_SIZE_MB: int = 500
     
-    # ============================================================================
-    # EXTRACTION CACHE SETTINGS
-    # ============================================================================
-    EXTRACTION_CACHE_ENABLED: bool = True
-    EXTRACTION_CACHE_TTL_HOURS: int = 168  # 7 days
+    # NOTE: EXTRACTION_CACHE_* settings are defined in EXTRACTION BACKEND SETTINGS section above
     
     # ============================================================================
     # FEATURE FLAGS
@@ -208,7 +206,7 @@ class Settings(BaseSettings):
     # LANGSMITH TRACING (Observability)
     # ============================================================================
     LANGSMITH_TRACING: bool = False  # Enable LangSmith tracing
-    LANGSMITH_API_KEY: Optional[str] = None  # Set via LANGSMITH_API_KEY env var
+    LANGSMITH_API_KEY: Optional[SecretStr] = None  # SecretStr prevents accidental logging
     LANGSMITH_PROJECT: str = "genai-rag"  # Project name in LangSmith
     LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
     # Trace sampling rate (1.0 = all traces, 0.1 = 10% of traces)

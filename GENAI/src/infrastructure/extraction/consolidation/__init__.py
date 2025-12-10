@@ -4,62 +4,77 @@ Table consolidation module.
 Consolidates extracted tables across multiple documents/periods.
 
 This module provides tools for combining tables from different sources:
-- Quarterly consolidation: Merge tables across quarters (Q1, Q2, Q3, Q4)
-- Multi-year consolidation: Merge tables across years with transposition
-- Consolidation engine: Advanced multi-PDF consolidation scenarios
+- TableConsolidator: Unified consolidator with filtering (recommended)
+- ConsolidationResult: Dataclass for consolidated output
 
 Usage:
-    # Multi-year consolidation (recommended)
-    from src.infrastructure.extraction.consolidation import MultiYearTableConsolidator
-    consolidator = MultiYearTableConsolidator()
-    result = consolidator.consolidate_multi_year_tables(search_results, "Total Assets")
+    from src.infrastructure.extraction.consolidation import get_table_consolidator
     
-    # Quarterly consolidation
-    from src.infrastructure.extraction.consolidation import QuarterlyTableConsolidator
-    consolidator = QuarterlyTableConsolidator(vector_store, embedding_manager)
-    tables = consolidator.find_tables_by_title("Balance Sheet")
+    consolidator = get_table_consolidator()
+    
+    # Find tables with filters
+    tables = consolidator.find_tables(
+        title="Balance Sheet",
+        years=[2020, 2021, 2022],
+        quarters=["Q1", "Q4"]
+    )
+    
+    # Consolidate
+    result = consolidator.consolidate(tables, transpose=True)
+    
+    # Export
+    consolidator.export(result, format="both")
 """
 
-# Multi-year consolidation (recommended for most use cases)
-from .table_consolidator import (
-    MultiYearTableConsolidator,
-    get_multi_year_consolidator,
-    consolidate_and_transpose
+# Unified consolidator (recommended)
+from .consolidator import (
+    TableConsolidator,
+    ConsolidationResult,
+    get_table_consolidator,
+    reset_table_consolidator,
 )
 
-# Quarterly/period consolidation
-from .quarterly import (
-    QuarterlyTableConsolidator,
-    get_quarterly_consolidator
-)
-
-# Multi-PDF consolidation engine
+# Multi-PDF consolidation engine (for complex scenarios)
 from .multi_year import (
     TableConsolidationEngine,
-    get_consolidation_engine
+    get_consolidation_engine,
 )
 
 
-# Backward compatibility - default to multi-year
-TableConsolidator = MultiYearTableConsolidator
-get_table_consolidator = get_multi_year_consolidator
+# Backward compatibility aliases
+MultiYearTableConsolidator = TableConsolidator
+QuarterlyTableConsolidator = TableConsolidator
+get_multi_year_consolidator = get_table_consolidator
+get_quarterly_consolidator = lambda vs=None, em=None: get_table_consolidator(vs, em)
+consolidate_and_transpose = lambda results, title, fmt='dataframe': (
+    get_table_consolidator().consolidate(
+        get_table_consolidator().find_tables(title) if not results else results,
+        table_name=title,
+        transpose=True
+    ).dataframe if fmt == 'dataframe' else 
+    get_table_consolidator().consolidate(
+        get_table_consolidator().find_tables(title) if not results else results,
+        table_name=title,
+        transpose=True
+    ).to_markdown()
+)
 
 
 __all__ = [
-    # Multi-year consolidation (recommended)
-    'MultiYearTableConsolidator',
-    'get_multi_year_consolidator',
-    'consolidate_and_transpose',
-    
-    # Quarterly consolidation
-    'QuarterlyTableConsolidator',
-    'get_quarterly_consolidator',
+    # Unified consolidator (recommended)
+    'TableConsolidator',
+    'ConsolidationResult',
+    'get_table_consolidator',
+    'reset_table_consolidator',
     
     # Multi-PDF engine
     'TableConsolidationEngine',
     'get_consolidation_engine',
     
     # Backward compatibility
-    'TableConsolidator',
-    'get_table_consolidator',
+    'MultiYearTableConsolidator',
+    'QuarterlyTableConsolidator',
+    'get_multi_year_consolidator',
+    'get_quarterly_consolidator',
+    'consolidate_and_transpose',
 ]

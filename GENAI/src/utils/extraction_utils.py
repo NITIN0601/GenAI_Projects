@@ -121,21 +121,48 @@ class DoclingHelper:
             return text.strip()[:100]
 
         def is_valid_title(text: str) -> bool:
-            """Check if text is a valid title and not a date/period header."""
-            text_lower = text.lower()
+            """Check if text is a valid title and not a date/period header or boilerplate."""
+            text_lower = text.lower().strip()
+            
+            # Too short or too long
+            if len(text) < 5 or len(text) > 120:
+                return False
+            
+            # Starts with parenthesis (likely not a title)
+            if text.startswith('('):
+                return False
+            
+            # Starts with lowercase (likely continuation text)
+            if text[0].islower():
+                return False
+            
             invalid_patterns = [
+                # Date/period patterns
                 'three months ended', 'six months ended', 'nine months ended', 'twelve months ended',
                 'year ended', 'quarter ended', 'at march', 'at december', 'at june', 'at september',
-                '$ in millions', '$ in billions', 'unaudited', '(unaudited)',
-                'rows 1-', 'rows 10-'
+                'as of december', 'as of march', 'as of june', 'as of september',
+                # Unit patterns
+                '$ in millions', '$ in billions', 'in millions', 'in billions',
+                'unaudited', '(unaudited)',
+                # Row patterns
+                'rows 1-', 'rows 10-', 'rows 8-',
+                # Boilerplate/address patterns
+                'address of principal', 'executive offices', 'zip code',
+                'included within', 'in the balance sheet', 'in the following table',
+                'see note', 'see also', 'refer to',
+                # Fragment patterns
+                'the following', 'as follows', 'shown below', 'presented below',
+                # SEC form boilerplate
+                'indicate by check mark', 'issuer pursuant', 'registrant',
             ]
             
-            if len(text) < 3:
-                return False
-                
             for pattern in invalid_patterns:
                 if pattern in text_lower:
                     return False
+            
+            # Must contain at least one letter
+            if not any(c.isalpha() for c in text):
+                return False
             
             return True
 
@@ -875,7 +902,7 @@ class TableDataFrameConverter:
                 v1 = cls._parse_currency(row[period1])
                 v2 = cls._parse_currency(row[period2])
                 return v1 - v2
-            except:
+            except (ValueError, TypeError):
                 return None
         
         def calc_pct(row):
@@ -885,7 +912,7 @@ class TableDataFrameConverter:
                 if v2 != 0:
                     return ((v1 - v2) / abs(v2)) * 100
                 return None
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 return None
         
         comparison['Change'] = comparison.apply(calc_change, axis=1)

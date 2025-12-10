@@ -51,6 +51,13 @@ MULTI_QUERY_PROMPT: Optional[PromptTemplate] = _loader.get_prompt_template("mult
 
 
 # ============================================================================
+# CONSOLIDATION PROMPTS
+# ============================================================================
+
+TIME_SERIES_CONSOLIDATION_PROMPT: Optional[PromptTemplate] = _loader.get_prompt_template("time_series_consolidation")
+
+
+# ============================================================================
 # EXPORTS
 # ============================================================================
 
@@ -67,4 +74,7 @@ __all__ = [
     # Search Strategies
     'HYDE_PROMPT',
     'MULTI_QUERY_PROMPT',
+    # Consolidation
+    'TIME_SERIES_CONSOLIDATION_PROMPT',
 ]
+

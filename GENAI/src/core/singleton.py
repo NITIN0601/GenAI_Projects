@@ -129,3 +129,75 @@ def reset_all_singletons() -> None:
     with ThreadSafeSingleton._global_lock:
         ThreadSafeSingleton._instances.clear()
         ThreadSafeSingleton._locks.clear()
+
+
+class SingletonRegistry:
+    """
+    Centralized registry for managing singletons that can't use metaclass.
+    
+    Some classes (like EmbeddingManager) can't use ThreadSafeSingleton metaclass
+    due to metaclass conflicts (e.g., with LangChain Embeddings). This registry
+    provides a standardized, thread-safe alternative.
+    
+    Usage:
+        >>> # In your module
+        >>> _registry = SingletonRegistry()
+        >>> 
+        >>> def get_my_manager():
+        ...     return _registry.get_or_create(MyManager, MyManager, arg1="value")
+        >>> 
+        >>> def reset_my_manager():
+        ...     _registry.reset(MyManager)
+    """
+    
+    def __init__(self):
+        self._instances: Dict[Type, Any] = {}
+        self._lock = threading.Lock()
+    
+    def get_or_create(self, key: Type[T], factory: Type[T], *args, **kwargs) -> T:
+        """
+        Get existing instance or create new one.
+        
+        Args:
+            key: Type to use as key (usually the class itself)
+            factory: Callable to create instance if needed
+            *args, **kwargs: Arguments for factory
+            
+        Returns:
+            Singleton instance
+        """
+        # Fast path - already exists
+        if key in self._instances:
+            return self._instances[key]
+        
+        # Slow path - create with lock
+        with self._lock:
+            if key not in self._instances:
+                self._instances[key] = factory(*args, **kwargs)
+            return self._instances[key]
+    
+    def reset(self, key: Type) -> None:
+        """Reset a specific singleton instance."""
+        with self._lock:
+            if key in self._instances:
+                del self._instances[key]
+    
+    def reset_all(self) -> None:
+        """Reset all instances in this registry."""
+        with self._lock:
+            self._instances.clear()
+    
+    def has_instance(self, key: Type) -> bool:
+        """Check if an instance exists."""
+        return key in self._instances
+
+
+# Global singleton registry for modules that can't use metaclass
+# Use this for EmbeddingManager, RedisVectorStore, etc.
+_global_singleton_registry = SingletonRegistry()
+
+
+def get_singleton_registry() -> SingletonRegistry:
+    """Get the global singleton registry instance."""
+    return _global_singleton_registry
+
