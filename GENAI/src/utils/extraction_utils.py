@@ -10,6 +10,8 @@ from datetime import datetime
 import hashlib
 import re
 
+import os
+
 from docling.document_converter import DocumentConverter
 from docling_core.types.doc import DocItemLabel
 from src.domain.tables import TableMetadata
@@ -23,13 +25,44 @@ class DoclingHelper:
         """
         Convert PDF using Docling.
         
+        Supports local model loading via environment variables:
+        - DOCLING_ARTIFACTS_PATH: Path to local docling models directory
+        - DOCLING_OFFLINE: Set to "1" to force offline mode (no downloads)
+        
         Args:
             pdf_path: Path to PDF file
             
         Returns:
             Docling conversion result
         """
-        converter = DocumentConverter()
+        # Check for local model path configuration
+        artifacts_path = os.environ.get('DOCLING_ARTIFACTS_PATH')
+        offline_mode = os.environ.get('DOCLING_OFFLINE', '').lower() in ('1', 'true', 'yes')
+        
+        # If offline mode requested, set HuggingFace offline environment variables
+        if offline_mode:
+            os.environ['HF_HUB_OFFLINE'] = '1'
+            os.environ['TRANSFORMERS_OFFLINE'] = '1'
+        
+        if artifacts_path:
+            # Use local model path with pipeline options
+            from docling.datamodel.pipeline_options import PdfPipelineOptions
+            from docling.datamodel.base_models import InputFormat
+            from docling.document_converter import PdfFormatOption
+            
+            pipeline_options = PdfPipelineOptions(
+                artifacts_path=artifacts_path
+            )
+            
+            converter = DocumentConverter(
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+                }
+            )
+        else:
+            # Default: download from HuggingFace Hub
+            converter = DocumentConverter()
+        
         return converter.convert(pdf_path)
     
     @staticmethod
