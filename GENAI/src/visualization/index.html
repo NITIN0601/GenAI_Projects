@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deviation Threshold Visualization</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 2rem;
+            background: linear-gradient(90deg, #00d4ff, #7b2ff7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Configuration Panel */
+        .config-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px 30px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .config-header {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #00d4ff;
+        }
+
+        .config-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .config-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .config-group label {
+            font-size: 0.8rem;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .config-group input[type="number"] {
+            width: 100px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            font-size: 1rem;
+            text-align: center;
+        }
+
+        .config-preview {
+            flex: 1;
+            padding: 12px 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.95rem;
+            color: #90EE90;
+        }
+
+        .apply-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            background: linear-gradient(90deg, #22c55e, #16a34a);
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .apply-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(34, 197, 94, 0.4);
+        }
+
+        /* Controls Panel */
+        .controls {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            z-index: 500;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .slider-container {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .slider-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #00d4ff;
+            text-align: center;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+            border-radius: 4px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        select,
+        input[type="text"] {
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 1rem;
+            min-width: 150px;
+        }
+
+        select option {
+            background: #1a1a2e;
+            color: #fff;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(90deg, #00d4ff, #7b2ff7);
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
+        }
+
+        #chart {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-height: 500px;
+        }
+
+        .legend-info {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .green {
+            background: rgba(144, 238, 144, 0.7);
+        }
+
+        .amber {
+            background: rgba(255, 200, 100, 0.7);
+        }
+
+        .red {
+            background: rgba(240, 128, 128, 0.7);
+        }
+
+        .slider-hint {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 5px;
+            text-align: center;
+        }
+
+        /* Dropdown Checkbox Component */
+        .dropdown-checkbox {
+            position: relative;
+            width: 100%;
+        }
+
+        .dropdown-header {
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .dropdown-header::after {
+            content: '▼';
+            font-size: 0.7rem;
+            margin-left: 10px;
+            opacity: 0.7;
+        }
+
+        .dropdown-header:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: rgba(40, 40, 60, 0.98);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            margin-top: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .dropdown-checkbox.open .dropdown-content {
+            display: block;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .checkbox-item:hover {
+            background: rgba(0, 212, 255, 0.2);
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            cursor: pointer;
+            accent-color: #00d4ff;
+            width: 16px;
+            height: 16px;
+        }
+
+        /* STD Info Panel Styles */
+        .std-info-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-top: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .std-info-header {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #00d4ff;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .std-visual {
+            margin: 10px 0;
+        }
+
+        .std-bar {
+            display: flex;
+            height: 60px;
+            border-radius: 8px;
+            overflow: hidden;
+            font-size: 0.7rem;
+            text-align: center;
+        }
+
+        .std-zone {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .red-zone-left,
+        .red-zone-right {
+            flex: 1;
+            background: linear-gradient(180deg, rgba(240, 128, 128, 0.8), rgba(220, 20, 60, 0.9));
+        }
+
+        .amber-zone-left,
+        .amber-zone-right {
+            flex: 1.5;
+            background: linear-gradient(180deg, rgba(255, 200, 100, 0.8), rgba(255, 165, 0, 0.9));
+        }
+
+        .green-zone {
+            flex: 4;
+            background: linear-gradient(180deg, rgba(144, 238, 144, 0.8), rgba(34, 139, 34, 0.9));
+        }
+
+        .std-labels {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            font-size: 0.75rem;
+            color: #aaa;
+        }
+
+        .std-stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            font-size: 0.85rem;
+        }
+
+        .stat-label {
+            color: #888;
+        }
+
+        .stat-item span:last-child {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>📊 Deviation Threshold Visualization</h1>
+
+        <!-- Threshold Configuration Panel -->
+        <div class="config-panel">
+            <div class="config-header">⚙️ Threshold Configuration</div>
+
+            <!-- LSTM Mode Config -->
+            <div id="lstm-config" class="config-row">
+                <div class="config-group">
+                    <label>Green Zone Upper (%)</label>
+                    <input type="number" id="green-upper" value="20" min="0" max="100" step="1">
+                </div>
+                <div class="config-group">
+                    <label>Amber Band Width (%)</label>
+                    <input type="number" id="amber-width" value="10" min="0" max="50" step="1">
+                </div>
+                <div class="config-preview" id="threshold-preview">
+                    Green: 0-20%, Amber: 20-30%, Red: 30%+
+                </div>
+                <button class="apply-btn" id="apply-config">Apply</button>
+            </div>
+
+            <!-- STD Mode Config -->
+            <div id="std-config" class="config-row" style="display: none;">
+                <div class="config-group">
+                    <label>Green Zone (±σ)</label>
+                    <input type="number" id="std-green-upper" value="2" min="0.5" max="5" step="0.5">
+                </div>
+                <div class="config-group">
+                    <label>Amber Zone (±σ)</label>
+                    <input type="number" id="std-amber-upper" value="3" min="1" max="6" step="0.5">
+                </div>
+                <div class="config-preview" id="std-threshold-preview">
+                    Green: ±2σ, Amber: ±2-3σ, Red: >±3σ
+                </div>
+                <button class="apply-btn" id="apply-std-config">Apply</button>
+            </div>
+        </div>
+
+        <!-- Main Controls -->
+        <div class="controls">
+            <div class="control-group slider-container">
+                <label>Tolerance Offset</label>
+                <input type="range" id="threshold" min="0" max="100" value="0">
+                <div class="slider-value">Offset: +<span id="threshold-value">0</span>%</div>
+                <div class="slider-hint">Adds to base thresholds (e.g., slider=10 → Green: 0-30%)</div>
+            </div>
+
+            <div class="control-group">
+                <label>Visualization Mode</label>
+                <select id="expected">
+                    <option value="std">STD Deviation</option>
+                    <option value="lstm" selected>ML Model (LSTM Predicted)</option>
+                </select>
+            </div>
+
+            <!-- Date Filters (dropdown with checkboxes) -->
+            <div class="control-group">
+                <label>Year</label>
+                <div class="dropdown-checkbox" id="year-dropdown">
+                    <div class="dropdown-header" id="year-header">Select Years...</div>
+                    <div class="dropdown-content" id="year-checkboxes">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Quarter</label>
+                <div class="dropdown-checkbox" id="quarter-dropdown">
+                    <div class="dropdown-header" id="quarter-header">Select Quarters...</div>
+                    <div class="dropdown-content" id="quarter-checkboxes">
+                        <label class="checkbox-item"><input type="checkbox" value="1"> Q1</label>
+                        <label class="checkbox-item"><input type="checkbox" value="2"> Q2</label>
+                        <label class="checkbox-item"><input type="checkbox" value="3"> Q3</label>
+                        <label class="checkbox-item"><input type="checkbox" value="4"> Q4</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Data File (optional)</label>
+                <input type="text" id="csv" placeholder="Path to CSV/Excel">
+            </div>
+
+            <button id="load-data">Load Data</button>
+        </div>
+
+        <div id="chart"></div>
+
+        <div class="legend-info">
+            <div class="legend-item">
+                <div class="legend-color green"></div>
+                <span>Green Zone: Acceptable Deviation</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color amber"></div>
+                <span>Amber Zone: Warning</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color red"></div>
+                <span>Red Zone: Anomaly</span>
+            </div>
+        </div>
+
+        <!-- STD Info Panel - shown when in STD mode -->
+        <div id="std-info-panel" class="std-info-panel" style="display: none;">
+            <div class="std-info-header">📊 Standard Deviation (STD) Zones</div>
+            <div class="std-visual">
+                <!-- Visual bell curve representation -->
+                <div class="std-bar">
+                    <div class="std-zone red-zone-left">Red<br>>3σ</div>
+                    <div class="std-zone amber-zone-left">Amber<br>2-3σ</div>
+                    <div class="std-zone green-zone">Green<br>±2σ<br><small>~95%</small></div>
+                    <div class="std-zone amber-zone-right">Amber<br>2-3σ</div>
+                    <div class="std-zone red-zone-right">Red<br>>3σ</div>
+                </div>
+                <div class="std-labels">
+                    <span>-3σ</span>
+                    <span>-2σ</span>
+                    <span>Mean</span>
+                    <span>+2σ</span>
+                    <span>+3σ</span>
+                </div>
+            </div>
+            <div class="std-stats" id="std-stats">
+                <div class="stat-item"><span class="stat-label">STD Value:</span> <span id="std-value">--</span></div>
+                <div class="stat-item"><span class="stat-label">Mean Residual:</span> <span id="mean-value">--</span>
+                </div>
+                <div class="stat-item"><span class="stat-label">±2σ Range:</span> <span id="range-2std">--</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
