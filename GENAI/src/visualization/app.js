@@ -322,24 +322,27 @@ function computeZScores(data, expectedKey, std) {
 /**
  * Calculate STD-based band boundaries.
  * @param {Array} expecteds - Expected values
- * @param {number} std - Standard deviation
+ * @param {Array|number} stds - Standard deviation(s) (array or scalar)
  * @param {number} yRange - Y-axis upper limit
  * @param {number} yMin - Y-axis lower limit
  * @returns {Object} Band boundaries
  */
-function calculateSTDBands(expecteds, std, yRange, yMin) {
+function calculateSTDBands(expecteds, stds, yRange, yMin) {
     const greenStd = CONFIG.stdGreenUpper;   // e.g., 2
     const amberStd = CONFIG.stdAmberUpper;   // e.g., 3
 
+    // Helper to get STD for current index
+    const getStd = (i) => Array.isArray(stds) ? (stds[i] || 0) : stds;
+
     // Green band: ±greenStd STD
-    const greenBandUpper = expecteds.map(e => e + greenStd * std);
-    const greenBandLower = expecteds.map(e => e - greenStd * std);
+    const greenBandUpper = expecteds.map((e, i) => e + greenStd * getStd(i));
+    const greenBandLower = expecteds.map((e, i) => e - greenStd * getStd(i));
 
     // Amber band: greenStd to amberStd STD
-    const amberBandUpperTop = expecteds.map(e => e + amberStd * std);
+    const amberBandUpperTop = expecteds.map((e, i) => e + amberStd * getStd(i));
     const amberBandUpperBottom = greenBandUpper;
     const amberBandLowerTop = greenBandLower;
-    const amberBandLowerBottom = expecteds.map(e => e - amberStd * std);
+    const amberBandLowerBottom = expecteds.map((e, i) => e - amberStd * getStd(i));
 
     // Red band: beyond amberStd STD to graph edges
     const redBandUpperTop = expecteds.map(() => yRange);
@@ -529,19 +532,22 @@ function buildPlot(data, deviations, sliderValue, expectedKey, visualizationMode
             return Math.abs(actual - expected) / pointStd;
         });
 
+        // Prepare rolling STD array for band calculation (use specific point STD or fallback to global std)
+        const stdArray = data.map(d => d.rolling_std || std);
+
         colors = classifyPointsSTD(zScores);
-        bands = calculateSTDBands(stdModeExpected, std, yMax, yMin);
+        bands = calculateSTDBands(stdModeExpected, stdArray, yMax, yMin);
         legendLabels = {
             green: `Green Zone (±${CONFIG.stdGreenUpper}σ)`,
             amber: `Amber Zone (±${CONFIG.stdGreenUpper}-${CONFIG.stdAmberUpper}σ)`,
             red: `Red Zone (>±${CONFIG.stdAmberUpper}σ)`
         };
-        // Format hover text with range labels for STD mode
+        // Format hover text with descriptive labels for STD mode
         hoverText = zScores.map((z) => {
             if (z === null || !isFinite(z)) return '';
-            if (z <= CONFIG.stdGreenUpper) return `±${CONFIG.stdGreenUpper}σ`;
-            if (z <= CONFIG.stdAmberUpper) return `±${CONFIG.stdGreenUpper}-${CONFIG.stdAmberUpper}σ`;
-            return `>±${CONFIG.stdAmberUpper}σ`;
+            if (z <= CONFIG.stdGreenUpper) return 'Not Anomaly';
+            if (z <= CONFIG.stdAmberUpper) return 'Level 2';
+            return 'Level 3';
         });
         rawDeviations = zScores;  // Store raw z-scores for table
 
@@ -863,22 +869,31 @@ function formatCurrency(value) {
 /**
  * Render the data table with zone colors matching chart.
  * Columns displayed depend on visualization mode:
- * - STD mode:  Actual (Loans), Predicted (lag_loans), Deviation (STD bands)
- * - LSTM mode: Actual (Loans), Predicted (LSTM_Predicted), Deviation (LSTM_Relative_Error %)
+ * - STD mode:  Actual, Predicted (Rolling Mean), Deviation Range (Level 3, Level 2, Not Anomaly)
+ * - LSTM mode: Actual, Predicted (LSTM), Deviation (%)
  * 
  * @param {Array} data - Data array
  * @param {Array} colors - Array of color values per point
- * @param {Array} deviations - Array of deviation percentages per point
+ * @param {Array} deviations - Array of deviation percentages or Z-scores per point
  * @param {string} visualizationMode - 'lstm' or 'std'
  */
 function renderDataTable(data, colors, deviations, visualizationMode) {
     const tableContainer = document.getElementById('data-table');
     if (!tableContainer) return;
 
-    // Column headers based on mode
-    // Always show "Predicted" for the predicted column header
-    const predictedHeader = 'Predicted';
-    const devHeader = visualizationMode === 'std' ? 'Deviation (σ)' : 'Deviation (%)';
+    // Toggle Legend Sections based on mode
+    const stdLegend = document.getElementById('legend-section-std');
+    const mlLegend = document.getElementById('legend-section-ml');
+
+    if (stdLegend && mlLegend) {
+        if (visualizationMode === 'std') {
+            stdLegend.style.display = 'block';
+            mlLegend.style.display = 'none';
+        } else {
+            stdLegend.style.display = 'none';
+            mlLegend.style.display = 'block';
+        }
+    }
 
     // Count zones for legend
     let greenCount = 0, amberCount = 0, redCount = 0;
@@ -888,109 +903,104 @@ function renderDataTable(data, colors, deviations, visualizationMode) {
         else if (c === '#C00C00') redCount++;
     });
 
-    // Update legend counts
-    const greenCountEl = document.getElementById('green-count');
-    const amberCountEl = document.getElementById('amber-count');
-    const redCountEl = document.getElementById('red-count');
-    if (greenCountEl) greenCountEl.textContent = `(${greenCount})`;
-    if (amberCountEl) amberCountEl.textContent = `(${amberCount})`;
-    if (redCountEl) redCountEl.textContent = `(${redCount})`;
+    // Determine which legend to update based on mode
+    const prefix = visualizationMode === 'std' ? 'std' : 'ml';
+    const otherPrefix = visualizationMode === 'std' ? 'ml' : 'std';
 
-    // Build table HTML with mode-specific headers
+    // Helper to update count visibility and text
+    const updateCount = (type, count) => {
+        // Update active legend
+        const el = document.getElementById(`${prefix}-${type}-count`);
+        if (el) {
+            el.textContent = `(${count})`;
+            el.style.display = 'inline-block';
+        }
+        // Hide inactive legend counts (to avoid confusion)
+        const otherEl = document.getElementById(`${otherPrefix}-${type}-count`);
+        if (otherEl) {
+            otherEl.style.display = 'none';
+        }
+    };
+
+    updateCount('green', greenCount);
+    updateCount('amber', amberCount);
+    updateCount('red', redCount);
+
+    // Determine headers based on mode
+    let lastColHeader = 'Deviation (%)';
+    if (visualizationMode === 'std') {
+        lastColHeader = 'Deviation Range';
+    }
+
     let html = `
         <table>
             <thead>
                 <tr>
-                    <th>Date</th>
-                    <th>Actual</th>
-                    <th>${predictedHeader}</th>
-                    <th>${devHeader}</th>
+                    <th style="width: 20%">Dates</th>
+                    <th style="width: 25%">Actual</th>
+                    <th style="width: 25%">Predicted</th>
+                    <th style="width: 30%">${lastColHeader}</th>
                 </tr>
             </thead>
             <tbody>
     `;
 
-    data.forEach((row, i) => {
-        const color = colors[i] || '#888';
-        const deviation = deviations[i];
+    data.forEach((d, i) => {
         let zoneClass = '';
+        if (colors[i] === '#107A1B') zoneClass = 'zone-green';
+        else if (colors[i] === '#BB831B') zoneClass = 'zone-amber';
+        else if (colors[i] === '#C00C00') zoneClass = 'zone-red';
 
-        // Match color names or hex codes for row styling
-        if (color === '#107A1B') {
-            zoneClass = 'zone-green';
-        }
-        else if (color === '#BB831B') {
-            zoneClass = 'zone-amber';
-        }
-        else if (color === '#C00C00') {
-            zoneClass = 'zone-red';
-        }
+        const dateStr = d.date ? formatDateAsQuarter(d.date) : `Point ${i + 1}`;
+        const actual = d.actual != null ? d.actual.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
 
-        const actual = formatCurrency(row.actual);
+        // Expected value logic
+        let expectedVal = '-';
+        let rawExpected;
 
-        // Use mode-specific predicted value
-        // STD mode: use rolling_mean (which maps to lag_* column from backend)
-        // LSTM mode: use expected_lstm (which maps to LSTM_Predicted column from backend)
-        let predictedValue;
         if (visualizationMode === 'std') {
-            // STD mode: use rolling mean (lag_loans) as the expected/predicted value
-            predictedValue = row.expected_rolling != null ? row.expected_rolling : row.rolling_mean;
+            // Prioritize rolling mean for STD
+            rawExpected = d.rolling_mean || d.expected_rolling || d.expected;
         } else {
-            // LSTM mode: use LSTM predicted value
-            predictedValue = row.expected_lstm != null ? row.expected_lstm : row.expected;
+            // Prioritize LSTM for LSTM mode
+            rawExpected = d.expected_lstm || d.expected;
         }
 
-        // Debug: log sample row to help diagnose
-        if (i === 3) {
-            console.log('[DEBUG v4] renderDataTable - Row 4:', {
-                visualizationMode,
-                'expected_rolling (lag)': row.expected_rolling,
-                'expected_lstm': row.expected_lstm,
-                'predictedValue': predictedValue,
-                'rolling_mean': row.rolling_mean,
-                'rolling_std': row.rolling_std,
-                'lstm_difference': row.lstm_difference,
-                'mode': visualizationMode === 'std' ? 'STD Mode' : 'LSTM Mode'
-            });
+        if (rawExpected != null && isFinite(rawExpected)) {
+            expectedVal = rawExpected.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
-        const predicted = formatCurrency(predictedValue);
-        const formattedDate = formatDateAsQuarter(row.date);
 
-        // Format deviation value based on mode
-        // STD mode: deviation is z-score, show as sigma band range
-        // LSTM mode: deviation is MAPE %, show as percentage
-        let devValue = '-';
-        let isBold = false;
-        if (deviation != null && isFinite(deviation)) {
+        // Deviation column logic
+        let deviationContent = '-';
+        const val = deviations ? deviations[i] : null;
+
+        if (val !== null && isFinite(val)) {
             if (visualizationMode === 'std') {
-                // Show sigma range for STD mode (z-score based)
-                // Green: within ±stdGreenUpper σ
-                // Amber: between stdGreenUpper and stdAmberUpper σ
-                // Red: beyond stdAmberUpper σ
-                if (deviation <= CONFIG.stdGreenUpper) {
-                    devValue = `±${CONFIG.stdGreenUpper}σ`;
-                } else if (deviation <= CONFIG.stdAmberUpper) {
-                    devValue = `±${CONFIG.stdGreenUpper}-${CONFIG.stdAmberUpper}σ`;
+                // STD Mode: Show Level based on Z-score
+                // Green: < 2, Amber: 2-3, Red: > 3
+                // Using exact thresholds from CONFIG if valid, else defaults
+                const greenThresh = CONFIG.stdGreenUpper || 2;
+                const amberThresh = CONFIG.stdAmberUpper || 3;
+
+                if (val <= greenThresh) {
+                    deviationContent = 'Not Anomaly';
+                } else if (val <= amberThresh) {
+                    deviationContent = 'Level 2';
                 } else {
-                    devValue = `>±${CONFIG.stdAmberUpper}σ`;
+                    deviationContent = 'Level 3';
                 }
             } else {
-                // Show percentage for LSTM mode (MAPE based)
-                devValue = deviation.toFixed(1) + '%';
-                // Bold if more than 100%
-                if (deviation > 100) {
-                    isBold = true;
-                }
+                // LSTM Mode: Show Percentage
+                deviationContent = val.toFixed(2) + '%';
             }
         }
 
-        const devStyle = isBold ? 'font-weight: bold;' : '';
         html += `
             <tr class="${zoneClass}" data-index="${i}">
-                <td>${formattedDate}</td>
+                <td>${dateStr}</td>
                 <td>${actual}</td>
-                <td>${predicted}</td>
-                <td style="${devStyle}">${devValue}</td>
+                <td>${expectedVal}</td>
+                <td>${deviationContent}</td>
             </tr>
         `;
     });
@@ -1164,6 +1174,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     [yearDropdown, quarterDropdown].forEach(d => {
         d.addEventListener('click', e => e.stopPropagation());
     });
+
+    // Graph size control
+    const graphSizeSelect = document.getElementById('graph-size');
+    const chartElement = document.getElementById('chart');
+    if (graphSizeSelect && chartElement) {
+        graphSizeSelect.addEventListener('change', () => {
+            const size = graphSizeSelect.value;
+            // Remove all size classes
+            chartElement.classList.remove('chart-small', 'chart-medium', 'chart-large');
+            // Add selected size class
+            chartElement.classList.add(`chart-${size}`);
+            // Trigger Plotly resize
+            if (window.Plotly) {
+                window.Plotly.Plots.resize(chartElement);
+            }
+        });
+        // Set initial size
+        chartElement.classList.add('chart-large');
+    }
 
     // Populate year checkboxes from data
     function populateYearCheckboxes() {

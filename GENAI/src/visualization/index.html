@@ -220,6 +220,19 @@
             box-sizing: border-box;
         }
 
+        /* Chart size variations */
+        #chart.chart-small {
+            flex: 0 0 60%;
+        }
+
+        #chart.chart-medium {
+            flex: 0 0 80%;
+        }
+
+        #chart.chart-large {
+            flex: 1;
+        }
+
         /* Chart and Table Layout */
         .chart-table-wrapper {
             display: flex;
@@ -229,8 +242,8 @@
         }
 
         .data-table-container {
-            width: 420px;
-            min-width: 420px;
+            width: 480px;
+            min-width: 480px;
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
             border-radius: 16px;
@@ -269,10 +282,25 @@
             text-align: center;
             position: sticky;
             top: 0;
-            z-index: 10;
+            z-index: 100;
             font-weight: 600;
             font-size: 12px;
-            border: 1px solid #DDD;
+            border: 2px solid #333;
+            /* Ensure boundary is visible when scrolling */
+            box-shadow: 0 1px 0 #333;
+        }
+
+        .legend-header {
+            background: #F5F5F5;
+            color: #666;
+            padding: 10px 6px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 12px;
+            border: 2px solid #333;
+            margin-bottom: 10px;
+            text-transform: none;
+            /* Ensure original casing */
         }
 
         .data-table-scroll td {
@@ -339,8 +367,14 @@
         }
 
         /* Selected row */
+        /* Selected row */
         .data-table-scroll tr.selected {
-            outline: 2px solid #00d4ff;
+            outline: 2px solid #242424;
+            /* Black border */
+        }
+
+        .data-table-scroll tr.selected td {
+            font-weight: bold;
         }
 
         /* Sigma note */
@@ -373,33 +407,36 @@
             gap: 8px;
             font-size: 0.9rem;
             color: #242424;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border-radius: 0 4px 4px 0;
+            /* Rounded only on right to match left border look */
         }
 
+        .legend-item.green {
+            background: #F1F7F1;
+            border-left: 4px solid #107A1B;
+        }
+
+        .legend-item.amber {
+            background: #FBF8F1;
+            border-left: 4px solid #BB831B;
+        }
+
+        .legend-item.red {
+            background: #FCF0F0;
+            border-left: 4px solid #C00C00;
+        }
+
+        /* circle classes no longer needed for new style, but keeping for compatibility if referenced elsewhere */
         .legend-circle {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-        }
-
-        .legend-circle.green {
-            background: #107A1B;
-        }
-
-        .legend-circle.amber {
-            background: #BB831B;
-        }
-
-        .legend-circle.red {
-            background: #C00C00;
-        }
-
-        .legend-circle.actual {
-            background: #242424;
+            display: none;
         }
 
         .legend-count {
             font-weight: 600;
-            margin-left: 4px;
+            margin-left: auto;
+            /* Push count to the right */
         }
 
         .slider-hint {
@@ -680,6 +717,16 @@
                 </div>
             </div>
 
+            <!-- Graph Size Control -->
+            <div class="control-group">
+                <label>Chart Size</label>
+                <select id="graph-size">
+                    <option value="small">Small (60%)</option>
+                    <option value="medium">Medium (80%)</option>
+                    <option value="large" selected>Large (100%)</option>
+                </select>
+            </div>
+
             <!-- Tolerance slider - only shown in LSTM mode, placed after Quarter -->
             <div class="control-group slider-container" id="slider-container">
                 <label>Tolerance Offset</label>
@@ -710,58 +757,106 @@
                     σ (sigma) = Standard Deviation. Measures how far a value deviates from the expected/predicted value.
                 </div>
                 <!-- Legend with circles and dynamic counts -->
+                <!-- Legend with circles and dynamic counts -->
                 <div class="legend-info" id="legend-info">
-                    <div class="legend-item">
-                        <div class="legend-circle green"></div>
-                        <span>Green Zone</span>
-                        <span class="legend-count" id="green-count">(0)</span>
+                    <div style="width: 100%; display: flex; justify-content: space-around; flex-wrap: wrap; gap: 20px;">
+                        <!-- Standard Deviation Zone Legend -->
+                        <div class="legend-section" id="legend-section-std" style="flex: 1; min-width: 200px;">
+                            <div class="legend-header">Standard Deviation Zone</div>
+
+                            <div class="legend-item red">
+                                <div>
+                                    <span style="font-weight: bold;">Level 3</span>
+                                    <div style="font-size: 0.8em; color: #666;">Red: > ±3σ</div>
+                                </div>
+                                <span class="legend-count" id="std-red-count" style="display:none;"></span>
+                            </div>
+
+                            <div class="legend-item amber">
+                                <div>
+                                    <span style="font-weight: bold;">Level 2</span>
+                                    <div style="font-size: 0.8em; color: #666;">Amber: ±2σ - ±3σ</div>
+                                </div>
+                                <span class="legend-count" id="std-amber-count" style="display:none;"></span>
+                            </div>
+
+                            <div class="legend-item green">
+                                <div>
+                                    <span style="font-weight: bold;">Not Anomaly</span>
+                                    <div style="font-size: 0.8em; color: #666;">Green: < ±2σ</div>
+                                    </div>
+                                    <span class="legend-count" id="std-green-count" style="display:none;"></span>
+                                </div>
+                            </div>
+
+                            <!-- ML Model Prediction Zone Legend -->
+                            <div class="legend-section" id="legend-section-ml" style="flex: 1; min-width: 200px;">
+                                <div class="legend-header">ML Model Prediction Zone</div>
+
+                                <div class="legend-item red">
+                                    <div>
+                                        <span style="font-weight: bold;">Critical</span>
+                                        <div style="font-size: 0.8em; color: #666;">Red: > 30%</div>
+                                    </div>
+                                    <span class="legend-count" id="ml-red-count" style="display:none;"></span>
+                                </div>
+
+                                <div class="legend-item amber">
+                                    <div>
+                                        <span style="font-weight: bold;">High</span>
+                                        <div style="font-size: 0.8em; color: #666;">Amber: 20% - 30%</div>
+                                    </div>
+                                    <span class="legend-count" id="ml-amber-count" style="display:none;"></span>
+                                </div>
+
+                                <div class="legend-item green">
+                                    <div>
+                                        <span style="font-weight: bold;">Low</span>
+                                        <div style="font-size: 0.8em; color: #666;">Green: 0 - 20%</div>
+                                    </div>
+                                    <span class="legend-count" id="ml-green-count" style="display:none;"></span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="legend-item">
-                        <div class="legend-circle amber"></div>
-                        <span>Amber Zone</span>
-                        <span class="legend-count" id="amber-count">(0)</span>
+                </div>
+            </div>
+
+            <!-- STD Info Panel - shown when in STD mode -->
+            <div id="std-info-panel" class="std-info-panel" style="display: none;">
+                <div class="std-info-header">Deviation Range</div>
+                <div class="std-visual">
+                    <!-- Visual bell curve representation -->
+                    <div class="std-bar">
+                        <div class="std-zone red-zone-left"><span class="color-red">Red</span><br>>±3σ</div>
+                        <div class="std-zone amber-zone-left"><span class="color-amber">Amber</span><br>±2 to ±3σ</div>
+                        <div class="std-zone green-zone"><span
+                                class="color-green">Green</span><br>±2σ<br><small>~95%</small>
+                        </div>
+                        <div class="std-zone amber-zone-right"><span class="color-amber">Amber</span><br>±2 to ±3σ</div>
+                        <div class="std-zone red-zone-right"><span class="color-red">Red</span><br>>±3σ</div>
                     </div>
-                    <div class="legend-item">
-                        <div class="legend-circle red"></div>
-                        <span>Red Zone</span>
-                        <span class="legend-count" id="red-count">(0)</span>
+                    <div class="std-labels">
+                        <span>-3σ</span>
+                        <span>-2σ</span>
+                        <span>Mean</span>
+                        <span>+2σ</span>
+                        <span>+3σ</span>
+                    </div>
+                </div>
+                <div class="std-stats" id="std-stats">
+                    <div class="stat-item"><span class="stat-label">STD Value:</span> <span id="std-value">--</span>
+                    </div>
+                    <div class="stat-item"><span class="stat-label">Mean Residual:</span> <span
+                            id="mean-value">--</span>
+                    </div>
+                    <div class="stat-item"><span class="stat-label">±2σ Range:</span> <span id="range-2std">--</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- STD Info Panel - shown when in STD mode -->
-        <div id="std-info-panel" class="std-info-panel" style="display: none;">
-            <div class="std-info-header">Deviation Range</div>
-            <div class="std-visual">
-                <!-- Visual bell curve representation -->
-                <div class="std-bar">
-                    <div class="std-zone red-zone-left"><span class="color-red">Red</span><br>>±3σ</div>
-                    <div class="std-zone amber-zone-left"><span class="color-amber">Amber</span><br>±2 to ±3σ</div>
-                    <div class="std-zone green-zone"><span
-                            class="color-green">Green</span><br>±2σ<br><small>~95%</small>
-                    </div>
-                    <div class="std-zone amber-zone-right"><span class="color-amber">Amber</span><br>±2 to ±3σ</div>
-                    <div class="std-zone red-zone-right"><span class="color-red">Red</span><br>>±3σ</div>
-                </div>
-                <div class="std-labels">
-                    <span>-3σ</span>
-                    <span>-2σ</span>
-                    <span>Mean</span>
-                    <span>+2σ</span>
-                    <span>+3σ</span>
-                </div>
-            </div>
-            <div class="std-stats" id="std-stats">
-                <div class="stat-item"><span class="stat-label">STD Value:</span> <span id="std-value">--</span></div>
-                <div class="stat-item"><span class="stat-label">Mean Residual:</span> <span id="mean-value">--</span>
-                </div>
-                <div class="stat-item"><span class="stat-label">±2σ Range:</span> <span id="range-2std">--</span></div>
-            </div>
-        </div>
-    </div>
-
-    <script src="app.js?v=3"></script>
+        <script src="app.js?v=3"></script>
 </body>
 
 </html>
