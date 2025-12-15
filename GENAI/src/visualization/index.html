@@ -14,26 +14,24 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: Arial, sans-serif;
+            background: #003061;
             min-height: 100vh;
-            color: #fff;
+            color: #FFF;
             padding: 20px;
         }
 
         .container {
             max-width: 1400px;
             margin: 0 auto;
+            position: relative;
         }
 
         h1 {
             text-align: center;
             margin-bottom: 20px;
             font-size: 2rem;
-            background: linear-gradient(90deg, #00d4ff, #7b2ff7);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #FFF;
         }
 
         /* Configuration Panel */
@@ -50,7 +48,7 @@
             font-size: 1.1rem;
             font-weight: 600;
             margin-bottom: 15px;
-            color: #00d4ff;
+            color: #FFF;
         }
 
         .config-row {
@@ -80,6 +78,7 @@
             border: 1px solid rgba(255, 255, 255, 0.3);
             background: rgba(255, 255, 255, 0.15);
             color: #fff;
+            font-family: Arial, sans-serif;
             font-size: 1rem;
             text-align: center;
         }
@@ -89,17 +88,17 @@
             padding: 12px 20px;
             background: rgba(0, 0, 0, 0.3);
             border-radius: 8px;
-            font-family: monospace;
+            font-family: Arial, sans-serif;
             font-size: 0.95rem;
-            color: #90EE90;
         }
 
         .apply-btn {
             padding: 10px 20px;
             border: none;
             border-radius: 6px;
-            background: linear-gradient(90deg, #22c55e, #16a34a);
+            background: #107A1B;
             color: #fff;
+            font-family: Arial, sans-serif;
             font-weight: 600;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
@@ -107,7 +106,7 @@
 
         .apply-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(34, 197, 94, 0.4);
+            box-shadow: 0 5px 20px rgba(16, 122, 27, 0.4);
         }
 
         /* Controls Panel */
@@ -140,15 +139,18 @@
             letter-spacing: 1px;
         }
 
+        /* Fixed width slider container */
         .slider-container {
-            flex: 1;
-            min-width: 300px;
+            width: 350px;
+            min-width: 350px;
+            max-width: 350px;
+            flex-shrink: 0;
         }
 
         .slider-value {
             font-size: 2rem;
             font-weight: bold;
-            color: #00d4ff;
+            color: #FFF;
             text-align: center;
         }
 
@@ -156,7 +158,8 @@
             width: 100%;
             height: 8px;
             -webkit-appearance: none;
-            background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+            appearance: none;
+            background: linear-gradient(90deg, #107A1B, #BB831B, #C00C00);
             border-radius: 4px;
             outline: none;
         }
@@ -178,12 +181,13 @@
             border: 1px solid rgba(255, 255, 255, 0.3);
             background: rgba(255, 255, 255, 0.1);
             color: #fff;
+            font-family: Arial, sans-serif;
             font-size: 1rem;
             min-width: 150px;
         }
 
         select option {
-            background: #1a1a2e;
+            background: #003061;
             color: #fff;
         }
 
@@ -191,8 +195,9 @@
             padding: 12px 24px;
             border: none;
             border-radius: 8px;
-            background: linear-gradient(90deg, #00d4ff, #7b2ff7);
+            background: #107A1B;
             color: #fff;
+            font-family: Arial, sans-serif;
             font-weight: 600;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
@@ -200,24 +205,166 @@
 
         button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
+            box-shadow: 0 5px 20px rgba(16, 122, 27, 0.4);
         }
 
         #chart {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
+            background: #FFF;
             border-radius: 16px;
             padding: 20px;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            min-height: 500px;
+            height: 700px;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            box-sizing: border-box;
         }
 
+        /* Chart and Table Layout */
+        .chart-table-wrapper {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 20px;
+            align-items: stretch;
+        }
+
+        .data-table-container {
+            width: 420px;
+            min-width: 420px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .data-table-header {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #FFF;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .data-table-scroll {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 500px;
+        }
+
+        .data-table-scroll table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            font-family: Arial, sans-serif;
+            border: 1px solid #DDD;
+        }
+
+        .data-table-scroll th {
+            background: #F5F5F5;
+            color: #666;
+            padding: 10px 6px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            font-weight: 600;
+            font-size: 12px;
+            border: 1px solid #DDD;
+        }
+
+        .data-table-scroll td {
+            padding: 8px 6px;
+            border: 1px solid #DDD;
+            color: #242424;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .data-table-scroll tbody tr {
+            transition: background 0.2s, color 0.2s;
+            cursor: pointer;
+        }
+
+        /* Zone row styles */
+        .data-table-scroll tr.zone-green {
+            background: #F1F7F1;
+        }
+
+        .data-table-scroll tr.zone-green td {
+            color: #242424;
+        }
+
+        .data-table-scroll tr.zone-green td:first-child {
+            border-left: 4px solid #107A1B;
+        }
+
+        .data-table-scroll tr.zone-amber {
+            background: #FBF8F1;
+        }
+
+        .data-table-scroll tr.zone-amber td {
+            color: #242424;
+        }
+
+        .data-table-scroll tr.zone-amber td:first-child {
+            border-left: 4px solid #BB831B;
+        }
+
+        .data-table-scroll tr.zone-red {
+            background: #FCF0F0;
+        }
+
+        .data-table-scroll tr.zone-red td {
+            color: #242424;
+        }
+
+        .data-table-scroll tr.zone-red td:first-child {
+            border-left: 4px solid #C00C00;
+        }
+
+        /* Hover states - bold text, keep same colors */
+        .data-table-scroll tr.zone-green:hover td {
+            font-weight: bold;
+        }
+
+        .data-table-scroll tr.zone-amber:hover td {
+            font-weight: bold;
+        }
+
+        .data-table-scroll tr.zone-red:hover td {
+            font-weight: bold;
+        }
+
+        /* Selected row */
+        .data-table-scroll tr.selected {
+            outline: 2px solid #00d4ff;
+        }
+
+        /* Sigma note */
+        .sigma-note {
+            font-size: 0.75rem;
+            color: #aaa;
+            margin-top: 10px;
+            text-align: center;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+        }
+
+        /* Legend with circles and counts */
         .legend-info {
             display: flex;
             justify-content: center;
-            gap: 30px;
-            margin-top: 30px;
+            gap: 25px;
+            margin-top: 20px;
+            padding: 15px 25px;
             flex-wrap: wrap;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #DDD;
+            border-radius: 8px;
         }
 
         .legend-item {
@@ -225,24 +372,34 @@
             align-items: center;
             gap: 8px;
             font-size: 0.9rem;
+            color: #242424;
         }
 
-        .legend-color {
-            width: 20px;
-            height: 20px;
-            border-radius: 4px;
+        .legend-circle {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
         }
 
-        .green {
-            background: rgba(144, 238, 144, 0.7);
+        .legend-circle.green {
+            background: #107A1B;
         }
 
-        .amber {
-            background: rgba(255, 200, 100, 0.7);
+        .legend-circle.amber {
+            background: #BB831B;
         }
 
-        .red {
-            background: rgba(240, 128, 128, 0.7);
+        .legend-circle.red {
+            background: #C00C00;
+        }
+
+        .legend-circle.actual {
+            background: #242424;
+        }
+
+        .legend-count {
+            font-weight: 600;
+            margin-left: 4px;
         }
 
         .slider-hint {
@@ -260,26 +417,27 @@
 
         .dropdown-header {
             padding: 8px 12px;
-            background: rgba(255, 255, 255, 0.15);
+            background: #FFF;
             border: 1px solid rgba(255, 255, 255, 0.3);
             border-radius: 6px;
             cursor: pointer;
             font-size: 0.9rem;
-            color: #fff;
+            color: #242424;
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
+            text-align: center;
         }
 
         .dropdown-header::after {
-            content: '▼';
+            content: ' ▼';
             font-size: 0.7rem;
             margin-left: 10px;
             opacity: 0.7;
         }
 
         .dropdown-header:hover {
-            background: rgba(255, 255, 255, 0.25);
+            background: #f0f0f0;
         }
 
         .dropdown-content {
@@ -288,8 +446,8 @@
             top: 100%;
             left: 0;
             right: 0;
-            background: rgba(40, 40, 60, 0.98);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: #FFF;
+            border: 1px solid rgba(0, 0, 0, 0.2);
             border-radius: 6px;
             margin-top: 4px;
             max-height: 200px;
@@ -305,20 +463,22 @@
         .checkbox-item {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
             padding: 8px 12px;
             cursor: pointer;
             font-size: 0.9rem;
+            color: #242424;
             transition: background 0.2s;
         }
 
         .checkbox-item:hover {
-            background: rgba(0, 212, 255, 0.2);
+            background: #f0f0f0;
         }
 
         .checkbox-item input[type="checkbox"] {
             cursor: pointer;
-            accent-color: #00d4ff;
+            accent-color: #107A1B;
             width: 16px;
             height: 16px;
         }
@@ -336,7 +496,7 @@
         .std-info-header {
             font-size: 1rem;
             font-weight: 600;
-            color: #00d4ff;
+            color: #FFF;
             margin-bottom: 12px;
             text-align: center;
         }
@@ -359,26 +519,28 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            color: #fff;
+            color: #242424;
             font-weight: 600;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
         }
 
         .red-zone-left,
         .red-zone-right {
             flex: 1;
-            background: linear-gradient(180deg, rgba(240, 128, 128, 0.8), rgba(220, 20, 60, 0.9));
+            background: #FCF0F0;
+            border: 1px solid #C00C00;
         }
 
         .amber-zone-left,
         .amber-zone-right {
             flex: 1.5;
-            background: linear-gradient(180deg, rgba(255, 200, 100, 0.8), rgba(255, 165, 0, 0.9));
+            background: #FBF8F1;
+            border: 1px solid #BB831B;
         }
 
         .green-zone {
             flex: 4;
-            background: linear-gradient(180deg, rgba(144, 238, 144, 0.8), rgba(34, 139, 34, 0.9));
+            background: #F1F7F1;
+            border: 1px solid #107A1B;
         }
 
         .std-labels {
@@ -406,19 +568,37 @@
         }
 
         .stat-item span:last-child {
-            color: #00d4ff;
+            color: #FFF;
             font-weight: 600;
+        }
+
+        /* Color classes for config preview */
+        .color-green {
+            color: #107A1B;
+        }
+
+        .color-amber {
+            color: #BB831B;
+        }
+
+        .color-red {
+            color: #C00C00;
+        }
+
+        /* Hidden elements */
+        .hidden {
+            display: none !important;
         }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h1>📊 Deviation Threshold Visualization</h1>
+        <h1>Deviation Threshold Visualization</h1>
 
         <!-- Threshold Configuration Panel -->
         <div class="config-panel">
-            <div class="config-header">⚙️ Threshold Configuration</div>
+            <div class="config-header">Threshold Configuration</div>
 
             <!-- LSTM Mode Config -->
             <div id="lstm-config" class="config-row">
@@ -431,7 +611,9 @@
                     <input type="number" id="amber-width" value="10" min="0" max="50" step="1">
                 </div>
                 <div class="config-preview" id="threshold-preview">
-                    Green: 0-20%, Amber: 20-30%, Red: 30%+
+                    <span class="color-green">Green: 0-20%</span>,
+                    <span class="color-amber">Amber: 20-30%</span>,
+                    <span class="color-red">Red: 30%+</span>
                 </div>
                 <button class="apply-btn" id="apply-config">Apply</button>
             </div>
@@ -447,7 +629,9 @@
                     <input type="number" id="std-amber-upper" value="3" min="1" max="6" step="0.5">
                 </div>
                 <div class="config-preview" id="std-threshold-preview">
-                    Green: ±2σ, Amber: ±2-3σ, Red: >±3σ
+                    <span class="color-green">Green: ±2σ</span>,
+                    <span class="color-amber">Amber: ±2-3σ</span>,
+                    <span class="color-red">Red: >±3σ</span>
                 </div>
                 <button class="apply-btn" id="apply-std-config">Apply</button>
             </div>
@@ -455,11 +639,12 @@
 
         <!-- Main Controls -->
         <div class="controls">
-            <div class="control-group slider-container">
-                <label>Tolerance Offset</label>
-                <input type="range" id="threshold" min="0" max="100" value="0">
-                <div class="slider-value">Offset: +<span id="threshold-value">0</span>%</div>
-                <div class="slider-hint">Adds to base thresholds (e.g., slider=10 → Green: 0-30%)</div>
+            <div class="control-group">
+                <label>Product/Entity</label>
+                <select id="dataset-select">
+                    <option value="">Select Dataset...</option>
+                    <!-- Populated dynamically from Excel sheets -->
+                </select>
             </div>
 
             <div class="control-group">
@@ -486,6 +671,7 @@
                 <div class="dropdown-checkbox" id="quarter-dropdown">
                     <div class="dropdown-header" id="quarter-header">Select Quarters...</div>
                     <div class="dropdown-content" id="quarter-checkboxes">
+                        <label class="checkbox-item select-all"><input type="checkbox" value="all"> Select All</label>
                         <label class="checkbox-item"><input type="checkbox" value="1"> Q1</label>
                         <label class="checkbox-item"><input type="checkbox" value="2"> Q2</label>
                         <label class="checkbox-item"><input type="checkbox" value="3"> Q3</label>
@@ -494,42 +680,69 @@
                 </div>
             </div>
 
+            <!-- Tolerance slider - only shown in LSTM mode, placed after Quarter -->
+            <div class="control-group slider-container" id="slider-container">
+                <label>Tolerance Offset</label>
+                <input type="range" id="threshold" min="0" max="100" value="0">
+                <div class="slider-value">Offset: +<span id="threshold-value">0</span>%</div>
+                <div class="slider-hint">Adds to base thresholds (e.g., slider=10 → Green: 0-30%)</div>
+            </div>
+
+            <!-- Hidden: Data File and Load Button -->
+            <!--
             <div class="control-group">
                 <label>Data File (optional)</label>
                 <input type="text" id="csv" placeholder="Path to CSV/Excel">
             </div>
-
             <button id="load-data">Load Data</button>
+            -->
         </div>
 
-        <div id="chart"></div>
-
-        <div class="legend-info">
-            <div class="legend-item">
-                <div class="legend-color green"></div>
-                <span>Green Zone: Acceptable Deviation</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color amber"></div>
-                <span>Amber Zone: Warning</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color red"></div>
-                <span>Red Zone: Anomaly</span>
+        <!-- Chart and Data Table Layout -->
+        <div class="chart-table-wrapper">
+            <div id="chart"></div>
+            <div class="data-table-container">
+                <div class="data-table-header">Data Table</div>
+                <div class="data-table-scroll" id="data-table">
+                    <!-- Populated dynamically -->
+                </div>
+                <div class="sigma-note" id="sigma-note" style="display: none;">
+                    σ (sigma) = Standard Deviation. Measures how far a value deviates from the expected/predicted value.
+                </div>
+                <!-- Legend with circles and dynamic counts -->
+                <div class="legend-info" id="legend-info">
+                    <div class="legend-item">
+                        <div class="legend-circle green"></div>
+                        <span>Green Zone</span>
+                        <span class="legend-count" id="green-count">(0)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-circle amber"></div>
+                        <span>Amber Zone</span>
+                        <span class="legend-count" id="amber-count">(0)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-circle red"></div>
+                        <span>Red Zone</span>
+                        <span class="legend-count" id="red-count">(0)</span>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- STD Info Panel - shown when in STD mode -->
         <div id="std-info-panel" class="std-info-panel" style="display: none;">
-            <div class="std-info-header">📊 Standard Deviation (STD) Zones</div>
+            <div class="std-info-header">Deviation Range</div>
             <div class="std-visual">
                 <!-- Visual bell curve representation -->
                 <div class="std-bar">
-                    <div class="std-zone red-zone-left">Red<br>>3σ</div>
-                    <div class="std-zone amber-zone-left">Amber<br>2-3σ</div>
-                    <div class="std-zone green-zone">Green<br>±2σ<br><small>~95%</small></div>
-                    <div class="std-zone amber-zone-right">Amber<br>2-3σ</div>
-                    <div class="std-zone red-zone-right">Red<br>>3σ</div>
+                    <div class="std-zone red-zone-left"><span class="color-red">Red</span><br>>±3σ</div>
+                    <div class="std-zone amber-zone-left"><span class="color-amber">Amber</span><br>±2 to ±3σ</div>
+                    <div class="std-zone green-zone"><span
+                            class="color-green">Green</span><br>±2σ<br><small>~95%</small>
+                    </div>
+                    <div class="std-zone amber-zone-right"><span class="color-amber">Amber</span><br>±2 to ±3σ</div>
+                    <div class="std-zone red-zone-right"><span class="color-red">Red</span><br>>±3σ</div>
                 </div>
                 <div class="std-labels">
                     <span>-3σ</span>
@@ -548,7 +761,7 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=3"></script>
 </body>
 
 </html>
