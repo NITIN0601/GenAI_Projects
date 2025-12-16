@@ -16,7 +16,7 @@ class TableStructureFormatter:
     """Format extracted tables with detailed structure information."""
     
     @staticmethod
-    def parse_markdown_table(markdown_content: str) -> Dict[str, Any]:
+    def parse_markdown_table(markdown_content: str, title: Optional[str] = None) -> Dict[str, Any]:
         """
         Parse markdown table into structured format.
         
@@ -24,9 +24,11 @@ class TableStructureFormatter:
         - Multi-level column headers (3+ levels)
         - Hierarchical row headers with parent-child relationships
         - Subsection rows (section headers within data)
+        - Title rows erroneously included in content
         
         Args:
             markdown_content: Markdown table string
+            title: Optional table title for validation/cleanup
             
         Returns:
             Dictionary with table structure information including:
@@ -40,6 +42,17 @@ class TableStructureFormatter:
         """
         lines = [line.strip() for line in markdown_content.split('\n') if line.strip()]
         
+        # Helper to check if a row looks like the title
+        def is_title_row(row_line: str, title: str) -> bool:
+            if not title:
+                return False
+            # Strip pipes
+            content = row_line.strip('|').strip()
+            # Simple fuzzy match or exact match
+            from difflib import SequenceMatcher
+            ratio = SequenceMatcher(None, content.lower(), title.lower()).ratio()
+            return ratio > 0.8 or title.lower() in content.lower()
+
         # Find separator line index
         separator_idx = -1
         for i, line in enumerate(lines):
@@ -69,6 +82,19 @@ class TableStructureFormatter:
                     header_lines.append(line)
                 elif i > separator_idx:
                     data_lines.append(line)
+        
+        # Post-processing: Check if header_lines[0] is actually the title
+        # If we have a title provided and the first header line matches it
+        if header_lines and title:
+            # Check if first header is title
+            if is_title_row(header_lines[0], title):
+                # Remove it
+                header_lines.pop(0)
+                
+                # If we have no headers left, and we have data lines, promote first data line
+                # EXCEPT if there was an explicit separator, in which case empty header is weird but possible
+                if not header_lines and data_lines and separator_idx == -1:
+                    header_lines.append(data_lines.pop(0))
         
         # Parse header rows into header_levels
         header_levels = []
@@ -106,6 +132,7 @@ class TableStructureFormatter:
         subsections = []
         current_parent = None
         current_subsection = None
+        current_subsection = None # Reset for safety
         
         for row_line in data_lines:
             # Split by pipe and filter out leading/trailing empty cells
@@ -257,14 +284,15 @@ class TableStructureFormatter:
         """
         content = table_dict.get('content', '')
         metadata = table_dict.get('metadata', {})
+        title = metadata.get('table_title')
         
-        # Parse table
-        parsed = TableStructureFormatter.parse_markdown_table(content)
+        # Parse table with title for cleanup
+        parsed = TableStructureFormatter.parse_markdown_table(content, title=title)
         
         # Build output
         output = []
         output.append("=" * 80)
-        output.append(f"Table Title: {metadata.get('table_title', 'N/A')}")
+        output.append(f"Table Title: {title or 'N/A'}")
         output.append("=" * 80)
         
         # Column headers

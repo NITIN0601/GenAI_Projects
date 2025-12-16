@@ -26,8 +26,10 @@ class ExtractStep(StepInterface):
     
     name = "extract"
     
-    def __init__(self, enable_caching: bool = True):
+
+    def __init__(self, enable_caching: bool = True, force: bool = False):
         self.enable_caching = enable_caching
+        self.force = force
     
     def validate(self, context: PipelineContext) -> bool:
         """Validate source directory exists."""
@@ -54,7 +56,8 @@ class ExtractStep(StepInterface):
             "description": "Extract tables from PDF files using Docling",
             "reads": ["context.source_dir"],
             "writes": ["context.extracted_data"],
-            "caching_enabled": self.enable_caching
+            "caching_enabled": self.enable_caching,
+            "force_extraction": self.force
         }
     
     def execute(self, context: PipelineContext) -> StepResult:
@@ -87,7 +90,8 @@ class ExtractStep(StepInterface):
             for pdf_path in pdf_files:
                 pbar.set_description(f"📄 {pdf_path.name[:25]}")
                 
-                result = extractor.extract(str(pdf_path))
+                # Pass force flag to extractor
+                result = extractor.extract(str(pdf_path), force=self.force)
                 
                 if result.is_successful():
                     all_results.append({
@@ -130,12 +134,13 @@ class ExtractStep(StepInterface):
 # Backward-compatible function for main.py
 def run_extract(
     source_dir: str = None,
+    force: bool = False,
     enable_caching: bool = True
 ):
     """Legacy wrapper for backward compatibility with main.py CLI."""
     from src.pipeline import PipelineStep, PipelineResult
     
-    step = ExtractStep(enable_caching=enable_caching)
+    step = ExtractStep(enable_caching=enable_caching, force=force)
     ctx = PipelineContext(source_dir=source_dir)
     result = step.execute(ctx) if step.validate(ctx) else StepResult(
         step_name="extract",

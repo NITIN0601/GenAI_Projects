@@ -261,7 +261,7 @@ class TableConsolidator:
         
         for table in tables:
             # Parse table content
-            df = self._parse_table_content(table['content'])
+            df = self._parse_table_content(table['content'], title=table.get('title'))
             
             if df.empty:
                 continue
@@ -382,10 +382,10 @@ class TableConsolidator:
         
         return export_paths
     
-    def _parse_table_content(self, content: str) -> pd.DataFrame:
+    def _parse_table_content(self, content: str, title: Optional[str] = None) -> pd.DataFrame:
         """Parse markdown/text table to DataFrame with currency cleaning."""
         from src.utils.table_utils import parse_markdown_table
-        return parse_markdown_table(content, handle_colon_separator=True)
+        return parse_markdown_table(content, handle_colon_separator=True, title=title)
     
     def _fuzzy_match(self, query: str, target: str) -> float:
         """Calculate fuzzy string similarity (0.0-1.0)."""
