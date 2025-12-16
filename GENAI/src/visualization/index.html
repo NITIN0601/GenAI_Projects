@@ -222,11 +222,11 @@
 
         /* Chart size variations */
         #chart.chart-small {
-            flex: 0 0 60%;
+            flex: 0 0 580px;
         }
 
         #chart.chart-medium {
-            flex: 0 0 80%;
+            flex: 0 0 800px;
         }
 
         #chart.chart-large {
@@ -363,6 +363,24 @@
         }
 
         .data-table-scroll tr.zone-red:hover td {
+            font-weight: bold;
+        }
+
+        /* Future prediction rows */
+        .data-table-scroll tr.zone-future {
+            background: #FFFFFF;
+        }
+
+        .data-table-scroll tr.zone-future td {
+            color: #242424;
+        }
+
+        .data-table-scroll tr.zone-future td:first-child {
+            border-left: 4px solid #888888;
+            /* Gray border for neutral/future */
+        }
+
+        .data-table-scroll tr.zone-future:hover td {
             font-weight: bold;
         }
 
@@ -677,9 +695,17 @@
         <!-- Main Controls -->
         <div class="controls">
             <div class="control-group">
+                <label>Table</label>
+                <select id="table-select">
+                    <option value="contract_fair_value" selected>Difference between Contractual Principal and Fair
+                        Values</option>
+                    <!-- Future tables can be added here for scalability -->
+                </select>
+            </div>
+
+            <div class="control-group">
                 <label>Product/Entity</label>
                 <select id="dataset-select">
-                    <option value="">Select Dataset...</option>
                     <!-- Populated dynamically from Excel sheets -->
                 </select>
             </div>
@@ -721,7 +747,7 @@
             <div class="control-group">
                 <label>Chart Size</label>
                 <select id="graph-size">
-                    <option value="small">Small (60%)</option>
+                    <option value="small">Small (580px)</option>
                     <option value="medium">Medium (80%)</option>
                     <option value="large" selected>Large (100%)</option>
                 </select>

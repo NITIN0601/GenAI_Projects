@@ -5,10 +5,14 @@ Serves the HTML/JS frontend and provides API endpoints.
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 import pandas as pd
 from pathlib import Path
 from typing import Optional, Union, List, Dict
+import logging
+from functools import lru_cache
+import os
 
 # ============================================================================
 # Configuration Models
@@ -72,6 +76,16 @@ class ConfigResponse(BaseModel):
     red_lower: float
 
 
+class SheetColumnsResponse(BaseModel):
+    """Response model for sheet columns endpoint."""
+    sheet_columns: Dict[str, List[str]]
+
+
+class SheetsResponse(BaseModel):
+    """Response model for sheets endpoint."""
+    sheets: List[str]
+
+
 # ============================================================================
 # App Initialization
 # ============================================================================
@@ -82,8 +96,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Add CORS middleware for frontend-backend communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Default data path - can be overridden via environment variable
-import os
 DATA_PATH = Path(os.environ.get('VIZ_DATA_PATH', Path(__file__).parent.parent.parent / 'data' / 'extracted' / 'Bor_graph.xlsx'))
 STATIC_DIR = Path(__file__).parent
 
@@ -129,6 +158,44 @@ SHEET_COLUMN_CONFIG: Dict[str, Union[List[str], Dict]] = {
 # Utility Functions
 # ============================================================================
 
+def validate_file_path(file_path: Path) -> Path:
+    """
+    Validate file path to prevent directory traversal attacks.
+    
+    Args:
+        file_path: Path to validate
+        
+    Returns:
+        Resolved absolute path
+        
+    Raises:
+        HTTPException: If path is invalid or outside allowed directories
+    """
+    try:
+        resolved_path = file_path.resolve()
+        
+        # Ensure file exists
+        if not resolved_path.exists():
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+        
+        # Ensure it's a file, not a directory
+        if not resolved_path.is_file():
+            raise HTTPException(status_code=400, detail=f"Path is not a file: {file_path}")
+        
+        # Check file extension
+        allowed_extensions = {'.xlsx', '.xls', '.csv'}
+        if resolved_path.suffix.lower() not in allowed_extensions:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
+            )
+        
+        return resolved_path
+        
+    except (OSError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid file path: {str(e)}")
+
+
 def get_sheet_columns(file_path: Path = None) -> dict:
     """
     Get column names for all sheets in an Excel file.
@@ -149,7 +216,7 @@ def get_sheet_columns(file_path: Path = None) -> dict:
             df.columns = df.columns.astype(str).str.strip()
             result[sheet_name] = list(df.columns)
     except Exception as e:
-        print(f"Error reading sheet columns: {e}")
+        logger.error(f"Error reading sheet columns: {e}")
     
     return result
 
@@ -393,6 +460,11 @@ def apply_data_trimming(df: pd.DataFrame, col_mapping: dict) -> pd.DataFrame:
     return result
 
 
+def is_blank_string(value) -> bool:
+    """Helper: treat strings like '', '-', '--', or whitespace as missing."""
+    return isinstance(value, str) and value.strip() in ('', '-', '--')
+
+
 def build_data_records(df: pd.DataFrame, col_mapping: dict) -> list:
     """
     Convert dataframe rows to JSON-serializable records for the API response.
@@ -414,25 +486,55 @@ def build_data_records(df: pd.DataFrame, col_mapping: dict) -> list:
     std_std_col = col_mapping['std_std_col']
     
     result = []
+    last_valid_date = None
     
     for _, row in df.iterrows():
-        # Skip rows without date
-        if date_col in df.columns and pd.isna(row.get(date_col)):
-            continue
-        
-        # Check if row has predicted/expected values
-        has_actual = pd.notna(row.get(actual_col))
+        # Check if row has predicted/expected values first
         has_lstm_predicted = lstm_predicted_col in df.columns and pd.notna(row.get(lstm_predicted_col))
         has_rolling_mean = std_mean_col in df.columns and pd.notna(row.get(std_mean_col))
         
-        # NEW FILTER LOGIC: Only show records where predicted values exist
-        # Skip if no predicted values (regardless of actual value presence)
+        # Skip rows without predicted values
         if not has_lstm_predicted and not has_rolling_mean:
             continue
+        
+        # Check if row has actual value
+        has_actual = pd.notna(row.get(actual_col))
+        
+        # Determine how to display the date
+        raw_date = row.get(date_col)
 
+        # Parse date if possible
+        parsed_date = None
+        if pd.notna(raw_date) and not is_blank_string(raw_date):
+            try:
+                parsed_date = pd.to_datetime(raw_date)
+            except Exception:
+                parsed_date = None
+
+        # If actual is missing AND we have a predicted value, and the source date is blank/missing,
+        # show a Future - Qn,YYYY label based on the last valid date. Otherwise show the parsed date.
+        is_future = False
+        if not has_actual and (has_lstm_predicted or has_rolling_mean) and (pd.isna(raw_date) or is_blank_string(raw_date) or parsed_date is None):
+            if last_valid_date:
+                next_date = last_valid_date + pd.DateOffset(months=3)
+                quarter = (next_date.month - 1) // 3 + 1
+                date_str = f'Future - Q{quarter},{next_date.year}'
+                is_future = True
+            else:
+                date_str = 'Future'
+                is_future = True
+        else:
+            if parsed_date is not None and pd.notna(parsed_date):
+                date_str = parsed_date.strftime('%Y-%m-%d')
+                last_valid_date = parsed_date
+            else:
+                # Fall back to original string (keeps any non-date text)
+                date_str = str(raw_date) if raw_date is not None else 'Future'
+        
         record = {
-            'date': pd.to_datetime(row[date_col]).strftime('%Y-%m-%d') if pd.notna(row.get(date_col)) else None,
+            'date': date_str,
             'actual': float(row[actual_col]) if has_actual else None,
+            'is_future': is_future,
         }
 
         # LSTM mode fields
@@ -520,38 +622,33 @@ async def update_column_config(config: ColumnConfig):
 # Data Endpoints
 # ============================================================================
 
-@app.get("/api/sheet-columns")
+@app.get("/api/sheet-columns", response_model=SheetColumnsResponse)
 async def get_sheet_columns_endpoint(
     csv: Optional[str] = Query(None, description="Path to Excel file")
 ):
     """
     Return a dictionary mapping sheet names to their column names.
     """
-    file_path = Path(csv) if csv else DATA_PATH
+    file_path = validate_file_path(Path(csv)) if csv else DATA_PATH
     
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
-    
-    return {"sheet_columns": get_sheet_columns(file_path)}
+    return SheetColumnsResponse(sheet_columns=get_sheet_columns(file_path))
 
 
-@app.get("/api/sheets")
+@app.get("/api/sheets", response_model=SheetsResponse)
 async def get_sheets(
     csv: Optional[str] = Query(None, description="Path to Excel file")
 ):
     """Return list of sheet names from the Excel file."""
-    file_path = Path(csv) if csv else DATA_PATH
-    
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    file_path = validate_file_path(Path(csv)) if csv else DATA_PATH
     
     try:
         if str(file_path).endswith('.xlsx') or str(file_path).endswith('.xls'):
             xl = pd.ExcelFile(file_path)
-            return {"sheets": xl.sheet_names}
+            return SheetsResponse(sheets=xl.sheet_names)
         else:
-            return {"sheets": ["default"]}
+            return SheetsResponse(sheets=["default"])
     except Exception as e:
+        logger.error(f"Error reading sheets: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -576,10 +673,8 @@ async def get_data(
     Returns:
         JSON with data array and config
     """
-    file_path = Path(csv) if csv else DATA_PATH
-    
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    file_path = validate_file_path(Path(csv)) if csv else DATA_PATH
+    logger.info(f"Loading data from {file_path}, sheet: {sheet}")
     
     try:
         # Load data based on file extension
@@ -621,6 +716,7 @@ async def get_data(
         }
         
     except Exception as e:
+        logger.error(f"Error processing data: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -634,9 +730,8 @@ async def debug_trim(
     Debug endpoint to diagnose data trimming behavior.
     Returns first n rows at each stage of processing.
     """
-    file_path = Path(csv) if csv else DATA_PATH
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    file_path = validate_file_path(Path(csv)) if csv else DATA_PATH
+    logger.info(f"Debug trim for {file_path}, sheet: {sheet}")
 
     try:
         if str(file_path).endswith('.xlsx') or str(file_path).endswith('.xls'):
@@ -694,6 +789,7 @@ async def debug_trim(
             'quarter_trimmed_head': to_records(quarter_trimmed),
         })
     except Exception as e:
+        logger.error(f"Error in debug trim: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -703,11 +799,11 @@ async def debug_trim(
 
 if __name__ == '__main__':
     import uvicorn
-    print("\n" + "="*60)
-    print("  VISUALIZATION SERVER (FastAPI)")
-    print("="*60)
-    print(f"  Data file: {DATA_PATH}")
-    print(f"  Open in browser: http://localhost:5001")
-    print(f"  API docs: http://localhost:5001/docs")
-    print("="*60 + "\n")
-    uvicorn.run(app, host="0.0.0.0", port=5001)
+    logger.info("="*60)
+    logger.info("  VISUALIZATION SERVER (FastAPI)")
+    logger.info("="*60)
+    logger.info(f"  Data file: {DATA_PATH}")
+    logger.info(f"  Open in browser: http://localhost:5001")
+    logger.info(f"  API docs: http://localhost:5001/docs")
+    logger.info("="*60)
+    uvicorn.run(app, host="0.0.0.0", port=5001, log_level="info")

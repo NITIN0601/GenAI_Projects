@@ -579,13 +579,43 @@ function buildPlot(data, deviations, sliderValue, expectedKey, visualizationMode
     }
 
     // Create traces
+    // Prepare marker sizes and colors for future points on the Predicted line
+    const predictedMarkerSizes = data.map(d => d.is_future === true ? 12 : 0);  // Only show markers for future points
+    const predictedMarkerColors = data.map((d, i) => {
+        if (d.is_future === true) {
+            // Future points: white fill for hollow appearance
+            return '#FFFFFF';
+        }
+        return 'rgba(0,0,0,0)';  // Invisible for non-future
+    });
+    const predictedMarkerBorders = data.map((d, i) => {
+        if (d.is_future === true) {
+            if (visualizationMode === 'std') {
+                return '#888888';  // Gray for STD mode
+            } else {
+                // LSTM mode: trend-based color
+                if (i > 0 && data[i - 1].actual != null && expecteds[i] != null) {
+                    const prevActual = data[i - 1].actual;
+                    return expecteds[i] > prevActual ? '#107A1B' : '#C00C00';
+                }
+                return '#888888';
+            }
+        }
+        return '#6a0dad';  // Purple border for non-future (matches line)
+    });
+
     const traceExpected = {
         x: x,
         y: expecteds,
-        mode: 'lines',
+        mode: 'lines+markers',  // Changed to include markers for future points
         name: 'Predicted',
         line: { color: '#6a0dad', dash: 'dash', width: 2, shape: 'linear' },
-        marker: { size: 6 },
+        marker: {
+            size: predictedMarkerSizes,
+            color: predictedMarkerColors,
+            symbol: 'circle',
+            line: { width: 2, color: predictedMarkerBorders }
+        },
         text: xLabels,
         // Format values with commas for tooltip display
         customdata: expecteds.map(e => e != null && isFinite(e) ? e.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'),
@@ -655,6 +685,29 @@ function buildPlot(data, deviations, sliderValue, expectedKey, visualizationMode
         showlegend: false
     };
 
+    // Prepare marker colors and border colors for future vs non-future points
+    const markerFillColors = data.map((d, i) => {
+        return d.is_future === true ? '#FFFFFF' : colors[i];  // White fill for future points
+    });
+
+    const markerBorderColors = data.map((d, i) => {
+        if (d.is_future === true) {
+            // For future points, border color depends on visualization mode
+            if (visualizationMode === 'std') {
+                // STD mode: neutral gray border (can't determine direction without deviation)
+                return '#888888';
+            } else {
+                // LSTM mode: trend-based border color
+                if (i > 0 && data[i - 1].actual != null && expecteds[i] != null) {
+                    const prevActual = data[i - 1].actual;
+                    return expecteds[i] > prevActual ? '#107A1B' : '#C00C00';  // Green if up, Red if down
+                }
+                return '#888888';  // Gray if no trend available
+            }
+        }
+        return '#242424';  // Default black border for non-future points
+    });
+
     const traceActual = {
         x: x,
         y: actuals,
@@ -662,10 +715,10 @@ function buildPlot(data, deviations, sliderValue, expectedKey, visualizationMode
         name: 'Actual',
         showlegend: false,  // Hide main trace from legend
         marker: {
-            color: colors,
+            color: markerFillColors,
             size: 10,
             symbol: 'circle',
-            line: { width: 2, color: '#242424' }
+            line: { width: 2, color: markerBorderColors }
         },
         line: { color: '#242424', dash: 'solid' },
         text: xLabels,
@@ -946,10 +999,17 @@ function renderDataTable(data, colors, deviations, visualizationMode) {
     `;
 
     data.forEach((d, i) => {
+        // Check if this is a future row
+        const isFuture = d.is_future === true;
+
         let zoneClass = '';
-        if (colors[i] === '#107A1B') zoneClass = 'zone-green';
-        else if (colors[i] === '#BB831B') zoneClass = 'zone-amber';
-        else if (colors[i] === '#C00C00') zoneClass = 'zone-red';
+        if (isFuture) {
+            zoneClass = 'zone-future';  // White background for future rows
+        } else {
+            if (colors[i] === '#107A1B') zoneClass = 'zone-green';
+            else if (colors[i] === '#BB831B') zoneClass = 'zone-amber';
+            else if (colors[i] === '#C00C00') zoneClass = 'zone-red';
+        }
 
         const dateStr = d.date ? formatDateAsQuarter(d.date) : `Point ${i + 1}`;
         const actual = d.actual != null ? d.actual.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
@@ -974,7 +1034,30 @@ function renderDataTable(data, colors, deviations, visualizationMode) {
         let deviationContent = '-';
         const val = deviations ? deviations[i] : null;
 
-        if (val !== null && isFinite(val)) {
+        if (isFuture) {
+            // Future row logic - mode specific
+            if (visualizationMode === 'std') {
+                // STD mode: no deviation for future rows (can't calculate Z-score without actual)
+                deviationContent = '--';
+            } else {
+                // LSTM mode: show percentage with green/red arrow based on prediction trend
+                // Compare current predicted with previous actual (if available)
+                if (i > 0 && data[i - 1].actual != null && rawExpected != null) {
+                    const prevActual = data[i - 1].actual;
+                    const percentChange = Math.abs((rawExpected - prevActual) / prevActual * 100);
+
+                    if (rawExpected > prevActual) {
+                        deviationContent = `<span style="color: #107A1B; font-size: 18px;">▲</span> ${percentChange.toFixed(2)}%`;
+                    } else if (rawExpected < prevActual) {
+                        deviationContent = `<span style="color: #C00C00; font-size: 18px;">▼</span> ${percentChange.toFixed(2)}%`;
+                    } else {
+                        deviationContent = '<span style="color: #888; font-size: 18px;">→</span> 0.00%';
+                    }
+                } else {
+                    deviationContent = '--';
+                }
+            }
+        } else if (val !== null && isFinite(val)) {
             if (visualizationMode === 'std') {
                 // STD Mode: Show Level based on Z-score
                 // Green: < 2, Amber: 2-3, Red: > 3
@@ -1094,6 +1177,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const amberWidthInput = document.getElementById('amber-width');
     const applyConfigBtn = document.getElementById('apply-config');
     const datasetSelect = document.getElementById('dataset-select');
+    const tableSelect = document.getElementById('table-select');
 
     let expectedKey = 'expected';
     let visualizationMode = expectedChoice.value || 'lstm';  // 'std' or 'lstm'
@@ -1105,7 +1189,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Populate dataset dropdown from sheets
     async function populateDatasetDropdown() {
         const sheets = await fetchSheets();
-        datasetSelect.innerHTML = '<option value="">Select Dataset...</option>';
+        datasetSelect.innerHTML = '';  // Clear existing options
         sheets.forEach(sheet => {
             const option = document.createElement('option');
             option.value = sheet;
@@ -1141,6 +1225,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     } else {
         console.error('datasetSelect element not found!');
+    }
+
+    // Table selection change handler (future scalability)
+    if (tableSelect) {
+        tableSelect.addEventListener('change', () => {
+            const selectedTable = tableSelect.value;
+            console.log('Table selected:', selectedTable);
+            // Future: Load different data file or configuration based on table selection
+            // For now, only one table is supported (contract_fair_value)
+        });
     }
 
     // Date filter dropdown elements
@@ -1281,8 +1375,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Set default expected key
-    if (rawData && rawData.length > 0 && rawData[0].expected != null) expectedKey = 'expected';
-    else if (rawData && rawData.length > 0 && rawData[0].expected_rolling != null) expectedKey = 'expected_rolling';
+    // Set default expected key based on mode and availability
+    if (visualizationMode === 'lstm') {
+        expectedKey = 'expected';
+    } else {
+        // For STD, prefer expected_rolling
+        if (rawData && rawData.length > 0 && rawData[0].expected_rolling != null) {
+            expectedKey = 'expected_rolling';
+        } else {
+            expectedKey = 'expected';
+        }
+    }
 
     let deviations = computeDeviations(data, expectedKey);
     buildPlot(data, deviations, Number(thresholdInput.value), expectedKey, visualizationMode, currentSheet);
@@ -1298,6 +1401,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Visualization mode change handler (STD vs LSTM)
     expectedChoice.addEventListener('change', async () => {
         visualizationMode = expectedChoice.value;  // 'std' or 'lstm'
+
+        // Determine correct expected key for this mode
+        if (visualizationMode === 'std') {
+            // For STD, we primarily rely on expected_rolling if available
+            if (data && data.length > 0 && data[0].expected_rolling != null) expectedKey = 'expected_rolling';
+        } else {
+            // For LSTM, force use of LSTM prediction
+            expectedKey = 'expected';
+        }
 
         // Toggle config panels based on mode
         const lstmConfig = document.getElementById('lstm-config');
