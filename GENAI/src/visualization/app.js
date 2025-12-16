@@ -580,16 +580,25 @@ function buildPlot(data, deviations, sliderValue, expectedKey, visualizationMode
 
     // Create traces
     // Prepare marker sizes and colors for future points on the Predicted line
-    const predictedMarkerSizes = data.map(d => d.is_future === true ? 12 : 0);  // Only show markers for future points
+    // Detect future: actual is null/missing but predicted exists
+    const predictedMarkerSizes = data.map(d => {
+        const hasPredicted = d.expected != null || d.expected_lstm != null || d.expected_rolling != null;
+        const isFuture = (d.actual == null || d.actual === '-') && hasPredicted;
+        return isFuture ? 12 : 0;  // Only show markers for future points
+    });
     const predictedMarkerColors = data.map((d, i) => {
-        if (d.is_future === true) {
+        const hasPredicted = d.expected != null || d.expected_lstm != null || d.expected_rolling != null;
+        const isFuture = (d.actual == null || d.actual === '-') && hasPredicted;
+        if (isFuture) {
             // Future points: white fill for hollow appearance
             return '#FFFFFF';
         }
         return 'rgba(0,0,0,0)';  // Invisible for non-future
     });
     const predictedMarkerBorders = data.map((d, i) => {
-        if (d.is_future === true) {
+        const hasPredicted = d.expected != null || d.expected_lstm != null || d.expected_rolling != null;
+        const isFuture = (d.actual == null || d.actual === '-') && hasPredicted;
+        if (isFuture) {
             if (visualizationMode === 'std') {
                 return '#888888';  // Gray for STD mode
             } else {
@@ -686,12 +695,17 @@ function buildPlot(data, deviations, sliderValue, expectedKey, visualizationMode
     };
 
     // Prepare marker colors and border colors for future vs non-future points
+    // Detect future: actual is null/missing but predicted exists  
     const markerFillColors = data.map((d, i) => {
-        return d.is_future === true ? '#FFFFFF' : colors[i];  // White fill for future points
+        const hasPredicted = d.expected != null || d.expected_lstm != null || d.expected_rolling != null;
+        const isFuture = (d.actual == null || d.actual === '-') && hasPredicted;
+        return isFuture ? '#FFFFFF' : colors[i];  // White fill for future points
     });
 
     const markerBorderColors = data.map((d, i) => {
-        if (d.is_future === true) {
+        const hasPredicted = d.expected != null || d.expected_lstm != null || d.expected_rolling != null;
+        const isFuture = (d.actual == null || d.actual === '-') && hasPredicted;
+        if (isFuture) {
             // For future points, border color depends on visualization mode
             if (visualizationMode === 'std') {
                 // STD mode: neutral gray border (can't determine direction without deviation)
@@ -999,12 +1013,14 @@ function renderDataTable(data, colors, deviations, visualizationMode) {
     `;
 
     data.forEach((d, i) => {
-        // Check if this is a future row
-        const isFuture = d.is_future === true;
+        // Detect future row: actual is null/missing but predicted exists
+        const hasPredicted = d.expected != null || d.expected_lstm != null || d.expected_rolling != null;
+        const isFuture = (d.actual == null || d.actual === '-') && hasPredicted;
 
         let zoneClass = '';
         if (isFuture) {
             zoneClass = 'zone-future';  // White background for future rows
+            console.log('[DEBUG] Future row detected:', d.date, 'actual:', d.actual, 'predicted:', d.expected);
         } else {
             if (colors[i] === '#107A1B') zoneClass = 'zone-green';
             else if (colors[i] === '#BB831B') zoneClass = 'zone-amber';
