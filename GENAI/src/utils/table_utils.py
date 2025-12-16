@@ -16,7 +16,8 @@ logger = get_logger(__name__)
 
 def parse_markdown_table(
     content: str,
-    handle_colon_separator: bool = False
+    handle_colon_separator: bool = False,
+    title: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Parse markdown/text table to DataFrame with currency cleaning.
@@ -24,6 +25,7 @@ def parse_markdown_table(
     Args:
         content: Markdown table content with | delimiters
         handle_colon_separator: If True, also parse "key: value" lines
+        title: Optional table title for cleanup (removes title from data/headers)
         
     Returns:
         DataFrame with table data, empty DataFrame on error
@@ -46,33 +48,59 @@ def parse_markdown_table(
         
         lines = [l.strip() for l in cleaned_content.split('\n') if l.strip()]
         
+        # Helper to check if a row looks like the title
+        def is_title_row(row_line: str, title: str) -> bool:
+            if not title:
+                return False
+            # Strip pipes
+            content = row_line.strip('|').strip()
+            # Simple fuzzy match or exact match
+            from difflib import SequenceMatcher
+            ratio = SequenceMatcher(None, content.lower(), title.lower()).ratio()
+            return ratio > 0.8 or title.lower() in content.lower()
+        
         # Remove separator lines (e.g., |---|---|)
-        lines = [l for l in lines if not all(c in '|-: ' for c in l)]
+        # But carefully, so we can detect separator index if needed for header/data split
+        # Actually parse_markdown_table logic here is simpler than TableStructureFormatter
+        # It assumes first parsed row is header.
         
-        if not lines:
-            return pd.DataFrame()
+        parsed_rows = []
+        separator_seen = False
         
-        rows = []
         for line in lines:
+            if all(c in '|-: ' for c in line) and '|' in line:
+                separator_seen = True
+                continue
+                
             if '|' in line:
                 # Parse pipe-delimited table
                 cells = [c.strip() for c in line.split('|')]
                 cells = [c for c in cells if c]  # Remove empty strings
                 cells = CurrencyValueCleaner.clean_currency_cells(cells)
                 if cells:
-                    rows.append(cells)
+                    parsed_rows.append(cells)
             elif handle_colon_separator and ':' in line:
                 # Parse "key: value" format (for consolidator)
                 parts = line.split(':', 1)
                 if len(parts) == 2:
-                    rows.append([parts[0].strip(), parts[1].strip()])
+                    parsed_rows.append([parts[0].strip(), parts[1].strip()])
         
-        if not rows or len(rows) < 2:
+        if not parsed_rows:
+            return pd.DataFrame()
+            
+        # Post-processing for title row content
+        if title and len(parsed_rows) > 0:
+            first_row_str = " ".join(parsed_rows[0])
+            if is_title_row(first_row_str, title):
+                 # If first row is title, drop it
+                 parsed_rows.pop(0)
+        
+        if not parsed_rows or len(parsed_rows) < 2:
             return pd.DataFrame()
         
         # First row is header
-        header = rows[0]
-        data = rows[1:]
+        header = parsed_rows[0]
+        data = parsed_rows[1:]
         
         # Pad rows to match header length
         max_cols = max(len(header), max(len(r) for r in data) if data else 0)

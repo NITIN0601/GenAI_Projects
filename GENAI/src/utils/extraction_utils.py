@@ -20,50 +20,153 @@ from src.domain.tables import TableMetadata
 class DoclingHelper:
     """Helper class for common Docling operations."""
     
+    # Default local model directory names relative to src/model/
+    LOCAL_MODEL_DIRS = [
+        'doclingPackages',  # Layout model (docling-layout-heron)
+        'docling-models',   # Tableformer models
+    ]
+    
+    @staticmethod
+    def _find_local_models() -> tuple:
+        """
+        Find local docling model directories.
+        
+        Searches for model directories in:
+        1. Environment variable DOCLING_ARTIFACTS_PATH
+        2. src/model/doclingPackages/ (layout model)
+        3. src/model/docling-models/ (tableformer models)
+        
+        Returns:
+            Tuple of (artifacts_path, tableformer_path) or (None, None) if not found
+        """
+        # First check environment variable
+        env_artifacts_path = os.environ.get('DOCLING_ARTIFACTS_PATH')
+        if env_artifacts_path and Path(env_artifacts_path).exists():
+            return env_artifacts_path, None
+        
+        # Try to find src/model directory relative to this file or project root
+        current_file = Path(__file__).resolve()
+        
+        # Try multiple possible locations
+        possible_roots = [
+            current_file.parent.parent,  # src/utils -> src
+            current_file.parent.parent.parent,  # src/utils -> project root
+            Path.cwd(),  # Current working directory
+        ]
+        
+        artifacts_path = None
+        tableformer_path = None
+        
+        for root in possible_roots:
+            # Check for src/model/doclingPackages (layout models)
+            docling_packages = root / 'model' / 'doclingPackages'
+            if docling_packages.exists() and (docling_packages / 'model.safetensors').exists():
+                artifacts_path = str(docling_packages)
+            
+            # Also check root/src/model/doclingPackages
+            docling_packages_alt = root / 'src' / 'model' / 'doclingPackages'
+            if docling_packages_alt.exists() and (docling_packages_alt / 'model.safetensors').exists():
+                artifacts_path = str(docling_packages_alt)
+            
+            # Check for src/model/docling-models (tableformer models)
+            docling_models = root / 'model' / 'docling-models'
+            if docling_models.exists() and (docling_models / 'model_artifacts').exists():
+                tableformer_path = str(docling_models)
+            
+            # Also check root/src/model/docling-models
+            docling_models_alt = root / 'src' / 'model' / 'docling-models'
+            if docling_models_alt.exists() and (docling_models_alt / 'model_artifacts').exists():
+                tableformer_path = str(docling_models_alt)
+            
+            if artifacts_path or tableformer_path:
+                break
+        
+        return artifacts_path, tableformer_path
+    
     @staticmethod
     def convert_pdf(pdf_path: str) -> Any:
         """
         Convert PDF using Docling.
         
-        Supports local model loading via environment variables:
-        - DOCLING_ARTIFACTS_PATH: Path to local docling models directory
-        - DOCLING_OFFLINE: Set to "1" to force offline mode (no downloads)
+        NOTE: The docling pip packages are installed normally via pip.
+        This configuration controls the MODEL WEIGHTS that docling downloads
+        at runtime from HuggingFace Hub (layout models, tableformer models, etc.)
+        
+        DEFAULT: Uses LOCAL model weights only (no runtime downloads from HuggingFace).
+        
+        Model weight loading priority:
+        1. Environment variable DOCLING_ARTIFACTS_PATH (if set)
+        2. Auto-detect local model weights in:
+           - src/model/doclingPackages/ (layout model weights - docling-layout-heron)  
+           - src/model/docling-models/ (tableformer model weights)
+        3. Download from HuggingFace Hub ONLY if DOCLING_ALLOW_DOWNLOAD=1
+        
+        Environment variables:
+        - DOCLING_ARTIFACTS_PATH: Path to local model weights directory
+        - DOCLING_ALLOW_DOWNLOAD: Set to "1" or "true" to allow downloading
+                                  model weights from internet (default: False)
         
         Args:
             pdf_path: Path to PDF file
             
         Returns:
             Docling conversion result
+            
+        Raises:
+            RuntimeError: If no local model weights found and downloads not allowed
         """
-        # Check for local model path configuration
-        artifacts_path = os.environ.get('DOCLING_ARTIFACTS_PATH')
-        offline_mode = os.environ.get('DOCLING_OFFLINE', '').lower() in ('1', 'true', 'yes')
+        import logging
+        logger = logging.getLogger(__name__)
         
-        # If offline mode requested, set HuggingFace offline environment variables
-        if offline_mode:
+        # Check if downloading model weights from internet is allowed (default: NO - local only)
+        allow_download = os.environ.get('DOCLING_ALLOW_DOWNLOAD', '').lower() in ('1', 'true', 'yes')
+        
+        # Find local model weights (checks env var first, then auto-detects)
+        artifacts_path, tableformer_path = DoclingHelper._find_local_models()
+        
+        # Log model weight source
+        if artifacts_path:
+            logger.info(f"Using local docling layout model weights from: {artifacts_path}")
+        if tableformer_path:
+            logger.info(f"Using local tableformer model weights from: {tableformer_path}")
+        
+        # If we have local model weights, use them (set offline mode to prevent any downloads)
+        if artifacts_path:
+            # Prevent any accidental model weight downloads when using local files
             os.environ['HF_HUB_OFFLINE'] = '1'
             os.environ['TRANSFORMERS_OFFLINE'] = '1'
-        
-        if artifacts_path:
-            # Use local model path with pipeline options
+            
             from docling.datamodel.pipeline_options import PdfPipelineOptions
             from docling.datamodel.base_models import InputFormat
             from docling.document_converter import PdfFormatOption
             
-            pipeline_options = PdfPipelineOptions(
-                artifacts_path=artifacts_path
-            )
+            pipeline_options = PdfPipelineOptions(artifacts_path=artifacts_path)
             
             converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
                 }
             )
-        else:
-            # Default: download from HuggingFace Hub
-            converter = DocumentConverter()
+            return converter.convert(pdf_path)
         
-        return converter.convert(pdf_path)
+        # No local model weights found - check if downloads are allowed
+        if allow_download:
+            logger.warning("No local model weights found, downloading from HuggingFace Hub (DOCLING_ALLOW_DOWNLOAD=1)")
+            converter = DocumentConverter()
+            return converter.convert(pdf_path)
+        
+        # Default: local only, no model weight downloads allowed
+        error_msg = (
+            "No local docling model weights found and internet downloads are disabled.\n"
+            "Note: pip packages (docling, docling-core) are installed normally.\n"
+            "This error is about the MODEL WEIGHTS that docling needs at runtime.\n"
+            "Please either:\n"
+            "  1. Add model weights to src/model/doclingPackages/ and src/model/docling-models/\n"
+            "  2. Set DOCLING_ARTIFACTS_PATH environment variable to your model weights directory\n"
+            "  3. Set DOCLING_ALLOW_DOWNLOAD=1 to enable downloading model weights from HuggingFace"
+        )
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
     
     @staticmethod
     def get_item_page(item) -> int:
