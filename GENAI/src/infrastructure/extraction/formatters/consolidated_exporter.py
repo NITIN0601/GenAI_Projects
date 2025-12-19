@@ -130,7 +130,7 @@ class ConsolidatedExcelExporter:
                 'path': str(output_path),
                 'tables_merged': len(all_tables_by_full_title),
                 'sources_merged': len(xlsx_files),
-                'sheet_names': list(used_sheet_names)
+                'sheet_names': [m.get('unique_sheet_name', '') for m in title_to_sheet_name.values()]
             }
             
         except Exception as e:

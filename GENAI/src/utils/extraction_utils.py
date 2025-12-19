@@ -781,8 +781,14 @@ class CurrencyValueCleaner:
             "10,207 2,762" -> ["10,207", "2,762"]
             "$647 $" -> ["$647"]  (trailing $ is noise)
             "$ 10,207 $ 2,762" -> ["$10,207", "$2,762"]
+            "$ in millions" -> ["$ in millions"]  (preserve descriptive text)
         """
         if not cell:
+            return [cell]
+        
+        # IMPORTANT: If cell contains letters (a-zA-Z), it's descriptive text, not currency
+        # Preserve it as-is to avoid splitting "$ in millions" incorrectly
+        if re.search(r'[a-zA-Z]', cell):
             return [cell]
         
         # Pattern: Look for $ followed by number, potentially with another $ and number
