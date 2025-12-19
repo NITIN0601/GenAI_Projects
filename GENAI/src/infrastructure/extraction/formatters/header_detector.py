@@ -37,6 +37,7 @@ class HeaderDetector:
             {
                 'has_multi_level': bool,
                 'level_1': List[str],  # Spanning headers (e.g., "Three Months Ended")
+                'level_1_with_cols': List[str],  # With column positions (e.g., "Three Months Ended (cols 2-3)")
                 'level_2': List[str]   # Sub-headers (e.g., "2025", "2024")
             }
         """
@@ -50,7 +51,7 @@ class HeaderDetector:
                 break
         
         if separator_idx == -1:
-            return {'has_multi_level': False, 'level_1': [], 'level_2': []}
+            return {'has_multi_level': False, 'level_1': [], 'level_1_with_cols': [], 'level_2': []}
         
         # Collect header lines BEFORE separator (Level 1 candidates)
         header_lines_before = []
@@ -71,15 +72,26 @@ class HeaderDetector:
             # No headers before separator - check if level_2_row found
             if level_2_row:
                 level_2_headers = cls._parse_header_line_skip_col1(level_2_row)
-                return {'has_multi_level': False, 'level_1': level_2_headers, 'level_2': []}
-            return {'has_multi_level': False, 'level_1': [], 'level_2': []}
+                return {'has_multi_level': False, 'level_1': level_2_headers, 'level_1_with_cols': [], 'level_2': []}
+            return {'has_multi_level': False, 'level_1': [], 'level_1_with_cols': [], 'level_2': []}
         
-        # Parse header row before separator (Level 1)
-        # Skip column 1 which is typically row labels
-        level_1_headers = cls._parse_header_line_skip_col1(header_lines_before[0])
+        # Parse header row before separator (Level 1) - WITH column tracking
+        level_1_with_positions = cls._parse_header_with_columns(header_lines_before[0])
         
-        # Dedupe repeated spanning headers (Docling repeats merged cells)
-        level_1_unique = cls._dedupe_spanning_headers(level_1_headers)
+        # Extract just the unique header names
+        level_1_unique = cls._dedupe_spanning_headers([h['text'] for h in level_1_with_positions])
+        
+        # Format with column positions: "Header (cols 2-3)"
+        level_1_with_cols = []
+        for h in level_1_with_positions:
+            if h['text']:
+                if h['start_col'] == h['end_col']:
+                    col_info = f"(col {h['start_col']})"
+                else:
+                    col_info = f"(cols {h['start_col']}-{h['end_col']})"
+                level_1_with_cols.append(f"{h['text']} {col_info}")
+        # Deduplicate the with_cols list
+        level_1_with_cols = cls._dedupe_spanning_headers(level_1_with_cols)
         
         # Parse Level 2 if found
         level_2_headers = []
@@ -92,8 +104,9 @@ class HeaderDetector:
         if has_multi_level:
             return {
                 'has_multi_level': True,
-                'level_1': level_1_unique,    # Spanning headers (deduplicated)
-                'level_2': level_2_headers    # Sub-headers (years)
+                'level_1': level_1_unique,           # Spanning headers (deduplicated)
+                'level_1_with_cols': level_1_with_cols,  # With column positions
+                'level_2': level_2_headers           # Sub-headers (years)
             }
         else:
             # Single level - combine
@@ -118,6 +131,70 @@ class HeaderDetector:
         if '%' in line and 'change' not in line_lower:
             return True
         return False
+    
+    @classmethod
+    def _parse_header_with_columns(cls, line: str) -> List[Dict[str, Any]]:
+        """
+        Parse header line and track which columns each header spans.
+        
+        For a line like:
+        |          | Three Months Ended | Three Months Ended | Nine Months Ended | Nine Months Ended |
+        
+        Returns:
+        [
+            {'text': 'Three Months Ended', 'start_col': 2, 'end_col': 3},
+            {'text': 'Nine Months Ended', 'start_col': 4, 'end_col': 5}
+        ]
+        """
+        parts = line.split('|')
+        
+        # Remove empty first/last parts
+        if parts and not parts[0].strip():
+            parts = parts[1:]
+        if parts and not parts[-1].strip():
+            parts = parts[:-1]
+        
+        if len(parts) <= 1:
+            return []
+        
+        # Skip column 1 (row labels) - start from column 2
+        result = []
+        current_header = None
+        start_col = 2  # Column 2 is first data column
+        
+        for i, part in enumerate(parts[1:], start=2):  # Skip first column
+            text = part.strip()
+            
+            if not text:
+                continue
+            
+            if current_header is None:
+                # Start a new header
+                current_header = text
+                start_col = i
+            elif text.lower() == current_header.lower():
+                # Same header continues (spanning)
+                pass
+            else:
+                # Different header - save the current one
+                result.append({
+                    'text': current_header,
+                    'start_col': start_col,
+                    'end_col': i - 1
+                })
+                # Start new header
+                current_header = text
+                start_col = i
+        
+        # Don't forget the last header
+        if current_header:
+            result.append({
+                'text': current_header,
+                'start_col': start_col,
+                'end_col': len(parts)  # Last column
+            })
+        
+        return result
     
     @classmethod
     def _parse_header_line_skip_col1(cls, line: str) -> List[str]:

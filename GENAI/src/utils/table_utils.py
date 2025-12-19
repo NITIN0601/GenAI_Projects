@@ -75,7 +75,12 @@ def parse_markdown_table(
             if '|' in line:
                 # Parse pipe-delimited table
                 cells = [c.strip() for c in line.split('|')]
-                cells = [c for c in cells if c]  # Remove empty strings
+                # Remove leading/trailing empty parts from pipe split, but PRESERVE structure
+                # e.g., "| | A | B |" → ['', '', 'A', 'B', ''] → ['', 'A', 'B']
+                if cells and not cells[0]:
+                    cells = cells[1:]  # Remove leading empty string
+                if cells and not cells[-1]:
+                    cells = cells[:-1]  # Remove trailing empty string
                 cells = CurrencyValueCleaner.clean_currency_cells(cells)
                 if cells:
                     parsed_rows.append(cells)

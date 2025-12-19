@@ -156,6 +156,9 @@ class ExcelTableExporter:
             # Add hyperlinks (requires reopening workbook)
             self._add_hyperlinks(output_path, tables_by_title)
             
+            # Merge repeated header cells to match PDF layout
+            self._merge_repeated_header_cells(output_path, tables_by_title)
+            
             logger.info(f"Exported {len(tables)} tables to {output_path}")
             return str(output_path)
             
@@ -494,6 +497,7 @@ class ExcelTableExporter:
             # === COLLECT COLUMN HEADERS FROM ALL CHUNKS ===
             # Parse actual table content to detect multi-level headers
             all_main_headers = []
+            all_main_headers_with_cols = []  # With column positions
             all_sub_headers = []
             detected_years = set()
             
@@ -505,6 +509,9 @@ class ExcelTableExporter:
                 
                 if headers_info['has_multi_level']:
                     all_main_headers.extend(headers_info['level_1'])
+                    # Use level_1_with_cols if available (shows column positions)
+                    if headers_info.get('level_1_with_cols'):
+                        all_main_headers_with_cols.extend(headers_info['level_1_with_cols'])
                     all_sub_headers.extend(headers_info['level_2'])
                 else:
                     # Single level - put in level 1
@@ -518,10 +525,14 @@ class ExcelTableExporter:
             
             # Deduplicate headers while preserving order
             unique_main = self._dedupe_preserve_order(all_main_headers)
+            unique_main_with_cols = self._dedupe_preserve_order(all_main_headers_with_cols)
             unique_sub = self._dedupe_preserve_order(all_sub_headers)
             
-            # Row 5: Column Header (Level 1) - main/spanning headers
-            if unique_main:
+            # Row 5: Column Header (Level 1) - use version with column positions if available
+            if unique_main_with_cols:
+                main_headers_str = ', '.join(unique_main_with_cols)
+                all_rows.append([f"Column Header (Level 1): {main_headers_str}"])
+            elif unique_main:
                 main_headers_str = ', '.join(unique_main)
                 all_rows.append([f"Column Header (Level 1): {main_headers_str}"])
             else:
@@ -679,6 +690,83 @@ class ExcelTableExporter:
             
         except Exception as e:
             logger.error(f"Failed to add hyperlinks: {e}")
+    
+    def _merge_repeated_header_cells(
+        self,
+        output_path: Path,
+        tables_by_title: Dict[str, List[Dict[str, Any]]]
+    ) -> None:
+        """
+        Merge adjacent cells with same values in header rows.
+        
+        This makes Excel output match PDF layout where headers span multiple columns.
+        For example: "Three Months Ended" | "Three Months Ended" → merged cell
+        """
+        try:
+            from openpyxl import load_workbook
+            from openpyxl.styles import Alignment
+            
+            wb = load_workbook(output_path)
+            
+            for sheet_name in tables_by_title.keys():
+                if sheet_name not in wb.sheetnames:
+                    continue
+                    
+                ws = wb[sheet_name]
+                
+                # Find rows that start with "Source:" - the next row is the header
+                for row_num in range(1, min(ws.max_row + 1, 20)):  # Check first 20 rows
+                    cell_value = ws.cell(row=row_num, column=1).value
+                    if cell_value and str(cell_value).startswith('Source:'):
+                        # Row after Source: is the header row (Level 1)
+                        header_row = row_num + 1
+                        if header_row <= ws.max_row:
+                            self._merge_row_cells(ws, header_row)
+                        break
+            
+            wb.save(output_path)
+            
+        except Exception as e:
+            logger.warning(f"Could not merge header cells: {e}")
+    
+    def _merge_row_cells(self, ws, row_num: int) -> None:
+        """Merge adjacent cells with same non-empty values in a row."""
+        from openpyxl.styles import Alignment
+        from openpyxl.utils import get_column_letter
+        
+        max_col = ws.max_column
+        if max_col < 2:
+            return
+        
+        col = 2  # Start from column B (skip column A which is row labels)
+        while col <= max_col:
+            cell_value = ws.cell(row=row_num, column=col).value
+            if not cell_value:
+                col += 1
+                continue
+            
+            # Find how many adjacent cells have the same value
+            end_col = col
+            while end_col < max_col:
+                next_value = ws.cell(row=row_num, column=end_col + 1).value
+                if next_value and str(next_value).strip() == str(cell_value).strip():
+                    end_col += 1
+                else:
+                    break
+            
+            # If we found repeated cells, merge them
+            if end_col > col:
+                start_letter = get_column_letter(col)
+                end_letter = get_column_letter(end_col)
+                merge_range = f"{start_letter}{row_num}:{end_letter}{row_num}"
+                try:
+                    ws.merge_cells(merge_range)
+                    # Center the merged cell
+                    ws.cell(row=row_num, column=col).alignment = Alignment(horizontal='center')
+                except Exception:
+                    pass  # Cell might already be merged
+            
+            col = end_col + 1
 
     def merge_processed_files(
         self,

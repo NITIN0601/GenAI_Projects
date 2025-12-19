@@ -95,24 +95,14 @@ class ConsolidatedExcelExporter:
             logger.warning("No tables collected for merging")
             return {}
         
-        # Ensure unique sheet names
-        used_sheet_names = {"index"}
-        
+        # Assign numeric sheet names (1, 2, 3...) like individual xlsx files
+        sheet_number = 1
         for normalized_key in all_tables_by_full_title.keys():
             mapping = title_to_sheet_name.get(normalized_key, {})
-            display_title = mapping.get('display_title', str(normalized_key))
-            
-            base_name = self._sanitize_sheet_name(display_title)
-            sheet_name = base_name
-            counter = 1
-            while sheet_name.lower() in used_sheet_names:
-                dup_suffix = f"_{counter}"
-                sheet_name = base_name[:31-len(dup_suffix)] + dup_suffix
-                counter += 1
-            
-            used_sheet_names.add(sheet_name.lower())
-            mapping['unique_sheet_name'] = sheet_name
+            # Use simple numeric ID as sheet name
+            mapping['unique_sheet_name'] = str(sheet_number)
             title_to_sheet_name[normalized_key] = mapping
+            sheet_number += 1
         
         # Create consolidated output
         output_path = self.extracted_dir / output_filename
@@ -324,9 +314,14 @@ class ConsolidatedExcelExporter:
             years = set()
             quarters = set()
             report_types = set()
+            sections = set()
+            source_refs = []  # List of "Q1,2025_page" references
             
             for t in tables:
                 meta = t['metadata']
+                section = t.get('section', '') or meta.get('section', '')
+                if section and str(section).strip() and str(section).lower() != 'nan':
+                    sections.add(str(section).strip())
                 if meta.get('source'):
                     sources.add(str(meta['source']))
                 if meta.get('year') and str(meta.get('year')) not in ['nan', 'NaN', '']:
@@ -335,29 +330,72 @@ class ConsolidatedExcelExporter:
                     quarters.add(str(meta['quarter']))
                 if meta.get('report_type'):
                     report_types.add(str(meta['report_type']))
+                
+                # Build source reference: Q1,2025_page or FY2024_page
+                year_val = str(int(meta['year'])) if isinstance(meta.get('year'), float) else str(meta.get('year', ''))
+                quarter_val = str(meta.get('quarter', ''))
+                page_val = str(meta.get('page', ''))
+                
+                if quarter_val and year_val:
+                    ref = f"{quarter_val},{year_val}"
+                elif year_val:
+                    ref = f"FY{year_val}"
+                else:
+                    ref = str(meta.get('source', 'Unknown'))[:10]
+                
+                if page_val and page_val != 'nan':
+                    ref += f"_p{page_val}"
+                
+                if ref and ref not in source_refs:
+                    source_refs.append(ref)
             
             # Filter out NaN values
             quarters = {q for q in quarters if q and q.lower() != 'nan'}
             years = {y for y in years if y and y.lower() != 'nan'}
             sources = {s for s in sources if s and s.lower() != 'nan'}
             report_types = {r for r in report_types if r and r.lower() != 'nan'}
+            sections = {s for s in sections if s and s.lower() != 'nan'}
             
             mapping = title_to_sheet_name.get(normalized_key, {})
             display_title = mapping.get('display_title', normalized_key)
+            original_title = mapping.get('original_title', display_title)
             sheet_name = mapping.get('unique_sheet_name', self._sanitize_sheet_name(normalized_key))
+            section_str = mapping.get('section', '') or ', '.join(sorted(sections))
+            
+            # Format source references (limit to 5 to avoid very long strings)
+            source_refs_str = ', '.join(source_refs[:5])
+            if len(source_refs) > 5:
+                source_refs_str += f'... (+{len(source_refs) - 5})'
             
             index_data.append({
-                'Table Title': display_title,
-                'Table Count': len(tables),
-                'Sources': ', '.join(sorted(sources)),
+                '#': 0,  # Will be set after sorting
+                'Section': section_str if section_str else '-',
+                'Table Title': original_title if original_title else display_title,
+                'TableCount': len(tables),
+                'Sources': source_refs_str,
                 'Report Types': ', '.join(sorted(report_types)),
-                'Years': ', '.join(sorted(years)),
+                'Years': ', '.join(sorted(years, reverse=True)),
                 'Quarters': ', '.join(sorted(quarters)),
-                'Link': sheet_name
+                'Link': '',  # Will be set after sorting
+                '_normalized_key': normalized_key  # Hidden key for sheet mapping
             })
         
         df = pd.DataFrame(index_data)
-        df = df.sort_values('Table Title')
+        # Sort by Section, then by Table Title
+        df = df.sort_values(['Section', 'Table Title'])
+        # Re-number after sorting and set Link to match #
+        df['#'] = range(1, len(df) + 1)
+        df['Link'] = df['#'].astype(str)
+        
+        # Update title_to_sheet_name with new numeric sheet names based on sorted order
+        for idx, row in df.iterrows():
+            normalized_key = row['_normalized_key']
+            sheet_num = str(row['#'])
+            if normalized_key in title_to_sheet_name:
+                title_to_sheet_name[normalized_key]['unique_sheet_name'] = sheet_num
+        
+        # Drop the hidden column before saving
+        df = df.drop(columns=['_normalized_key'])
         df.to_excel(writer, sheet_name='Index', index=False)
         
         # Auto-adjust column widths
@@ -368,12 +406,22 @@ class ConsolidatedExcelExporter:
             header_len = len(col)
             max_len = max(max_content_len, header_len) + 2
             
-            if col == 'Table Title':
-                max_len = min(max_len, 70)
-            elif col in ['Sources', 'Report Types']:
-                max_len = min(max_len, 40)
-            elif col == 'Link':
+            if col == '#':
+                max_len = 5
+            elif col == 'Section':
                 max_len = min(max_len, 35)
+            elif col == 'Table Title':
+                max_len = min(max_len, 50)
+            elif col == 'TableCount':
+                max_len = 10
+            elif col == 'Sources':
+                max_len = min(max_len, 45)  # Wider for Q1,2025_p48 format
+            elif col == 'Report Types':
+                max_len = min(max_len, 15)
+            elif col in ['Years', 'Quarters']:
+                max_len = min(max_len, 20)
+            elif col == 'Link':
+                max_len = min(max_len, 32)
             else:
                 max_len = min(max_len, 20)
             
@@ -556,34 +604,50 @@ class ConsolidatedExcelExporter:
             # Add hyperlinks in Index sheet
             index_sheet = wb['Index']
             
-            # Find Link column
+            # Find Link column dynamically (same as individual xlsx logic)
+            header_row = [index_sheet.cell(row=1, column=c).value for c in range(1, index_sheet.max_column + 1)]
             link_col = None
-            for col_idx in range(1, index_sheet.max_column + 1):
-                cell_val = index_sheet.cell(row=1, column=col_idx).value
-                if cell_val and str(cell_val).lower() == 'link':
-                    link_col = col_idx
+            for i, h in enumerate(header_row, start=1):
+                if isinstance(h, str) and h.strip().lower() == 'link':
+                    link_col = i
                     break
             
-            if link_col:
-                for row in range(2, index_sheet.max_row + 1):
+            if link_col is None:
+                logger.warning("Link column not found in consolidated Index sheet")
+            else:
+                for row in range(2, index_sheet.max_row + 1):  # Skip header
                     cell = index_sheet.cell(row=row, column=link_col)
-                    sheet_name = str(cell.value) if cell.value else ''
+                    raw_value = cell.value
+                    
+                    # Extract sheet name (handle → prefix if present)
+                    sheet_name = None
+                    if raw_value is not None:
+                        raw_str = str(raw_value).strip()
+                        if raw_str.startswith('→'):
+                            sheet_name = raw_str.lstrip('→').strip()
+                        else:
+                            sheet_name = raw_str
+                    
                     if sheet_name and sheet_name in wb.sheetnames:
                         cell.hyperlink = f"#'{sheet_name}'!A1"
                         cell.value = f"→ {sheet_name}"
                         cell.font = Font(color="0000FF", underline="single")
+                    elif sheet_name:
+                        logger.debug(f"Sheet '{sheet_name}' not found in consolidated workbook")
             
-            # Add back-links in each sheet
+            # Add back-links in each data sheet
             for sheet_name in wb.sheetnames:
                 if sheet_name == 'Index':
                     continue
                 ws = wb[sheet_name]
                 cell = ws.cell(row=1, column=1)
-                if '← Back to Index' in str(cell.value):
-                    cell.hyperlink = "#'Index'!A1"
-                    cell.font = Font(color="0000FF", underline="single")
+                # Set back-link regardless of current value
+                cell.value = "← Back to Index"
+                cell.hyperlink = "#'Index'!A1"
+                cell.font = Font(color="0000FF", underline="single")
             
             wb.save(output_path)
+            logger.info(f"Added hyperlinks to consolidated workbook: {len(wb.sheetnames) - 1} sheets")
             
         except Exception as e:
             logger.warning(f"Could not add hyperlinks: {e}")
