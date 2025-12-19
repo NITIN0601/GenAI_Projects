@@ -202,9 +202,41 @@ class ConsolidatedExcelExporter:
             # Read table content (skip header rows)
             try:
                 table_df = pd.read_excel(xlsx_path, sheet_name=sheet_name, header=None)
-                # Skip metadata rows (find where actual data starts)
-                if len(table_df) > 10:
-                    table_df = table_df.iloc[10:].reset_index(drop=True)
+                
+                # Dynamically find where data starts by looking for "Source:" row
+                # Individual xlsx structure:
+                #   Row 0: ← Back to Index
+                #   Row 1-6: Metadata (Row Header, Column Header, etc.)
+                #   Row 7: Year(s) or blank
+                #   Row 8: Table Title
+                #   Row 9: Blank
+                #   Row 10+: "Source: ..." followed by actual table data
+                data_start_row = 0
+                for idx, row in table_df.iterrows():
+                    first_cell = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ''
+                    if first_cell.startswith('Source:'):
+                        data_start_row = idx
+                        break
+                
+                # If Source: not found, fallback to row 10 or after metadata
+                if data_start_row == 0:
+                    # Look for first row that looks like table data
+                    for idx, row in table_df.iterrows():
+                        first_cell = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ''
+                        # Skip metadata patterns
+                        if any(first_cell.startswith(p) for p in 
+                               ['← Back', 'Row Header', 'Column Header', 'Product', 
+                                'Table Title', 'Year(s)', 'Source:']):
+                            continue
+                        if first_cell.strip() == '':
+                            continue
+                        # This looks like data - start here
+                        data_start_row = idx
+                        break
+                
+                # Slice from data start
+                if data_start_row > 0 and len(table_df) > data_start_row:
+                    table_df = table_df.iloc[data_start_row:].reset_index(drop=True)
                 
                 # Compute row signature for strict matching
                 raw_rows = table_df.iloc[:, 0].astype(str).tolist() if not table_df.empty else []
