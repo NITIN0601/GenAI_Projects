@@ -4,51 +4,78 @@ This guide explains how to configure Docling to use locally downloaded models in
 
 ## Quick Setup
 
-Add to your `.env` file:
+The system **automatically detects** local model weights in:
+- `src/model/doclingPackages/` — Layout model (docling-layout-heron)
+- `src/model/docling-models/` — Tableformer models
+
+No `.env` changes needed if models are in these directories!
+
+### Optional: Manual Override
 
 ```bash
-# Path to local docling models
-DOCLING_ARTIFACTS_PATH=/Users/nitin/Desktop/Chatbot/Morgan/GENAI/src/model/docling
+# Override auto-detection with a custom path
+DOCLING_ARTIFACTS_PATH=/path/to/custom/models
 
-# Force offline mode (prevents downloads from HuggingFace)
-DOCLING_OFFLINE=True
+# Allow downloading from HuggingFace if local models not found
+DOCLING_ALLOW_DOWNLOAD=False
 ```
 
 ---
 
 ## Environment Variables
 
-| Variable | Description | Example |
+| Variable | Description | Default |
 |----------|-------------|---------|
-| `DOCLING_ARTIFACTS_PATH` | Path to locally downloaded docling models | `/path/to/src/model/docling` |
-| `DOCLING_OFFLINE` | Set to `True` to block internet downloads | `True` or `False` |
+| `DOCLING_ARTIFACTS_PATH` | Override auto-detected model path | Auto-detect |
+| `DOCLING_ALLOW_DOWNLOAD` | Allow HuggingFace downloads | `False` (local only) |
+| `DOCLING_OCR_ENGINE` | Force OCR engine (`ocrmac`, `rapidocr`, `auto`) | `auto` |
+| `DOCLING_TABLE_MODE` | TableFormer mode (`accurate`, `fast`) | `accurate` |
+| `DOCLING_IMAGE_SCALE` | Image resolution scale (1.0-4.0) | `1.0` |
+
+---
+
+## Directory Structure
+
+```
+src/model/
+├── doclingPackages/              # Layout model (docling-layout-heron)
+│   ├── config.json
+│   ├── model.safetensors         # ~171MB
+│   ├── preprocessor_config.json
+│   └── RapidOcr/                 # OCR models (Windows/Linux)
+│       └── onnx/PP-OCRv4/
+│           ├── det/
+│           ├── rec/
+│           └── cls/
+│
+└── docling-models/               # Tableformer models
+    ├── config.json
+    ├── README.md
+    └── model_artifacts/
+        └── tableformer/
+            ├── accurate/
+            └── fast/
+```
 
 ---
 
 ## Downloading Models
 
-### Step 1: Download from HuggingFace
+### Layout Model (doclingPackages)
 
-Download the docling-layout-heron model from:
-- **URL**: https://huggingface.co/docling-project/docling-layout-heron
+Download from: https://huggingface.co/docling-project/docling-layout-heron
 
-### Step 2: Directory Structure
+Place in `src/model/doclingPackages/`.
 
-Place the model files in your local directory:
+### Tableformer Model (docling-models)
 
-```
-src/model/docling/
-├── config.json
-├── model.safetensors (or model.bin)
-├── preprocessor_config.json
-├── tokenizer_config.json
-└── ... (other model files)
-```
+Download from: https://huggingface.co/ds4sd/docling-models
+
+Place in `src/model/docling-models/`.
 
 ### Alternative: Using docling-tools
 
 ```bash
-# Prefetch all docling models to a specific directory
 docling-tools models download --artifacts-path /path/to/your/models
 ```
 
@@ -56,26 +83,22 @@ docling-tools models download --artifacts-path /path/to/your/models
 
 ## How It Works
 
-The `DoclingHelper.convert_pdf()` function in `src/utils/extraction_utils.py` checks for environment variables:
+The `DoclingHelper.convert_pdf()` function in `src/utils/extraction_utils.py`:
 
-1. If `DOCLING_ARTIFACTS_PATH` is set → Uses local models
-2. If `DOCLING_OFFLINE=True` → Sets HuggingFace offline mode
-3. Otherwise → Downloads from HuggingFace Hub (default)
+1. Checks `DOCLING_ARTIFACTS_PATH` environment variable
+2. Auto-detects local models in `src/model/doclingPackages/` and `src/model/docling-models/`
+3. If found → Sets offline mode, uses local weights
+4. If not found and `DOCLING_ALLOW_DOWNLOAD=True` → Downloads from HuggingFace
+5. Otherwise → Raises error with setup instructions
 
 ---
 
 ## Verification
 
-Test the configuration:
-
 ```python
-import os
-os.environ['DOCLING_ARTIFACTS_PATH'] = '/path/to/your/models'
-os.environ['DOCLING_OFFLINE'] = 'True'
-
 from src.utils.extraction_utils import DoclingHelper
 
-# This should use local models without internet access
+# Auto-detects local models
 result = DoclingHelper.convert_pdf('your_pdf.pdf')
 ```
 
@@ -85,14 +108,14 @@ result = DoclingHelper.convert_pdf('your_pdf.pdf')
 
 | Issue | Solution |
 |-------|----------|
-| Model still downloading | Verify `DOCLING_ARTIFACTS_PATH` is set correctly |
-| Missing model files | Ensure all files from HuggingFace repo are present |
-| Module not found errors | Check docling version compatibility |
+| "No local docling model weights found" | Ensure `src/model/doclingPackages/model.safetensors` exists |
+| Missing tableformer models | Add `src/model/docling-models/model_artifacts/` |
+| Still trying to download | Check that `DOCLING_ALLOW_DOWNLOAD` is not set to `True` |
 
 ---
 
 ## Related Files
 
-- **Configuration**: `.env` / `.env.example`
-- **Implementation**: `src/utils/extraction_utils.py` → `DoclingHelper.convert_pdf()`
+- **Configuration**: `.env.example` (lines 85-110)
+- **Implementation**: `src/utils/extraction_utils.py` → `DoclingHelper`
 - **Backend**: `src/infrastructure/extraction/backends/docling_backend.py`

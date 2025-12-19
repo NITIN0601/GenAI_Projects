@@ -1,95 +1,93 @@
-# Core PDF Processing - Docling (Advanced)
-# ============================================================================
+# ==============================================================================
+# GENAI Project Requirements - Updated 2025-12-17
+# Only includes packages directly used by the project (not transitive dependencies)
+# ==============================================================================
+
+# Core PDF Processing - Docling (Primary)
+# ==============================================================================
 docling>=2.0.0
 docling-core>=2.0.0,<3.0.0
 docling-ibm-models>=3.0.0
 docling-parse>=4.0.0
 
-# PDF Processing - Legacy (Fallback)
-# ============================================================================
-PyMuPDF>=1.24.0
-pdfplumber>=0.10.0
-beautifulsoup4>=4.12.0
-lxml>=5.0.0
-huggingface_hub>=0.20.0
-pypdfium2>=4.0.0
+# PDF Processing - Fallback Backends
+# ==============================================================================
+PyMuPDF>=1.24.0                # pymupdf_backend.py
+pdfplumber>=0.10.0             # pdfplumber_backend.py
+beautifulsoup4>=4.12.0         # HTML parsing
+lxml>=5.0.0                    # XML/HTML processing
 
 # Vector Databases
-# ============================================================================
-chromadb>=0.4.0
-faiss-cpu>=1.7.0
-redisvl>=0.1.0
+# ==============================================================================
+chromadb>=0.4.0                # chromadb_store.py
+faiss-cpu>=1.7.0               # faiss_store.py, direct import in main.py
+redisvl>=0.1.0                 # redis_store.py
+redis>=5.0.0,<7.0              # Redis connection
 
-# Embeddings
-# ============================================================================
-sentence-transformers>=2.2.0
+# Embeddings & ML
+# ==============================================================================
+sentence-transformers>=2.2.0   # Local embeddings
+huggingface_hub>=0.20.0        # Model downloads
+torch>=2.0.0                   # PyTorch backend
+torchvision>=0.15.0            # Vision models for docling
 
-# LangChain Ecosystem (1.0.0 - Nov 2025)
-# ============================================================================
-langchain>=1.0.0
-langchain-community>=0.3.0
-langchain-core>=0.3.0
-langchain-huggingface>=0.1.0
-langchain-chroma>=0.2.0
-langchain-openai>=0.3.0
-langgraph>=1.0.0
-langsmith>=0.2.0
+# LangChain Ecosystem
+# ==============================================================================
+langchain>=1.0.0               # Core orchestration
+langchain-community>=0.3.0     # ChatOllama, FAISS community
+langchain-core>=0.3.0          # Base types, prompts, documents
+langchain-huggingface>=0.1.0   # HuggingFace integrations
+langchain-chroma>=0.2.0        # Chroma vector store
+langchain-openai>=0.3.0        # OpenAI embeddings/models
+langgraph>=1.0.0               # Graph-based workflows
+langsmith>=0.2.0               # Tracing/debugging
 
 # Search & Retrieval
-# ============================================================================
-rank-bm25>=0.2.2
+# ==============================================================================
+rank-bm25>=0.2.2               # BM25 keyword search
 
-# LLM & RAG
-# ============================================================================
-tiktoken>=0.5.0
+# LLM & Tokenization
+# ==============================================================================
+tiktoken>=0.5.0                # Token counting for OpenAI
 
 # Data Processing
-# ============================================================================
-pandas>=2.0.0
-numpy>=1.24.0,<2.0.0
-openpyxl>=3.1.0
-
-# Caching & Storage
-# ============================================================================
-redis>=5.0.0,<7.0
+# ==============================================================================
+pandas>=2.0.0                  # DataFrame operations
+numpy>=1.24.0,<2.0.0           # Numerical operations
+openpyxl>=3.1.0                # Excel export
 
 # CLI & UI
-# ============================================================================
-typer>=0.9.0
-rich>=13.0.0
-click>=8.1.0
+# ==============================================================================
+typer>=0.9.0                   # CLI framework
+rich>=13.0.0                   # Rich console output
+click>=8.1.0                   # CLI utilities
 
 # HTTP & Networking
-# ============================================================================
-requests>=2.31.0
-urllib3>=2.0.0
-httpx>=0.25.0
+# ==============================================================================
+requests>=2.31.0               # HTTP client
+urllib3>=2.0.0                 # HTTP library
+httpx>=0.25.0                  # Async HTTP client
 
-# Utilities
-# ============================================================================
-python-dotenv>=1.0.0
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-tqdm>=4.60.0
-python-dateutil>=2.8.0
-rapidfuzz>=3.0.0
+# Configuration & Utilities
+# ==============================================================================
+python-dotenv>=1.0.0           # .env file loading
+pydantic>=2.0.0                # Data validation
+pydantic-settings>=2.0.0       # Settings management
+tqdm>=4.60.0                   # Progress bars
+python-dateutil>=2.8.0         # Date parsing
+rapidfuzz>=3.0.0               # Fuzzy string matching
+PyYAML>=6.0.0                  # YAML parsing
 
 # Text Processing
-# ===========================================================================
-nltk>=3.8.0
-regex>=2023.0.0
+# ==============================================================================
+nltk>=3.8.0                    # NLP utilities
+regex>=2023.0.0                # Advanced regex
 
 # Scheduler
-# ============================================================================
-APScheduler>=3.10.0
-holidays>=0.40
+# ==============================================================================
+APScheduler>=3.10.0            # Job scheduling
+holidays>=0.40                 # Holiday calendars
 
-# PyTorch (CPU only for offline)
-# ============================================================================
-torch>=2.0.0
-torchvision>=0.15.0
-
-# YAML
-# ============================================================================
-PyYAML>=6.0.0
-ragas>=0.1.0
+# Evaluation
+# ==============================================================================
+ragas>=0.1.0                   # RAG evaluation metrics

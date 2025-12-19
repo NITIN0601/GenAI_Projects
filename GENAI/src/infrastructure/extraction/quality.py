@@ -10,6 +10,21 @@ from src.infrastructure.extraction.base import ExtractionResult
 class QualityAssessor:
     """Assess extraction quality with multiple metrics."""
     
+    # Scoring constants for table count assessment
+    SCORE_NO_TABLES = 0.0
+    SCORE_FEW_TABLES = 10.0      # 1-2 tables
+    SCORE_MODERATE_TABLES = 15.0  # 3-5 tables
+    SCORE_MANY_TABLES = 20.0      # 6+ tables
+    
+    # Scoring constants for structure assessment
+    SCORE_HEADERS_DETECTED = 15.0
+    SCORE_CONSISTENT_STRUCTURE = 10.0
+    
+    # Scoring constants for text quality
+    SCORE_TEXT_GARBLED = 5.0
+    SCORE_TEXT_GOOD = 10.0
+    SCORE_TEXT_EXCELLENT = 15.0
+    
     def __init__(self):
         self.weights = {
             'table_count': 0.20,      # 20 points
@@ -32,12 +47,15 @@ class QualityAssessor:
         if not result.is_successful():
             return 0.0
         
+        # Get base confidence from backend type (not from result.quality_score to avoid circular dependency)
+        backend_confidence = self._get_backend_confidence(result.backend)
+        
         scores = {
             'table_count': self._assess_table_count(result),
             'cell_completeness': self._assess_cell_completeness(result),
             'structure': self._assess_structure(result),
             'text_quality': self._assess_text_quality(result),
-            'backend_confidence': result.quality_score
+            'backend_confidence': backend_confidence
         }
         
         # Weighted sum
@@ -53,6 +71,23 @@ class QualityAssessor:
         
         return min(total_score, 100.0)
     
+    def _get_backend_confidence(self, backend) -> float:
+        """
+        Get base confidence score for a backend type.
+        
+        Returns confidence score out of 10 (weight is 0.10).
+        """
+        from src.infrastructure.extraction.base import BackendType
+        
+        confidence_map = {
+            BackendType.DOCLING: 10.0,      # Highest confidence
+            BackendType.PYMUPDF: 8.0,
+            BackendType.PDFPLUMBER: 7.0,
+            BackendType.CAMELOT: 6.0,
+            BackendType.UNSTRUCTURED: 7.0,
+        }
+        return confidence_map.get(backend, 5.0)
+    
     def _assess_table_count(self, result: ExtractionResult) -> float:
         """
         Assess based on number of tables found.
@@ -65,13 +100,13 @@ class QualityAssessor:
         """
         count = len(result.tables)
         if count == 0:
-            return 0.0
+            return self.SCORE_NO_TABLES
         elif count <= 2:
-            return 10.0
+            return self.SCORE_FEW_TABLES
         elif count <= 5:
-            return 15.0
+            return self.SCORE_MODERATE_TABLES
         else:
-            return 20.0
+            return self.SCORE_MANY_TABLES
     
     def _assess_cell_completeness(self, result: ExtractionResult) -> float:
         """
@@ -112,11 +147,11 @@ class QualityAssessor:
         
         # Check for headers
         if self._has_headers(result.tables):
-            score += 15.0
+            score += self.SCORE_HEADERS_DETECTED
         
         # Check structure consistency
         if self._has_consistent_structure(result.tables):
-            score += 10.0
+            score += self.SCORE_CONSISTENT_STRUCTURE
         
         return score
     
@@ -131,13 +166,13 @@ class QualityAssessor:
         
         # Check for garbled text
         if self._has_garbled_text(result.tables):
-            return 5.0  # Penalize but don't zero out
+            return self.SCORE_TEXT_GARBLED  # Penalize but don't zero out
         
         # Check for proper numeric formatting
         if self._has_proper_numbers(result.tables):
-            return 15.0
+            return self.SCORE_TEXT_EXCELLENT
         
-        return 10.0
+        return self.SCORE_TEXT_GOOD
     
     def _count_cells(self, table: Dict[str, Any]) -> int:
         """Count total cells in table."""

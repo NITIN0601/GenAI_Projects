@@ -39,10 +39,7 @@ class ConsolidateStep(StepInterface):
         self.quarters = quarters
     
     def validate(self, context: PipelineContext) -> bool:
-        """Validate table title is provided."""
-        if not context.query:
-            logger.error("No table_title (query) provided for consolidation")
-            return False
+        """Validate context."""
         return True
     
     def get_step_info(self) -> Dict[str, Any]:
@@ -62,6 +59,41 @@ class ConsolidateStep(StepInterface):
         
         table_title = context.query
         output_dir = self.output_dir or getattr(settings, 'OUTPUT_DIR', 'outputs/consolidated_tables')
+        
+        # If no table_title, perform a full Excel merge of all processed files
+        if not table_title:
+            try:
+                from src.infrastructure.extraction.formatters.excel_exporter import get_excel_exporter
+                exporter = get_excel_exporter()
+                merge_result = exporter.merge_processed_files()
+                
+                if merge_result and 'path' in merge_result:
+                    consolidated_path = merge_result['path']
+                    return StepResult(
+                        step_name=self.name,
+                        status=StepStatus.SUCCESS,
+                        data={'export_paths': {'excel': consolidated_path}},
+                        message=f"Consolidated all {merge_result.get('tables_merged', 0)} tables into {consolidated_path}",
+                        metadata={
+                            'mode': 'full_merge',
+                            'total_rows': 0, # Not applicable for full merge
+                            'total_columns': 0,
+                            'quarters_included': [f"{merge_result.get('sources_merged', 0)} files merged"]
+                        }
+                    )
+                else:
+                    return StepResult(
+                        step_name=self.name,
+                        status=StepStatus.FAILED,
+                        error="Failed to create consolidated report"
+                    )
+            except Exception as e:
+                logger.error(f"Full consolidation failed: {e}")
+                return StepResult(
+                    step_name=self.name,
+                    status=StepStatus.FAILED,
+                    error=str(e)
+                )
         
         # Get year/quarter filters from context or step config
         filters = context.filters or {}
@@ -145,7 +177,7 @@ class ConsolidateStep(StepInterface):
 
 # Backward-compatible function for main.py
 def run_consolidate(
-    table_title: str,
+    table_title: Optional[str] = None,
     output_format: str = "both",
     output_dir: Optional[str] = None,
     transpose: bool = True,

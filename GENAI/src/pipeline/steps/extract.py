@@ -114,6 +114,21 @@ class ExtractStep(StepInterface):
             # Write to context for next step
             context.extracted_data = all_results
             
+            # --- ADDED: Auto-merge all processed files into a consolidated report ---
+            try:
+                from src.infrastructure.extraction.formatters.excel_exporter import get_excel_exporter
+                exporter = get_excel_exporter()
+                logger.info("Merging all extracted tables into consolidated_tables.xlsx...")
+                merge_result = exporter.merge_processed_files()
+                if merge_result and 'path' in merge_result:
+                    consolidated_path = merge_result['path']
+                    logger.info(f"✓ Consolidated report created: {consolidated_path}")
+                    stats['consolidated_report'] = consolidated_path
+                    stats['tables_merged'] = merge_result.get('tables_merged', 0)
+            except Exception as e:
+                logger.warning(f"Failed to create consolidated report: {e}")
+            # ------------------------------------------------------------------------
+            
             return StepResult(
                 step_name=self.name,
                 status=StepStatus.SUCCESS,

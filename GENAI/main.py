@@ -337,7 +337,7 @@ def query(
 
 @app.command()
 def consolidate(
-    table_title: str = typer.Argument(..., help="Table title to consolidate"),
+    table_title: Optional[str] = typer.Argument(None, help="Table title to consolidate (leave empty to merge ALL tables)"),
     output_dir: str = typer.Option(None, "--output", "-o", help="Output directory"),
     format: str = typer.Option("both", "--format", "-f", help="csv, excel, or both"),
     transpose: bool = typer.Option(True, "--transpose/--no-transpose", help="Timeseries format")
@@ -347,11 +347,13 @@ def consolidate(
     
     Examples:
         python main.py consolidate "Balance Sheet"
-        python main.py consolidate "Revenue" --format excel
-        python main.py consolidate "Fair Value" --output ./exports
+        python main.py consolidate --format excel  # Merge ALL tables from extractions
     """
     console.print(f"\n[bold green]📊 Steps 8-9: Consolidate + Export[/bold green]\n")
-    console.print(f"[cyan]Table:[/cyan] {table_title}\n")
+    if table_title:
+        console.print(f"[cyan]Table:[/cyan] {table_title}\n")
+    else:
+        console.print(f"[cyan]Merging ALL extracted tables into consolidated report...[/cyan]\n")
     
     result = run_consolidate(
         table_title=table_title,

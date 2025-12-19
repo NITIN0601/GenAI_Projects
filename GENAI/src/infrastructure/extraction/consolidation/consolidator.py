@@ -34,6 +34,7 @@ Usage:
 
 import pandas as pd
 import numpy as np
+import re
 from typing import List, Dict, Any, Optional, Tuple, Union
 from pathlib import Path
 from datetime import datetime
@@ -41,6 +42,7 @@ from difflib import SequenceMatcher
 from dataclasses import dataclass, field
 
 from src.utils import get_logger
+from src.utils.table_utils import parse_markdown_table
 from config.settings import settings
 
 logger = get_logger(__name__)
@@ -97,7 +99,11 @@ class TableConsolidator:
     Follows singleton pattern consistent with other managers.
     """
     
-    def __init__(self, vector_store=None, embedding_manager=None):
+    def __init__(
+        self,
+        vector_store: Optional[Any] = None,
+        embedding_manager: Optional[Any] = None
+    ):
         """
         Initialize table consolidator.
         
@@ -278,6 +284,11 @@ class TableConsolidator:
             date_str = self._get_period_date(year, quarter)
             period_labels.append(date_str)
             
+            # Skip empty DataFrames
+            if len(df) == 0:
+                logger.warning(f"Skipping empty DataFrame for period {date_str}")
+                continue
+            
             # Set first column as index (row headers / metrics)
             if len(df.columns) > 0:
                 df = df.set_index(df.columns[0])
@@ -352,7 +363,7 @@ class TableConsolidator:
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate filename
-        timestamp = datetime.now().strftime("%Y_%m")
+        timestamp = datetime.now().strftime("%Y%m%d")
         safe_name = result.table_title.replace(' ', '_').replace('/', '_').lower()
         
         year_range = ""
@@ -384,7 +395,6 @@ class TableConsolidator:
     
     def _parse_table_content(self, content: str, title: Optional[str] = None) -> pd.DataFrame:
         """Parse markdown/text table to DataFrame with currency cleaning."""
-        from src.utils.table_utils import parse_markdown_table
         return parse_markdown_table(content, handle_colon_separator=True, title=title)
     
     def _fuzzy_match(self, query: str, target: str) -> float:

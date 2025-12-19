@@ -10,6 +10,7 @@ Provides structured output format for tables with:
 """
 
 from typing import Dict, List, Any, Tuple, Optional
+from difflib import SequenceMatcher
 
 
 class TableStructureFormatter:
@@ -48,8 +49,7 @@ class TableStructureFormatter:
                 return False
             # Strip pipes
             content = row_line.strip('|').strip()
-            # Simple fuzzy match or exact match
-            from difflib import SequenceMatcher
+            # Fuzzy match ratio using difflib (imported at module top)
             ratio = SequenceMatcher(None, content.lower(), title.lower()).ratio()
             return ratio > 0.8 or title.lower() in content.lower()
 
@@ -132,7 +132,6 @@ class TableStructureFormatter:
         subsections = []
         current_parent = None
         current_subsection = None
-        current_subsection = None # Reset for safety
         
         for row_line in data_lines:
             # Split by pipe and filter out leading/trailing empty cells

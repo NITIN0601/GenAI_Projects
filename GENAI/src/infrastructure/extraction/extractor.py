@@ -161,7 +161,7 @@ class UnifiedExtractor:
                     success=True,
                     tables_found=len(cached.tables),
                     quality_score=cached.quality_score,
-                extraction_time=0.0  # Cache hit
+                    extraction_time=0.0  # Cache hit
                 )
                 self._save_table_report(cached)
                 return cached

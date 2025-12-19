@@ -9,7 +9,10 @@ Handles detection of:
 """
 
 import re
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
+from src.utils import get_logger
+
+logger = get_logger(__name__)
 
 class MetadataEnricher:
     """Enriches table metadata with financial context."""
@@ -73,7 +76,7 @@ class MetadataEnricher:
                     return unit
         return None
 
-    def _detect_currency(self, content: str) -> tuple[str, bool]:
+    def _detect_currency(self, content: str) -> Tuple[str, bool]:
         """Detect currency and if it's present."""
         content_lower = content.lower()
         if '$' in content or 'usd' in content_lower:
@@ -83,7 +86,9 @@ class MetadataEnricher:
         if '£' in content or 'gbp' in content_lower:
             return "GBP", True
             
-        return "USD", False  # Default to USD if uncertain but likely financial
+        # No explicit currency found - default to USD for financial tables
+        logger.debug("No explicit currency detected, defaulting to USD")
+        return "USD", False  # has_currency=False indicates uncertain detection
 
     def _detect_statement_type(self, title: str) -> Optional[str]:
         """Detect financial statement type from title."""

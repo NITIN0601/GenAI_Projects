@@ -23,6 +23,26 @@ from src.infrastructure.extraction.formatters.excel_exporter import (
     get_excel_exporter,
     reset_excel_exporter,
 )
+from src.infrastructure.extraction.formatters.consolidated_exporter import (
+    ConsolidatedExcelExporter,
+    get_consolidated_exporter,
+    reset_consolidated_exporter,
+)
+from src.infrastructure.extraction.formatters.header_detector import (
+    HeaderDetector,
+    detect_column_headers,
+)
+from src.infrastructure.extraction.formatters.date_utils import (
+    DateUtils,
+    parse_date_from_header,
+    convert_to_quarter_format,
+)
+from src.infrastructure.extraction.formatters.excel_utils import (
+    ExcelUtils,
+    get_column_letter,
+    sanitize_sheet_name,
+    normalize_title_for_grouping,
+)
 
 __all__ = [
     # Basic formatting
@@ -36,9 +56,24 @@ __all__ = [
     # Metadata extraction
     'MetadataExtractor',
     'extract_and_prepare_for_vectordb',
-    # Excel export with Index sheet
+    # Excel export - single PDF
     'ExcelTableExporter',
     'get_excel_exporter',
     'reset_excel_exporter',
+    # Excel export - consolidated
+    'ConsolidatedExcelExporter',
+    'get_consolidated_exporter',
+    'reset_consolidated_exporter',
+    # Header detection
+    'HeaderDetector',
+    'detect_column_headers',
+    # Date utilities
+    'DateUtils',
+    'parse_date_from_header',
+    'convert_to_quarter_format',
+    # Excel utilities
+    'ExcelUtils',
+    'get_column_letter',
+    'sanitize_sheet_name',
+    'normalize_title_for_grouping',
 ]
-

@@ -5,35 +5,46 @@ Consolidate tables with the same title across multiple quarters/years and export
 
 ---
 
-## Best Search Logic (Hybrid Approach)
+## Table Matching Logic (Strict Signature Matching)
 
-### Three-Stage Search Strategy
+Tables are merged **only if they have identical structure**. This prevents accidentally combining different tables that share similar names.
 
-#### 1. **Semantic Similarity Search**
-- Uses vector embeddings to find semantically similar table titles
-- Handles variations: "Balance Sheet" ≈ "Consolidated Balance Sheet"
-- Retrieves top 50 candidates from vector store
+### Composite Key
 
-#### 2. **Fuzzy String Matching**
-- Calculates `SequenceMatcher` ratio for exact title comparison
-- Scores 0.0 (no match) to 1.0 (perfect match)
-- Threshold: 0.85 (configurable via `.env`)
+Each table is identified by a three-part key:
 
-#### 3. **Metadata Filtering**
-- Filters by `actual_table_title` field
-- Ensures results are actual tables (not plain text)
-- Deduplicates by (year, quarter)
-
-### Combined Scoring
-```python
-combined_score = (semantic_score + fuzzy_score) / 2
-# Only tables with fuzzy_score >= 0.85 are kept
+```
+{Section}::{Normalized Title}::{Row Signature}
 ```
 
-**Example**:
-- Query: "Contractual principals and fair value"
-- Match: "Contractual Principals and Fair Value (Difference Between)" 
-- Fuzzy Score: 0.92 [OK] (above threshold)
+| Component | Description | Example |
+|-----------|-------------|---------|
+| **Section** | Business segment | `Institutional Securities` |
+| **Normalized Title** | Cleaned, lowercase title | `income statement info` |
+| **Row Signature** | Pipe-separated row labels | `net revenues\|compensation\|total expenses` |
+
+### How It Works
+
+1. **Extract Section**: From document metadata (e.g., "Institutional Securities", "Wealth Management")
+2. **Normalize Title**: Remove row ranges, clean whitespace, lowercase
+3. **Build Row Signature**: Collect all first-column values (row labels), normalize, join with `|`
+
+### Matching Examples
+
+**Tables WILL Merge** (same key):
+```
+Q1: Inst Securities::balance sheet::assets|liabilities|equity
+Q2: Inst Securities::balance sheet::assets|liabilities|equity
+```
+
+**Tables WON'T Merge** (different key):
+```
+Q1: Inst Securities::balance sheet::assets|liabilities|equity
+Q2: Wealth Management::balance sheet::assets|liabilities|equity  ← Different section
+```
+
+> [!NOTE]
+> This strict matching ensures data integrity - tables with even slight row differences are kept separate to prevent incorrect data merging.
 
 ---
 
@@ -229,5 +240,5 @@ Recommended tools:
 
 ---
 
-**Last Updated**: 2025-11-30  
+**Last Updated**: 2025-12-18  
 **Feature Status**: [DONE] Complete & Tested

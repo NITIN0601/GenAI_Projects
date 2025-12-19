@@ -1,6 +1,6 @@
 # Configuration Guide
 
-> **Version:** 3.1.0 | **Updated:** December 9, 2025
+> **Version:** 3.2.0 | **Updated:** December 18, 2025
 
 ## Overview
 
@@ -194,6 +194,13 @@ VECTORDB_PROVIDER=faiss
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=your-redis-password
+
+# Docling Extraction Configuration
+DOCLING_ARTIFACTS_PATH=        # Path to local model weights (auto-detected)
+DOCLING_ALLOW_DOWNLOAD=False   # Allow HuggingFace model downloads
+DOCLING_TABLE_MODE=accurate    # TableFormer mode: "accurate" or "fast"
+DOCLING_IMAGE_SCALE=1.0        # Image resolution scale (1.0-4.0)
+DOCLING_OCR_ENGINE=auto        # OCR engine: "ocrmac", "rapidocr", "auto"
 ```
 
 > [!IMPORTANT]

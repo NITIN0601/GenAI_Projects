@@ -6,10 +6,11 @@ Includes all improvements: chunking, spanning headers, metadata extraction.
 """
 
 import time
-import logging
-from src.utils import get_logger
+from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, TYPE_CHECKING
+
+from src.utils import get_logger
 
 # Lazy import to avoid downloading models on module import
 DocumentConverter = None
@@ -103,11 +104,27 @@ class DoclingBackend(ExtractionBackend):
             tables = DoclingHelper.extract_tables(doc)
             logger.info(f"Found {len(tables)} tables")
             
+            # Group tables by page number for proper indexing (page_1, page_2, etc.)
+            page_table_counts = defaultdict(int)  # Track how many tables per page
+            
             # Process each table
             all_chunks = []
             for i, table_item in enumerate(tables):
                 try:
-                    chunks = self._extract_table_chunks(table_item, pdf_path, doc, table_index=i)
+                    # Get page number for this table
+                    page_no = DoclingHelper.get_item_page(table_item)
+                    
+                    # Increment count for this page and get table index on this page
+                    page_table_counts[page_no] += 1
+                    table_index_on_page = page_table_counts[page_no]
+                    
+                    # Pass both global index and page-specific index
+                    chunks = self._extract_table_chunks(
+                        table_item, pdf_path, doc, 
+                        table_index=i,
+                        page_no=page_no,
+                        table_index_on_page=table_index_on_page
+                    )
                     all_chunks.extend(chunks)
                 except Exception as e:
                     logger.error(f"Error extracting table {i + 1}: {e}")
@@ -120,8 +137,8 @@ class DoclingBackend(ExtractionBackend):
             # Extract metadata
             result.metadata = self._extract_metadata(pdf_path, doc)
             
-            # Calculate quality score (Docling is high quality)
-            result.quality_score = 85.0  # Base score for Docling
+            # Note: quality_score is computed by QualityAssessor in strategy.py
+            # Not setting it here to avoid confusion with actual computed score
             
         except Exception as e:
             logger.error(f"Docling extraction failed: {e}")
@@ -132,8 +149,26 @@ class DoclingBackend(ExtractionBackend):
         
         return result
     
-    def _extract_table_chunks(self, table_item: TableItem, pdf_path: str, doc, table_index: int = 0) -> List:
-        """Extract and chunk a single table."""
+    def _extract_table_chunks(
+        self, 
+        table_item,  # TableItem - lazily imported
+        pdf_path: str, 
+        doc, 
+        table_index: int = 0,
+        page_no: int = None,
+        table_index_on_page: int = None
+    ) -> List:
+        """
+        Extract and chunk a single table.
+        
+        Args:
+            table_item: Docling table item
+            pdf_path: Path to source PDF
+            doc: Docling document
+            table_index: Global index of table in document (0-based)
+            page_no: Page number (1-indexed)
+            table_index_on_page: Index of table on this specific page (1-indexed)
+        """
         from src.utils.extraction_utils import FootnoteExtractor, CurrencyValueCleaner
         
         # Get table text with doc argument to avoid deprecation warning
@@ -157,18 +192,33 @@ class DoclingBackend(ExtractionBackend):
         # Clean footnotes from row labels
         table_text, footnotes_map = FootnoteExtractor.clean_table_content(table_text_cleaned)
         
-        # Get page number
-        page_no = DoclingHelper.get_item_page(table_item)
+        # Get page number if not provided
+        if page_no is None:
+            page_no = DoclingHelper.get_item_page(table_item)
+        
+        # Default table_index_on_page to global index if not provided
+        if table_index_on_page is None:
+            table_index_on_page = table_index + 1
+        
+        # Generate table_id with format: page_tableIndexOnPage (e.g., "7_1", "7_2")
+        filename = Path(pdf_path).stem
+        table_id = f"{filename}_p{page_no}_{table_index_on_page}"
         
         # Get better table title
         caption = DoclingHelper.extract_table_title(doc, table_item, table_index, page_no)
         
-        # Create metadata with footnotes
+        # Get section name (e.g., "Institutional Securities", "Wealth Management")
+        section_name = DoclingHelper.extract_section_name(doc, table_item, page_no)
+        
+        # Create metadata with footnotes, section, and page-based table_id
         metadata = PDFMetadataExtractor.create_metadata(
             pdf_path=pdf_path,
             page_no=page_no,
             table_title=caption,
             table_index=table_index,
+            table_id=table_id,  # Page-based ID: e.g., "10q0624_p7_1"
+            table_index_on_page=table_index_on_page,  # NEW: index on this page
+            section_name=section_name,
             footnote_references=list(set(fn for fns in footnotes_map.values() for fn in fns)) if footnotes_map else None
         )
         
@@ -192,7 +242,10 @@ class DoclingBackend(ExtractionBackend):
             'metadata': {
                 'source_doc': chunk.metadata.source_doc,
                 'page_no': chunk.metadata.page_no,
+                'table_id': getattr(chunk.metadata, 'table_id', '') or '',  # Page-based ID
+                'table_index_on_page': getattr(chunk.metadata, 'table_index_on_page', None),  # Index on page
                 'table_title': chunk.metadata.table_title,
+                'section_name': getattr(chunk.metadata, 'section_name', '') or '',
                 'year': chunk.metadata.year,
                 'quarter': chunk.metadata.quarter,
                 'report_type': chunk.metadata.report_type,

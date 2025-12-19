@@ -8,7 +8,6 @@ import pickle
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timedelta
-import logging
 from src.utils import get_logger
 
 from src.infrastructure.extraction.base import ExtractionResult
@@ -186,11 +185,17 @@ class ExtractionCache:
         Generate cache key from PDF path.
         
         Uses MD5 hash of file path + file modification time.
+        Falls back to path-only key if file doesn't exist.
         """
         pdf_file = Path(pdf_path)
         
-        # Include file path and modification time in key
-        key_data = f"{pdf_file.absolute()}_{pdf_file.stat().st_mtime}"
+        try:
+            # Include file path and modification time in key
+            key_data = f"{pdf_file.absolute()}_{pdf_file.stat().st_mtime}"
+        except (FileNotFoundError, OSError):
+            # File may have been deleted - use path only
+            key_data = str(pdf_file.absolute())
+            logger.debug(f"PDF file not found, using path-only cache key: {pdf_path}")
         
         return hashlib.md5(key_data.encode()).hexdigest()
     
@@ -202,7 +207,12 @@ class ExtractionCache:
 
 
 class RedisCache(ExtractionCache):
-    """Redis-based cache for extraction results (future implementation)."""
+    """
+    Redis-based cache for extraction results.
+    
+    NOTE: This is a placeholder for future implementation.
+    Currently falls back to file-based caching.
+    """
     
     def __init__(self, redis_url: str = "redis://localhost:6379", **kwargs):
         """
@@ -214,5 +224,14 @@ class RedisCache(ExtractionCache):
         """
         super().__init__(**kwargs)
         self.redis_url = redis_url
-        # TODO: Implement Redis connection
-        logger.warning("RedisCache not yet implemented, falling back to file cache")
+        logger.warning("RedisCache not yet implemented, using file cache fallback")
+    
+    def get(self, pdf_path: str):
+        """Get from cache - falls back to file cache."""
+        logger.debug("RedisCache.get() not implemented, using file cache")
+        return super().get(pdf_path)
+    
+    def set(self, pdf_path: str, result):
+        """Set in cache - falls back to file cache."""
+        logger.debug("RedisCache.set() not implemented, using file cache")
+        return super().set(pdf_path, result)

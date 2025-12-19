@@ -43,7 +43,13 @@ from src.infrastructure.extraction.formatters.enhanced_formatter import (
     format_enhanced_table,
     format_all_tables_enhanced
 )
-from src.infrastructure.extraction.backends import DoclingBackend, PyMuPDFBackend
+from src.infrastructure.extraction.backends import (
+    DoclingBackend,
+    PyMuPDFBackend,
+    PDFPlumberBackend,
+    CamelotBackend,
+    UnstructuredBackend
+)
 from src.infrastructure.extraction.quality import QualityAssessor
 from src.infrastructure.extraction.cache import ExtractionCache
 from src.infrastructure.extraction.strategy import ExtractionStrategy
@@ -72,6 +78,9 @@ __all__ = [
     # Backends
     'DoclingBackend',
     'PyMuPDFBackend',
+    'PDFPlumberBackend',
+    'CamelotBackend',
+    'UnstructuredBackend',
     
     # Components
     'ExtractionStrategy',

@@ -70,6 +70,7 @@ class TableMetadata(BaseModel):
     table_type: Optional[str] = Field(None, description="Balance Sheet, Income Statement, etc.")
     statement_type: Optional[str] = Field(None, description="Statement classification")
     chunk_table_index: Optional[int] = Field(None, description="Table index (0-based)")
+    table_index_on_page: Optional[int] = Field(None, description="Table index on this page (1-indexed, e.g., 1 for first table on page)")
     table_start_page: Optional[int] = Field(None, description="Start page for multi-page")
     table_end_page: Optional[int] = Field(None, description="End page for multi-page")
     
@@ -86,6 +87,7 @@ class TableMetadata(BaseModel):
     
     # === Hierarchical Structure ===
     parent_section: Optional[str] = Field(None, description="Parent section")
+    section_name: Optional[str] = Field(None, description="Section name from document structure (e.g., 'Institutional Securities')")
     has_hierarchy: Optional[bool] = Field(None)
     subsections: Optional[str] = Field(None, description="Subsections (pipe-separated)")
     table_structure: Optional[str] = Field(None, description="simple, multi_column, multi_header")
@@ -194,6 +196,7 @@ class TableMetadata(BaseModel):
             table_type=_get_value(table_meta, 'table_type'),
             statement_type=_get_value(table_meta, 'statement_type'),
             chunk_table_index=table_index,
+            table_index_on_page=_get_value(table_meta, 'table_index_on_page'),
             table_start_page=_get_value(table_meta, 'table_start_page'),
             table_end_page=_get_value(table_meta, 'table_end_page'),
             
@@ -210,6 +213,7 @@ class TableMetadata(BaseModel):
             
             # Hierarchical Structure
             parent_section=_get_value(table_meta, 'parent_section'),
+            section_name=_get_value(table_meta, 'section_name'),
             has_hierarchy=_get_value(table_meta, 'has_hierarchy'),
             subsections=_get_value(table_meta, 'subsections'),
             table_structure=_get_value(table_meta, 'table_structure'),

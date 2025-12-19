@@ -65,6 +65,13 @@ graph TB
             DOCLING[backends/docling]
             PYMUPDF[backends/pymupdf]
             PDFPLUMBER[backends/pdfplumber]
+            subgraph "formatters/"
+                EXCEL_EXP[excel_exporter.py]
+                CONSOL_EXP[consolidated_exporter.py]
+                HEADER_DET[header_detector.py]
+                DATE_UTILS[date_utils.py]
+                EXCEL_UTILS[excel_utils.py]
+            end
         end
         
         subgraph "cache/"

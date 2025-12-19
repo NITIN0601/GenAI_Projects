@@ -94,6 +94,10 @@ class DoclingHelper:
         
         DEFAULT: Uses LOCAL model weights only (no runtime downloads from HuggingFace).
         
+        Platform-specific OCR:
+        - macOS: Uses OcrMac (Apple Vision framework, fast GPU-accelerated)
+        - Windows/Linux: Uses RapidOCR with local ONNX models from src/model/
+        
         Model weight loading priority:
         1. Environment variable DOCLING_ARTIFACTS_PATH (if set)
         2. Auto-detect local model weights in:
@@ -105,6 +109,9 @@ class DoclingHelper:
         - DOCLING_ARTIFACTS_PATH: Path to local model weights directory
         - DOCLING_ALLOW_DOWNLOAD: Set to "1" or "true" to allow downloading
                                   model weights from internet (default: False)
+        - DOCLING_OCR_ENGINE: Override OCR engine ("ocrmac", "rapidocr", "auto")
+        - DOCLING_TABLE_MODE: TableFormer mode ("accurate", "fast") default: accurate
+        - DOCLING_IMAGE_SCALE: Image resolution scale (1.0-4.0) default: 1.0
         
         Args:
             pdf_path: Path to PDF file
@@ -116,6 +123,7 @@ class DoclingHelper:
             RuntimeError: If no local model weights found and downloads not allowed
         """
         import logging
+        import platform
         logger = logging.getLogger(__name__)
         
         # Check if downloading model weights from internet is allowed (default: NO - local only)
@@ -140,7 +148,90 @@ class DoclingHelper:
             from docling.datamodel.base_models import InputFormat
             from docling.document_converter import PdfFormatOption
             
-            pipeline_options = PdfPipelineOptions(artifacts_path=artifacts_path)
+            # Determine OCR engine based on platform
+            ocr_override = os.environ.get('DOCLING_OCR_ENGINE', '').lower()
+            system = platform.system()
+            
+            if ocr_override == 'rapidocr':
+                use_rapidocr = True
+            elif ocr_override == 'ocrmac':
+                use_rapidocr = False
+            else:
+                # Auto-detect: macOS uses OcrMac, Windows/Linux use RapidOCR
+                use_rapidocr = (system != 'Darwin')
+            
+            # Configure OCR options
+            ocr_options = None
+            if use_rapidocr:
+                from docling.datamodel.pipeline_options import RapidOcrOptions
+                
+                # Build paths to local RapidOCR models
+                rapidocr_base = Path(artifacts_path) / 'RapidOcr' / 'onnx' / 'PP-OCRv4'
+                det_model = rapidocr_base / 'det' / 'ch_PP-OCRv4_det_infer.onnx'
+                rec_model = rapidocr_base / 'rec' / 'ch_PP-OCRv4_rec_infer.onnx'
+                cls_model = rapidocr_base / 'cls' / 'ch_ppocr_mobile_v2.0_cls_infer.onnx'
+                
+                # Check if models exist, fall back to package defaults if not
+                if det_model.exists() and rec_model.exists():
+                    ocr_options = RapidOcrOptions(
+                        det_model_path=str(det_model),
+                        rec_model_path=str(rec_model),
+                        cls_model_path=str(cls_model) if cls_model.exists() else None,
+                    )
+                    logger.info(f"Using RapidOCR with local models from: {rapidocr_base}")
+                else:
+                    # Use default RapidOCR (models from pip package)
+                    ocr_options = RapidOcrOptions()
+                    logger.info("Using RapidOCR with default bundled models")
+            else:
+                from docling.datamodel.pipeline_options import OcrMacOptions
+                ocr_options = OcrMacOptions()
+                logger.info("Using OcrMac (macOS native OCR)")
+            
+            # Configure tableformer mode (accurate vs fast)
+            table_mode = os.environ.get('DOCLING_TABLE_MODE', 'accurate').lower()
+            
+            # Configure image scale for better quality (higher = better but slower)
+            try:
+                image_scale = float(os.environ.get('DOCLING_IMAGE_SCALE', '1.0'))
+                image_scale = max(1.0, min(4.0, image_scale))  # Clamp between 1.0 and 4.0
+            except ValueError:
+                image_scale = 1.0
+            
+            # Import TableFormerMode for table structure detection
+            try:
+                from docling.datamodel.pipeline_options import TableFormerMode, TableStructureOptions
+                
+                if table_mode == 'fast':
+                    table_structure_options = TableStructureOptions(
+                        mode=TableFormerMode.FAST,
+                        do_cell_matching=True
+                    )
+                    logger.info("Using TableFormer FAST mode")
+                else:
+                    table_structure_options = TableStructureOptions(
+                        mode=TableFormerMode.ACCURATE,
+                        do_cell_matching=True
+                    )
+                    logger.info("Using TableFormer ACCURATE mode (higher quality)")
+                
+                pipeline_options = PdfPipelineOptions(
+                    artifacts_path=artifacts_path,
+                    ocr_options=ocr_options,
+                    do_table_structure=True,
+                    table_structure_options=table_structure_options,
+                    images_scale=image_scale,
+                )
+            except ImportError:
+                # Fallback for older docling versions without TableFormerMode
+                logger.warning("TableFormerMode not available, using default table detection")
+                pipeline_options = PdfPipelineOptions(
+                    artifacts_path=artifacts_path,
+                    ocr_options=ocr_options,
+                )
+            
+            if image_scale > 1.0:
+                logger.info(f"Using image scale: {image_scale}x")
             
             converter = DocumentConverter(
                 format_options={
@@ -208,6 +299,124 @@ class DoclingHelper:
                 tables.append(item)
         
         return tables
+    
+    @staticmethod
+    def extract_section_name(doc, table_item, page_no: int) -> str:
+        """
+        Extract the section name (e.g., 'Institutional Securities', 'Wealth Management')
+        that contains this table.
+        
+        Uses multiple strategies:
+        1. Look for SECTION_HEADER or TITLE labels
+        2. Look for all-caps text that matches known section patterns
+        3. Look for short capitalized headings before the table
+        
+        Args:
+            doc: Docling document
+            table_item: The table item
+            page_no: Page number
+            
+        Returns:
+            Section name or empty string if not found
+        """
+        # Common section names in Morgan Stanley and financial reports
+        section_keywords = [
+            'institutional securities', 'wealth management', 'investment management',
+            'corporate', 'intersegment eliminations', 'segment information',
+            'consolidated statements', 'notes to consolidated', 'financial instruments',
+            'fair value', 'credit risk', 'liquidity', 'capital requirements',
+            'income statement', 'balance sheet', 'cash flow', 'equity',
+            'allowance for credit losses', 'deposits', 'borrowings', 'securitizations',
+            'derivatives', 'hedging', 'commitments', 'contingencies',
+        ]
+        
+        try:
+            items_list = list(doc.iterate_items())
+            section_candidates = []
+            
+            for item_data in items_list:
+                item = item_data[0] if isinstance(item_data, tuple) else item_data
+                
+                # Check if this is our table - stop looking
+                if item is table_item:
+                    break
+                
+                # Get item's page number
+                item_page = 1
+                if hasattr(item, 'prov') and item.prov:
+                    for p in item.prov:
+                        if hasattr(p, 'page_no'):
+                            item_page = p.page_no
+                
+                # Only consider items on same or recent pages
+                if item_page >= page_no - 2:
+                    # Get text first
+                    if not hasattr(item, 'text') or not item.text:
+                        continue
+                    
+                    text = str(item.text).strip()
+                    
+                    # Skip if too short or too long
+                    if not (3 < len(text) < 80):
+                        continue
+                    
+                    text_lower = text.lower()
+                    
+                    # Skip table-like content
+                    if any(skip in text_lower for skip in ['$', '|', '---', 'row', 'total:', 'net ']):
+                        continue
+                    
+                    # Strategy 1: Check label using both enum comparison and string fallback
+                    is_section_or_title = False
+                    
+                    if hasattr(item, 'label') and item.label:
+                        # Direct enum comparison (preferred)
+                        if item.label == DocItemLabel.SECTION_HEADER:
+                            is_section_or_title = True
+                        elif hasattr(DocItemLabel, 'TITLE') and item.label == DocItemLabel.TITLE:
+                            is_section_or_title = True
+                        else:
+                            # Fallback: string comparison for edge cases
+                            label_str = str(item.label).upper()
+                            if 'SECTION' in label_str or 'TITLE' in label_str:
+                                is_section_or_title = True
+                    
+                    # Strategy 2: Check if it matches known section keywords
+                    matches_keyword = any(keyword in text_lower for keyword in section_keywords)
+                    
+                    # Strategy 3: Check if it's all-caps or title-case (common for section headers)
+                    is_all_caps = text.isupper() and len(text) > 5
+                    is_title_case = text.istitle() and len(text.split()) <= 5
+                    
+                    # Strategy 4: Check for "Note X" pattern which often precedes sections
+                    is_note_header = bool(re.match(r'^Note\s+\d+', text, re.IGNORECASE))
+                    
+                    # Accept if any strategy matches and text looks like a header
+                    is_valid_heading = (
+                        text[0].isupper() and 
+                        not any(c.isdigit() for c in text[:5]) and
+                        len(text.split()) <= 8  # Section headers are usually short
+                    )
+                    
+                    if is_section_or_title or (matches_keyword and is_valid_heading) or \
+                       (is_all_caps and is_valid_heading) or is_note_header:
+                        section_candidates.append(text)
+            
+            # Return the most recent section header (closest to the table)
+            if section_candidates:
+                # Clean up the section name
+                result = section_candidates[-1]
+                # Remove "Note X" prefix if followed by more text
+                result = re.sub(r'^Note\s+\d+\.?\s*[-–:]?\s*', '', result, flags=re.IGNORECASE).strip()
+                # Normalize capitalization if all caps
+                if result.isupper():
+                    result = result.title()
+                return result
+                
+        except Exception:
+            pass
+        
+        return ""
     
     @staticmethod
     def extract_table_title(doc, table_item, table_index: int, page_no: int) -> str:

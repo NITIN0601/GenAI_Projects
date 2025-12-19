@@ -1,0 +1,7 @@
+# Docling packages installed in .venv as of 2025-12-17
+# Generated before cleanup for reinstallation reference
+
+docling==2.64.0
+docling-core==2.54.0
+docling-ibm-models==3.10.3
+docling-parse==4.7.2

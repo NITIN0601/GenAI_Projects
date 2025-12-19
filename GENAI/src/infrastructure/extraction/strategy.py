@@ -2,10 +2,12 @@
 Extraction strategy with automatic fallback.
 """
 
-import logging
-from src.utils import get_logger
+import sys
+import platform
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed, TimeoutError
 from typing import List, Optional
 
+from src.utils import get_logger
 from src.infrastructure.extraction.base import ExtractionBackend, ExtractionResult, ExtractionError
 from src.infrastructure.extraction.quality import QualityAssessor
 
@@ -142,9 +144,7 @@ class ExtractionStrategy:
         Returns:
             Best extraction result
         """
-        import sys
-        import platform
-        from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed, TimeoutError
+        # Imports moved to module top
         
         # Get available backends
         available_backends = [b for b in self.backends if b.is_available()]
@@ -192,7 +192,9 @@ class ExtractionStrategy:
                     # If quality is good enough, we can stop early
                     if quality >= min_quality:
                         logger.info(f"{backend.get_name()} met quality threshold, using result")
-                        # Cancel remaining futures
+                        # NOTE: future.cancel() only prevents queued tasks from starting;
+                        # already-running backends will continue to completion in background.
+                        # This is acceptable as results are discarded and resources freed on completion.
                         for f in future_to_backend:
                             f.cancel()
                         return result
