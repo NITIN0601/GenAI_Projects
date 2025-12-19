@@ -36,38 +36,35 @@ logger = get_logger(__name__)
 
 class DoclingBackend(ExtractionBackend):
     """
-    Docling extraction backend with all optimizations.
+    Docling extraction backend - extracts COMPLETE tables from PDFs.
     
     Features:
     - Page-by-page processing
-    - Intelligent chunking with overlap
+    - Complete table extraction (no chunking - chunking is done in embedding stage)
     - Centered spanning headers
     - Multi-line header flattening
     - Complete metadata extraction
+    
+    Note: Chunking for RAG/embeddings is handled separately in the embedding pipeline,
+    not during extraction. This ensures complete tables are available for Excel export.
     """
     
-    def __init__(
-        self,
-        chunk_size: int = 10,
-        overlap: int = 3,
-        flatten_headers: bool = False
-    ):
+    def __init__(self, flatten_headers: bool = False):
         """
-        Initialize Docling backend.
+        Initialize Docling backend for complete table extraction.
         
         Args:
-            chunk_size: Rows per chunk
-            overlap: Overlapping rows between chunks
             flatten_headers: Flatten multi-line headers
         """
-        self.chunk_size = chunk_size
-        self.overlap = overlap
         self.flatten_headers = flatten_headers
+        # Use very large chunk_size to pass tables through without splitting
+        # Actual chunking for embeddings happens in the embed pipeline
         self.chunker = TableChunker(
-            chunk_size=chunk_size,
-            overlap=overlap,
+            chunk_size=100000,  # Effectively no chunking
+            overlap=0,
             flatten_headers=flatten_headers
         )
+        logger.info("DoclingBackend initialized - extracting complete tables")
     
     def extract(self, pdf_path: str, **kwargs) -> ExtractionResult:
         """
