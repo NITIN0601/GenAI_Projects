@@ -307,8 +307,8 @@ class DoclingHelper:
         that contains this table.
         
         Uses multiple strategies:
-        1. Look for SECTION_HEADER or TITLE labels
-        2. Look for all-caps text that matches known section patterns
+        1. Look for SECTION_HEADER or TITLE labels that match business segments
+        2. Look for all-caps or title-case text matching known business segments
         3. Look for short capitalized headings before the table
         
         Args:
@@ -319,15 +319,24 @@ class DoclingHelper:
         Returns:
             Section name or empty string if not found
         """
-        # Common section names in Morgan Stanley and financial reports
-        section_keywords = [
-            'institutional securities', 'wealth management', 'investment management',
-            'corporate', 'intersegment eliminations', 'segment information',
-            'consolidated statements', 'notes to consolidated', 'financial instruments',
-            'fair value', 'credit risk', 'liquidity', 'capital requirements',
-            'income statement', 'balance sheet', 'cash flow', 'equity',
-            'allowance for credit losses', 'deposits', 'borrowings', 'securitizations',
-            'derivatives', 'hedging', 'commitments', 'contingencies',
+        # IMPORTANT: Only use actual BUSINESS SEGMENT names - NOT table titles!
+        # These are the top-level sections that group tables in Morgan Stanley reports
+        BUSINESS_SEGMENTS = [
+            'institutional securities',
+            'wealth management', 
+            'investment management',
+            'corporate',
+            'intersegment eliminations',
+            'inter-segment eliminations',
+        ]
+        
+        # Additional section headers that are valid (but less specific)
+        GENERAL_SECTION_HEADERS = [
+            'management\'s discussion and analysis',
+            'consolidated financial statements',
+            'notes to consolidated financial statements',
+            'risk disclosures',
+            'financial data supplement',
         ]
         
         try:
@@ -381,31 +390,41 @@ class DoclingHelper:
                             if 'SECTION' in label_str or 'TITLE' in label_str:
                                 is_section_or_title = True
                     
-                    # Strategy 2: Check if it matches known section keywords
-                    matches_keyword = any(keyword in text_lower for keyword in section_keywords)
+                    # Strategy 2: Check if it matches known BUSINESS SEGMENTS (high priority)
+                    # This is the most reliable way to detect sections
+                    matches_business_segment = any(seg in text_lower for seg in BUSINESS_SEGMENTS)
                     
-                    # Strategy 3: Check if it's all-caps or title-case (common for section headers)
-                    is_all_caps = text.isupper() and len(text) > 5
-                    is_title_case = text.istitle() and len(text.split()) <= 5
+                    # Strategy 3: Check if it matches general section headers (lower priority)
+                    matches_general_header = any(hdr in text_lower for hdr in GENERAL_SECTION_HEADERS)
                     
                     # Strategy 4: Check for "Note X" pattern which often precedes sections
                     is_note_header = bool(re.match(r'^Note\s+\d+', text, re.IGNORECASE))
                     
-                    # Accept if any strategy matches and text looks like a header
-                    is_valid_heading = (
-                        text[0].isupper() and 
-                        not any(c.isdigit() for c in text[:5]) and
-                        len(text.split()) <= 8  # Section headers are usually short
-                    )
-                    
-                    if is_section_or_title or (matches_keyword and is_valid_heading) or \
-                       (is_all_caps and is_valid_heading) or is_note_header:
-                        section_candidates.append(text)
+                    # Only accept if it matches a BUSINESS SEGMENT or is a known general header
+                    # Do NOT accept random section_or_title labels - they often pick up table titles
+                    if matches_business_segment:
+                        # Business segment - save with high priority
+                        section_candidates.append(('business', text))
+                    elif is_note_header:
+                        # Note header - save with medium priority  
+                        section_candidates.append(('note', text))
+                    elif matches_general_header and is_section_or_title:
+                        # General header with section label - save with low priority
+                        section_candidates.append(('general', text))
             
-            # Return the most recent section header (closest to the table)
+            # Return the best section header (prioritize business segments)
             if section_candidates:
+                # Sort by priority: business > note > general
+                priority_order = {'business': 0, 'note': 1, 'general': 2}
+                section_candidates.sort(key=lambda x: priority_order.get(x[0], 99))
+                
+                # Get the highest priority match that's closest to the table
+                # Among same priority, prefer the last one (closest to table)
+                best_priority = section_candidates[0][0]
+                same_priority = [c for c in section_candidates if c[0] == best_priority]
+                result = same_priority[-1][1]  # Last match of best priority
+                
                 # Clean up the section name
-                result = section_candidates[-1]
                 # Remove "Note X" prefix if followed by more text
                 result = re.sub(r'^Note\s+\d+\.?\s*[-–:]?\s*', '', result, flags=re.IGNORECASE).strip()
                 # Normalize capitalization if all caps
