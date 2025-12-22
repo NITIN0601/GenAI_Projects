@@ -245,7 +245,7 @@ class UnifiedExtractor:
             return
         
         try:
-            from src.infrastructure.extraction.formatters.report_exporter import get_report_exporter
+            from src.infrastructure.extraction.exporters.report_exporter import get_report_exporter
             
             # Get output settings from config
             try:
