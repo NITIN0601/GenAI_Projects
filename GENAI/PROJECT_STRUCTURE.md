@@ -1,6 +1,6 @@
 # GENAI Project Structure
 
-**Last Updated**: 2025-12-09  
+**Last Updated**: 2025-12-22  
 **Total Python Files**: 130  
 **Total Directories**: 22+
 
@@ -176,56 +176,64 @@ src/embeddings/
 ### `/src/extraction` - PDF Table Extraction
 
 ```
-src/extraction/
-├── __init__.py
-├── base.py                         # Base extraction classes
+src/infrastructure/extraction/
+├── __init__.py                     # Package exports
+├── base.py                         # Base classes (ExtractionBackend, ExtractionResult)
 ├── extractor.py                    # Unified extractor orchestrator
 ├── strategy.py                     # Extraction strategy selection
 ├── quality.py                      # Quality assessment
-├── metrics.py                      # Extraction metrics
 ├── cache.py                        # Extraction result caching
 ├── enrichment.py                   # Metadata enrichment
+├── metadata_extractor.py           # Metadata extraction from content
 ├── backends/                       # Extraction backends
 │   ├── __init__.py
 │   ├── docling_backend.py         # Docling (primary)
 │   ├── pymupdf_backend.py         # PyMuPDF (fallback)
 │   ├── pdfplumber_backend.py      # PDFPlumber (fallback)
-│   └── camelot_backend.py         # Camelot (fallback)
-├── consolidation/                  # Table consolidation
+│   ├── camelot_backend.py         # Camelot (fallback)
+│   └── unstructured_backend.py    # Unstructured (fallback)
+├── consolidation/                  # Table consolidation (multi-file)
 │   ├── __init__.py
-│   ├── table_consolidator.py      # Base consolidator
-│   ├── quarterly.py               # Quarterly consolidation
-│   └── multi_year.py              # Multi-year consolidation
-└── formatters/                     # Table formatting
+│   ├── consolidator.py            # Unified consolidator
+│   ├── multi_year.py              # Multi-year consolidation
+│   └── consolidated_exporter.py   # Multi-file Excel merge
+├── exporters/                      # Export functionality (NEW)
+│   ├── __init__.py
+│   ├── excel_exporter.py          # Single PDF to Excel with Index
+│   └── report_exporter.py         # CSV/Excel report generation
+└── formatters/                     # Table parsing/structure
     ├── __init__.py
-    ├── table_formatter.py         # Basic table formatting
+    ├── table_formatter.py         # Markdown table parsing
     ├── enhanced_formatter.py      # Advanced formatting
-    └── metadata_extractor.py      # Metadata extraction
+    └── header_detector.py         # Multi-level header detection
 ```
 
 **Files**:
-- `base.py`: Base classes for extraction backends (ExtractionBackend, ExtractionResult)
+- `base.py`: Base classes for extraction backends (ExtractionBackend, ExtractionResult, BackendType)
 - `extractor.py`: Main orchestrator with multi-backend fallback
 - `strategy.py`: Backend selection strategy based on quality
 - `quality.py`: Table quality scoring and assessment
-- `metrics.py`: Extraction performance metrics
 - `cache.py`: File-based caching for extraction results
 - `enrichment.py`: Financial metadata enrichment (units, currency, statement types)
+- `metadata_extractor.py`: Extract metadata from table content for vector DB
 - `backends/docling_backend.py`: Primary extraction using Docling
 - `backends/pymupdf_backend.py`: Fallback using PyMuPDF
 - `backends/pdfplumber_backend.py`: Fallback using PDFPlumber
 - `backends/camelot_backend.py`: Fallback using Camelot
-- `consolidation/table_consolidator.py`: Base consolidation logic
-- `consolidation/quarterly.py`: Quarterly table consolidation
-- `consolidation/multi_year.py`: Multi-year table consolidation
-- `formatters/table_formatter.py`: Basic markdown table formatting
+- `consolidation/consolidator.py`: Unified table consolidation with filtering
+- `consolidation/multi_year.py`: Multi-year/period consolidation engine
+- `consolidation/consolidated_exporter.py`: Merge multiple Excel files with row alignment
+- `exporters/excel_exporter.py`: Single PDF export to Excel with Index sheet
+- `exporters/report_exporter.py`: CSV and basic Excel report generation
+- `formatters/table_formatter.py`: Markdown table parsing with structure detection
 - `formatters/enhanced_formatter.py`: Advanced formatting with multi-level headers
-- `formatters/metadata_extractor.py`: Extract metadata from table content
+- `formatters/header_detector.py`: Detect multi-level column headers
 
 **Purpose**: Extract tables from financial PDFs with quality assessment
 - **Primary**: Docling (best quality)
-- **Fallback**: PyMuPDF, PDFPlumber, Camelot
+- **Fallback**: PyMuPDF, PDFPlumber, Camelot, Unstructured
 - **Consolidation**: Merge tables across quarters/years
+- **Export**: Excel with Index, CSV reports, consolidated multi-file merge
 - **Enrichment**: Add financial context (units, currency, etc.)
 
 ---
@@ -436,7 +444,11 @@ src/utils/
 ├── exceptions.py                   # Custom exceptions
 ├── helpers.py                      # Helper functions
 ├── metrics.py                      # Performance metrics
-└── extraction_utils.py            # Extraction utilities
+├── extraction_utils.py            # Extraction utilities
+├── table_utils.py                 # Table parsing utilities
+├── financial_patterns.py          # Financial pattern constants (NEW)
+├── date_utils.py                  # Date/period utilities (moved from formatters)
+└── excel_utils.py                 # Excel utilities (moved from formatters)
 ```
 
 **Files**:
@@ -444,7 +456,11 @@ src/utils/
 - `exceptions.py`: Custom exception classes for the application
 - `helpers.py`: General helper functions
 - `metrics.py`: Performance metrics collection and reporting
-- `extraction_utils.py`: Utilities for table extraction and processing
+- `extraction_utils.py`: Utilities for table extraction (DoclingHelper, etc.)
+- `table_utils.py`: Markdown table parsing utilities
+- `financial_patterns.py`: Consolidated financial patterns (units, currency, statements)
+- `date_utils.py`: Date/quarter parsing and conversion utilities
+- `excel_utils.py`: Excel-specific utilities (sheet names, column letters, etc.)
 
 **Purpose**: Shared utilities and helper functions
 

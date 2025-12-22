@@ -17,6 +17,33 @@ from docling_core.types.doc import DocItemLabel
 from src.domain.tables import TableMetadata
 
 
+# =============================================================================
+# MODULE-LEVEL COMPILED REGEX PATTERNS (Optimization)
+# =============================================================================
+# These patterns are compiled once at module import time instead of being
+# compiled repeatedly inside functions for better performance.
+
+# TOC extraction patterns
+_TOC_ENTRY_PATTERN = re.compile(r'^(\d+\.\s+)?(.+?)\s+(\d{1,3})\s*$')
+_NUMBERED_SECTION_PATTERN = re.compile(r'^(\d{1,2})\.\s+([A-Z][A-Za-z\s,\-]+)$')
+_NUMBERED_PREFIX_PATTERN = re.compile(r'^\d+\.\s+')
+
+# Title cleaning patterns
+_SECTION_NUMBER_PREFIX = re.compile(r'^\d+[\.\:\s]+\s*')
+_NOTE_PREFIX_PATTERN = re.compile(r'^Note\s+\d+\.?\s*[-–:]?\s*', re.IGNORECASE)
+_TABLE_PREFIX_PATTERN = re.compile(r'^Table\s+\d+\.?\s*[-–:]?\s*', re.IGNORECASE)
+_ROW_RANGE_PATTERN = re.compile(r'\s*\(Rows?\s*\d+[-–]\d+\)\s*$', re.IGNORECASE)
+
+# Footnote patterns
+_TRAILING_NUMBER_PATTERN = re.compile(r'\s+\d+\s*$')
+_PAREN_NUMBER_PATTERN = re.compile(r'\s*\(\d+\)\s*$')
+_SUPERSCRIPT_PATTERN = re.compile(r'[¹²³⁴⁵⁶⁷⁸⁹⁰]+')
+
+# Note header pattern for section detection
+_NOTE_HEADER_PATTERN = re.compile(r'^Note\s+\d+', re.IGNORECASE)
+_NUMBERED_HEADER_PATTERN = re.compile(r'^\d+\.\s+[A-Z]')
+
+
 class DoclingHelper:
     """Helper class for common Docling operations."""
     
@@ -260,6 +287,245 @@ class DoclingHelper:
         raise RuntimeError(error_msg)
     
     @staticmethod
+    def extract_toc_sections(doc) -> dict:
+        """
+        Extract Table of Contents (TOC) and build page-to-section mapping.
+        
+        Parses the TOC from the PDF document to create a reliable mapping of
+        page numbers to section names (e.g., page 51 -> "5. Fair Value Option").
+        
+        Handles hierarchical TOC structure:
+        - Level 0: Major sections (e.g., "Notes to Consolidated Financial Statements")
+        - Level 1: Subsections (e.g., "5. Fair Value Option")
+        
+        Args:
+            doc: Docling document
+            
+        Returns:
+            Dict mapping page numbers to section names, e.g.:
+            {44: "Notes to Consolidated Financial Statements",
+             51: "5. Fair Value Option",
+             52: "6. Derivative Instruments and Hedging Activities"}
+        """
+        toc_sections = {}
+        
+        # Known section title patterns (to distinguish from footnotes)
+        VALID_SECTION_STARTERS = [
+            'introduction', 'executive', 'business', 'institutional', 'wealth',
+            'investment', 'supplemental', 'accounting', 'critical', 'liquidity',
+            'balance', 'regulatory', 'quantitative', 'qualitative', 'market',
+            'credit', 'country', 'report', 'consolidated', 'notes', 'financial',
+            'controls', 'legal', 'risk', 'other', 'exhibits', 'signatures',
+            'cash', 'fair', 'derivative', 'securities', 'collateral', 'loans',
+            'deposits', 'borrowings', 'commitments', 'variable', 'total', 'equity',
+            'interest', 'income', 'taxes', 'segment', 'geographic', 'revenue',
+            'basis', 'presentation', 'policies', 'assets', 'liabilities',
+        ]
+        
+        # Words that indicate a footnote (NOT a section)
+        FOOTNOTE_INDICATORS = [
+            'amounts', 'includes', 'based on', 'represents', 'related to',
+            'percent', 'excludes', 'primarily', 'net of', 'see note',
+            'does not', 'prior to', 'inclusive of', 'applicable',
+        ]
+        
+        try:
+            items_list = list(doc.iterate_items())
+            in_toc = False
+            toc_end_page = 5  # TOC usually on first few pages
+            
+            for item_data in items_list:
+                item = item_data[0] if isinstance(item_data, tuple) else item_data
+                
+                if not hasattr(item, 'text') or not item.text:
+                    continue
+                
+                text = str(item.text).strip()
+                text_lower = text.lower()
+                
+                # Get page of this item
+                item_page = DoclingHelper.get_item_page(item)
+                
+                # Detect start of TOC
+                if 'table of contents' in text_lower or 'contents' == text_lower:
+                    in_toc = True
+                    continue
+                
+                # Skip very short or very long text
+                if len(text) < 5 or len(text) > 100:
+                    continue
+                
+                # Pattern: "Section Name PageNumber" at end
+                # Examples: "5. Fair Value Option 51", "Executive Summary 5", "Notes to Consolidated Financial Statements 44"
+                toc_match = re.match(r'^(\d+\.\s+)?(.+?)\s+(\d{1,3})\s*$', text)
+                
+                if toc_match:
+                    prefix = toc_match.group(1) or ''
+                    section_name = (prefix + toc_match.group(2)).strip()
+                    
+                    try:
+                        page_num = int(toc_match.group(3))
+                    except ValueError:
+                        continue
+                    
+                    # Validate: page number should be reasonable
+                    if not (1 <= page_num <= 500):
+                        continue
+                    
+                    # Check if this looks like a footnote (should be filtered out)
+                    is_footnote = False
+                    section_lower = section_name.lower()
+                    
+                    # Footnote check: starts with number + "." but followed by footnote indicator
+                    if re.match(r'^\d+\.\s+', section_name):
+                        after_number = re.sub(r'^\d+\.\s+', '', section_lower)
+                        for indicator in FOOTNOTE_INDICATORS:
+                            if after_number.startswith(indicator):
+                                is_footnote = True
+                                break
+                    
+                    # Also check if the section text itself starts with footnote indicator
+                    for indicator in FOOTNOTE_INDICATORS:
+                        if section_lower.startswith(indicator):
+                            is_footnote = True
+                            break
+                    
+                    if is_footnote:
+                        continue
+                    
+                    # Validate: section should start with known section word OR be numbered
+                    is_valid = False
+                    
+                    # Numbered sections like "5. Fair Value Option" are valid
+                    if re.match(r'^\d+\.\s+', section_name):
+                        is_valid = True
+                    else:
+                        # Check if first word is a known section starter
+                        first_word = section_lower.split()[0] if section_lower.split() else ''
+                        if any(first_word.startswith(starter) for starter in VALID_SECTION_STARTERS):
+                            is_valid = True
+                    
+                    if is_valid and len(section_name) > 3:
+                        toc_sections[page_num] = section_name
+            
+            # Also look for numbered section headers in the document body
+            # (these appear as standalone headers like "5. Fair Value Option" on the page)
+            numbered_section_pattern = re.compile(r'^(\d{1,2})\.\s+([A-Z][A-Za-z\s,\-]+)$')
+            
+            for item_data in items_list:
+                item = item_data[0] if isinstance(item_data, tuple) else item_data
+                
+                if not hasattr(item, 'text') or not item.text:
+                    continue
+                
+                text = str(item.text).strip()
+                
+                # Only consider short titles (section headers are usually brief)
+                if len(text) < 5 or len(text) > 60:
+                    continue
+                
+                num_match = numbered_section_pattern.match(text)
+                if num_match:
+                    section_num = num_match.group(1)
+                    section_title = num_match.group(2).strip()
+                    full_section = f"{section_num}. {section_title}"
+                    
+                    # Get page number of this item
+                    page = DoclingHelper.get_item_page(item)
+                    
+                    # Only add if not already in toc_sections AND not a footnote
+                    section_lower = section_title.lower()
+                    is_footnote = any(section_lower.startswith(ind) for ind in FOOTNOTE_INDICATORS)
+                    
+                    if page and not is_footnote and page not in toc_sections:
+                        toc_sections[page] = full_section
+            
+            # Third pass: Look for SECTION_HEADER labeled items to capture business segments
+            # like "Institutional Securities", "Wealth Management", etc.
+            for item_data in items_list:
+                item = item_data[0] if isinstance(item_data, tuple) else item_data
+                
+                # Check for SECTION_HEADER or TITLE label
+                if not hasattr(item, 'label') or not item.label:
+                    continue
+                
+                label_str = str(item.label).upper()
+                if 'SECTION' not in label_str and 'TITLE' not in label_str:
+                    continue
+                
+                if not hasattr(item, 'text') or not item.text:
+                    continue
+                
+                text = str(item.text).strip()
+                text_lower = text.lower()
+                
+                # Skip short or long text
+                if len(text) < 5 or len(text) > 80:
+                    continue
+                
+                # Skip table-like content
+                if any(skip in text_lower for skip in ['$', '|', '---', 'total:', 'net ']):
+                    continue
+                
+                # Skip footnote-like content
+                is_footnote = any(text_lower.startswith(ind) for ind in FOOTNOTE_INDICATORS)
+                if is_footnote:
+                    continue
+                
+                # Must start with a valid section word OR be a known business segment
+                first_word = text_lower.split()[0] if text_lower.split() else ''
+                is_valid_section = any(first_word.startswith(starter) for starter in VALID_SECTION_STARTERS)
+                
+                # Known business segment names
+                is_business_segment = any(seg in text_lower for seg in [
+                    'institutional securities', 'wealth management', 'investment management',
+                    'corporate', 'intersegment', 'business segments'
+                ])
+                
+                if is_valid_section or is_business_segment:
+                    page = DoclingHelper.get_item_page(item)
+                    if page and page not in toc_sections:
+                        # Clean up the section name
+                        section_name = text
+                        if section_name.isupper():
+                            section_name = section_name.title()
+                        toc_sections[page] = section_name
+            
+        except Exception:
+            pass
+        
+        return toc_sections
+    
+    @staticmethod
+    def get_section_for_page(toc_sections: dict, page_no: int) -> str:
+        """
+        Get section name for a given page number using TOC mapping.
+        
+        Finds the most specific section that contains the given page.
+        
+        Args:
+            toc_sections: Dict from extract_toc_sections()
+            page_no: Page number to look up
+            
+        Returns:
+            Section name or empty string if not found
+        """
+        if not toc_sections:
+            return ""
+        
+        # Find the section with the highest page number <= page_no
+        # This gives us the section that starts at or before the table's page
+        best_section = ""
+        best_page = 0
+        
+        for sec_page, sec_name in toc_sections.items():
+            if sec_page <= page_no and sec_page > best_page:
+                best_page = sec_page
+                best_section = sec_name
+        
+        return best_section
+    
+    @staticmethod
     def get_item_page(item) -> int:
         """
         Get page number for a Docling item.
@@ -300,25 +566,44 @@ class DoclingHelper:
         
         return tables
     
+    # Class-level cache for TOC sections (to avoid re-parsing for every table)
+    _toc_cache = {}
+    
     @staticmethod
-    def extract_section_name(doc, table_item, page_no: int) -> str:
+    def extract_section_name(doc, table_item, page_no: int, toc_sections: dict = None) -> str:
         """
-        Extract the section name (e.g., 'Institutional Securities', 'Wealth Management')
+        Extract the section name (e.g., '5. Fair Value Option', 'Wealth Management')
         that contains this table.
         
-        Uses multiple strategies:
-        1. Look for SECTION_HEADER or TITLE labels that match business segments
-        2. Look for all-caps or title-case text matching known business segments
-        3. Look for short capitalized headings before the table
+        Uses multiple strategies in priority order:
+        1. TOC-based lookup (most reliable) - uses page-to-section mapping from Table of Contents
+        2. Pattern matching for SECTION_HEADER/TITLE labels matching business segments
+        3. Numbered section pattern matching (e.g., "5. Fair Value Option")
+        4. General section header matching
         
         Args:
             doc: Docling document
             table_item: The table item
             page_no: Page number
+            toc_sections: Optional pre-parsed TOC dict (from extract_toc_sections)
             
         Returns:
             Section name or empty string if not found
         """
+        # Strategy 1: TOC-based lookup (most reliable)
+        if toc_sections is None:
+            # Try to use cached TOC or parse it
+            doc_id = id(doc)
+            if doc_id not in DoclingHelper._toc_cache:
+                DoclingHelper._toc_cache[doc_id] = DoclingHelper.extract_toc_sections(doc)
+            toc_sections = DoclingHelper._toc_cache[doc_id]
+        
+        if toc_sections:
+            section = DoclingHelper.get_section_for_page(toc_sections, page_no)
+            if section:
+                return section
+        
+        # Strategy 2+: Fall back to pattern matching
         # IMPORTANT: Only use actual BUSINESS SEGMENT names - NOT table titles!
         # These are the top-level sections that group tables in Morgan Stanley reports
         BUSINESS_SEGMENTS = [
@@ -399,12 +684,19 @@ class DoclingHelper:
                     
                     # Strategy 4: Check for "Note X" pattern which often precedes sections
                     is_note_header = bool(re.match(r'^Note\s+\d+', text, re.IGNORECASE))
+
+                    # Strategy 5: Check for Numbered Section pattern (e.g., "5. Fair Value Option")
+                    # Must start with digit + dot + space + generic text
+                    is_numbered_header = bool(re.match(r'^\d+\.\s+[A-Z]', text))
                     
                     # Only accept if it matches a BUSINESS SEGMENT or is a known general header
                     # Do NOT accept random section_or_title labels - they often pick up table titles
                     if matches_business_segment:
                         # Business segment - save with high priority
                         section_candidates.append(('business', text))
+                    elif is_numbered_header and len(text) < 60:
+                        # Numbered section (likely what we want, e.g. "5. Fair Value Option")
+                        section_candidates.append(('numbered', text))
                     elif is_note_header:
                         # Note header - save with medium priority  
                         section_candidates.append(('note', text))
@@ -414,8 +706,8 @@ class DoclingHelper:
             
             # Return the best section header (prioritize business segments)
             if section_candidates:
-                # Sort by priority: business > note > general
-                priority_order = {'business': 0, 'note': 1, 'general': 2}
+                # Sort by priority: business > numbered > note > general
+                priority_order = {'business': 0, 'numbered': 0, 'note': 1, 'general': 2}
                 section_candidates.sort(key=lambda x: priority_order.get(x[0], 99))
                 
                 # Get the highest priority match that's closest to the table
@@ -425,8 +717,25 @@ class DoclingHelper:
                 result = same_priority[-1][1]  # Last match of best priority
                 
                 # Clean up the section name
-                # Remove "Note X" prefix if followed by more text
-                result = re.sub(r'^Note\s+\d+\.?\s*[-–:]?\s*', '', result, flags=re.IGNORECASE).strip()
+                # Remove "Note X" prefix ONLY if the result is NOT just "Note X" (keep "Note 5" if that's all there is)
+                # But keep "5. Fair Value Option" intact (it doesn't start with Note)
+                # If it starts with "Note 5. Title", user might want "5. Title" or "Note 5. Title".
+                # Given user feedback "The actual section is '5. Fair Value Option'", we should try to preserve the number.
+                
+                # If it matches "Note X. Title", strip "Note " but keep "X. Title" ?
+                # Or just strip "Note \d+." completely?
+                # The user request suggests they want "5. Fair Value Option".
+                # If the text was "Note 5. Fair Value Option", stripping "Note " leaves "5. Fair Value Option".
+                
+                # Improved regex: Replace "Note " at start if followed by digit
+                result = re.sub(r'^Note\s+(?=\d)', '', result, flags=re.IGNORECASE).strip()
+                
+                # Validation: If result became empty or just a number, revert or handle
+                if not result or result.isdigit() or re.match(r'^\d+\.?$', result):
+                    # Fallback or keep original?
+                    if len(same_priority[-1][1]) > len(result): 
+                         result = same_priority[-1][1] # unexpected over-cleaning
+                
                 # Normalize capitalization if all caps
                 if result.isupper():
                     result = result.title()

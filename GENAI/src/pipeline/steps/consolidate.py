@@ -63,7 +63,7 @@ class ConsolidateStep(StepInterface):
         # If no table_title, perform a full Excel merge of all processed files
         if not table_title:
             try:
-                from src.infrastructure.extraction.formatters.excel_exporter import get_excel_exporter
+                from src.infrastructure.extraction.exporters.excel_exporter import get_excel_exporter
                 exporter = get_excel_exporter()
                 merge_result = exporter.merge_processed_files()
                 

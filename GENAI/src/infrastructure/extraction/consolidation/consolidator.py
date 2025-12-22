@@ -43,6 +43,7 @@ from dataclasses import dataclass, field
 
 from src.utils import get_logger
 from src.utils.table_utils import parse_markdown_table
+from src.utils.date_utils import DateUtils
 from config.settings import settings
 
 logger = get_logger(__name__)
@@ -418,41 +419,12 @@ class TableConsolidator:
         return list(groups.values())
     
     def _get_period_date(self, year: Optional[int], quarter: Optional[str]) -> str:
-        """Get standard period end date (YYYY-MM-DD)."""
-        if not year:
-            return "Unknown"
-        
-        if not quarter:
-            return f"{year}-12-31"
-        
-        quarter = quarter.upper()
-        
-        if "Q1" in quarter:
-            return f"{year}-03-31"
-        elif "Q2" in quarter:
-            return f"{year}-06-30"
-        elif "Q3" in quarter:
-            return f"{year}-09-30"
-        elif "Q4" in quarter or "10-K" in quarter or "10K" in quarter:
-            return f"{year}-12-31"
-        else:
-            return f"{year}-12-31"
+        """Get standard period end date (YYYY-MM-DD). Delegates to DateUtils."""
+        return DateUtils.get_period_date(year, quarter)
     
     def _quarter_to_num(self, quarter: Optional[str]) -> int:
-        """Convert quarter to number for sorting."""
-        if not quarter:
-            return 5
-        
-        quarter = quarter.upper()
-        if 'Q1' in quarter:
-            return 1
-        elif 'Q2' in quarter:
-            return 2
-        elif 'Q3' in quarter:
-            return 3
-        elif 'Q4' in quarter or '10K' in quarter:
-            return 4
-        return 5
+        """Convert quarter to number for sorting. Delegates to DateUtils."""
+        return DateUtils.quarter_to_num(quarter)
     
     def _validate(
         self,

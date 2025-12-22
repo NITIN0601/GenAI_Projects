@@ -10,18 +10,11 @@ Handles detection of:
 import re
 from typing import List, Dict, Any
 
+from src.utils.financial_patterns import UNIT_PATTERNS, is_unit_indicator
+
 
 class HeaderDetector:
     """Detect and parse table header structures."""
-    
-    # Unit indicator patterns to filter from Product/Entity
-    UNIT_PATTERNS = [
-        '$ in million', '$ in billion', '$ in thousand',
-        'in millions', 'in billions', 'in thousands',
-        'dollars in millions', 'dollars in billions',
-        '(in millions)', '(in billions)', '(in thousands)',
-        'amounts in millions', 'amounts in billions',
-    ]
     
     @classmethod
     def detect_column_header_levels(cls, content: str) -> Dict[str, Any]:
@@ -259,21 +252,10 @@ class HeaderDetector:
         Check if text is a unit indicator.
         
         Examples: "$ in millions", "(in thousands)", "amounts in billions"
+        
+        Delegates to shared is_unit_indicator utility.
         """
-        if not text:
-            return False
-            
-        text_lower = text.lower().strip()
-        
-        for pattern in cls.UNIT_PATTERNS:
-            if pattern in text_lower:
-                return True
-        
-        # Also exclude if it starts with $ and contains 'in'
-        if text_lower.startswith('$') and ' in ' in text_lower:
-            return True
-        
-        return False
+        return is_unit_indicator(text)
     
     @classmethod
     def extract_years_from_headers(cls, headers: List[str]) -> List[str]:

@@ -236,108 +236,32 @@ class UnifiedExtractor:
         """
         Save a detailed report of extracted tables to CSV and/or Excel.
         
+        Delegates to ReportExporter for the actual work.
+        
         Args:
             result: Extraction result
         """
         if not result.is_successful() or not result.tables:
             return
-            
+        
         try:
-            import csv
-            from datetime import datetime
+            from src.infrastructure.extraction.formatters.report_exporter import get_report_exporter
             
-            # Get output settings
-            output_dir = Path(settings.EXTRACTION_REPORT_DIR)
-            output_format = getattr(settings, 'EXTRACTION_REPORT_FORMAT', 'both')
-            
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Generate filename base
-            source_name = Path(result.pdf_path).stem
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            base_path = output_dir / f"table_report_{source_name}_{timestamp}"
-            
-            # Prepare report data
-            rows = []
-            for table in result.tables:
-                meta = table.get('metadata', {})
-                content = table.get('content', '')
-                
-                # Use TableStructureFormatter for proper extraction
-                from src.infrastructure.extraction.formatters.table_formatter import TableStructureFormatter
-                parsed = TableStructureFormatter.parse_markdown_table(content)
-                
-                # Get structured row headers
-                row_headers_structured = parsed.get('row_headers_structured', [])
-                
-                # Format row headers with hierarchy indication
-                formatted_headers = []
-                for rh in row_headers_structured[:15]:  # Limit to first 15
-                    text = rh.get('text', '')
-                    if not text:
-                        continue
-                    indent = '  ' * rh.get('indent_level', 0)
-                    if rh.get('is_subsection'):
-                        formatted_headers.append(f"[{text}]")
-                    elif rh.get('is_total'):
-                        formatted_headers.append(f"**{text}**")
-                    else:
-                        formatted_headers.append(f"{indent}{text}")
-                
-                row_headers_str = '; '.join(formatted_headers)
-                if len(row_headers_structured) > 15:
-                    row_headers_str += f"... (+{len(row_headers_structured)-15} more)"
-                
-                # Get subsections
-                subsections = parsed.get('subsections', [])
-                subsections_str = '; '.join(subsections[:5]) if subsections else ''
-                if len(subsections) > 5:
-                    subsections_str += f"... (+{len(subsections)-5} more)"
-                
-                # Clean table title - remove section numbers and row ranges
-                import re
-                table_title = meta.get('original_table_title') or meta.get('table_title', 'N/A')
-                # Remove leading section numbers like "17." or "17 "
-                table_title = re.sub(r'^\d+[\.\:\s]+\s*', '', table_title)
-                # Remove Note/Table prefixes
-                table_title = re.sub(r'^Note\s+\d+\.?\s*[-–:]?\s*', '', table_title, flags=re.IGNORECASE)
-                table_title = re.sub(r'^Table\s+\d+\.?\s*[-–:]?\s*', '', table_title, flags=re.IGNORECASE)
-                # Remove row range patterns
-                table_title = re.sub(r'\s*\(Rows?\s*\d+[-–]\d+\)\s*$', '', table_title, flags=re.IGNORECASE)
-                
-                rows.append({
-                    'Page No': meta.get('page_no', 'N/A'),
-                    'Table Title': table_title.strip(),
-                    'Row Headers': row_headers_str,
-                    'Subsections': subsections_str,
-                    'Source': meta.get('source_doc', 'N/A'),
-                    'Quality Score': meta.get('quality_score', result.quality_score),
-                    'Backend': result.backend.value if result.backend else 'N/A'
-                })
-            
-            # Save CSV
-            if output_format in ('csv', 'both'):
-                csv_path = f"{base_path}.csv"
-                with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-                    writer = csv.DictWriter(f, fieldnames=rows[0].keys())
-                    writer.writeheader()
-                    writer.writerows(rows)
-                logger.info(f"Saved extraction report to {csv_path}")
-            
-            # Save Excel
-            if output_format in ('excel', 'both'):
-                try:
-                    import pandas as pd
-                    xlsx_path = f"{base_path}.xlsx"
-                    df = pd.DataFrame(rows)
-                    df.to_excel(xlsx_path, index=False, sheet_name='Extraction Report')
-                    logger.info(f"Saved extraction report to {xlsx_path}")
-                except ImportError:
-                    logger.warning("pandas not available, skipping Excel export")
-            
-            # Save Excel with Index sheet (multi-sheet workbook)
+            # Get output settings from config
             try:
-                from src.infrastructure.extraction.formatters.excel_exporter import get_excel_exporter
+                output_dir = str(Path(settings.EXTRACTION_REPORT_DIR))
+            except (AttributeError, KeyError):
+                output_dir = None
+            
+            exporter = get_report_exporter(output_dir=output_dir)
+            report_path = exporter.save_report(result)
+            
+            if report_path:
+                logger.info(f"Saved extraction report to {report_path}")
+            
+            # Also export Excel with Index sheet (multi-sheet workbook)
+            try:
+                from src.infrastructure.extraction.exporters.excel_exporter import get_excel_exporter
                 excel_exporter = get_excel_exporter()
                 excel_path = excel_exporter.export_pdf_tables(
                     tables=result.tables,

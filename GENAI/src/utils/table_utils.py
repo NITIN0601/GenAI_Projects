@@ -107,10 +107,69 @@ def parse_markdown_table(
         header = parsed_rows[0]
         data = parsed_rows[1:]
         
+        # === FIX SPLIT COLUMNS ===
+        # Detect if Docling split text across multiple columns
+        # Merge text-only columns back into column 1 (row labels)
+        def is_date_header(header_val: str) -> bool:
+            """Check if a header looks like a date column header (e.g., 'At March 31, 2025')."""
+            val_str = str(header_val).strip().lower()
+            if not val_str:
+                return False
+            # Check for date patterns in header
+            if ('at ' in val_str or 
+                'as of' in val_str or
+                any(month in val_str for month in 
+                    ['january', 'february', 'march', 'april', 'may', 'june', 
+                     'july', 'august', 'september', 'october', 'november', 'december',
+                     'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'])):
+                return True
+            # Check for year patterns (2020-2030)
+            import re
+            if re.search(r'\b20[0-3]\d\b', val_str):
+                return True
+            return False
+        
+        def merge_split_columns(header: List[str], data: List[List[str]]) -> tuple:
+            """Merge text-only columns at the start back into column 1."""
+            if len(header) <= 2:
+                return header, data  # Can't merge if only 1-2 columns
+            
+            # Find where date/data columns start (first column with date header)
+            data_start_col = len(header)  # Default: no data columns found
+            for col_idx in range(1, len(header)):
+                if is_date_header(header[col_idx]):
+                    data_start_col = col_idx
+                    break
+            
+            # If no date column found, check last column - it might be the data
+            if data_start_col >= len(header):
+                # Fallback: keep only last 2 columns as data if header has 4+ columns
+                if len(header) >= 4:
+                    data_start_col = len(header) - 2
+                else:
+                    return header, data  # Can't determine, don't merge
+            
+            # If data starts at column 1, no merging needed
+            if data_start_col <= 1:
+                return header, data
+            
+            # Merge columns 0 to data_start_col-1 into column 0
+            new_header = [' '.join(str(h) for h in header[:data_start_col]).strip()] + list(header[data_start_col:])
+            new_data = []
+            for row in data:
+                merged_cell = ' '.join(str(c) for c in row[:data_start_col]).strip()
+                new_row = [merged_cell] + list(row[data_start_col:])
+                new_data.append(new_row)
+            
+            return new_header, new_data
+        
+        # Apply merge logic
+        header, data = merge_split_columns(header, data)
+        
         # Pad rows to match header length
         max_cols = max(len(header), max(len(r) for r in data) if data else 0)
-        header = header + [''] * (max_cols - len(header))
-        data = [r + [''] * (max_cols - len(r)) for r in data]
+        header = list(header) + [''] * (max_cols - len(header))
+        data = [list(r) + [''] * (max_cols - len(r)) for r in data]
         
         return pd.DataFrame(data, columns=header)
         

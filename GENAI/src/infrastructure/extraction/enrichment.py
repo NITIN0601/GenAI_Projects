@@ -11,6 +11,12 @@ Handles detection of:
 import re
 from typing import Dict, Any, Optional, List, Tuple
 from src.utils import get_logger
+from src.utils.financial_patterns import (
+    UNIT_PATTERNS_REGEX,
+    STATEMENT_KEYWORDS,
+    detect_units,
+    detect_currency,
+)
 
 logger = get_logger(__name__)
 
@@ -18,19 +24,9 @@ class MetadataEnricher:
     """Enriches table metadata with financial context."""
     
     def __init__(self):
-        self.statement_keywords = {
-            'balance_sheet': ['balance sheet', 'financial position', 'assets', 'liabilities'],
-            'income_statement': ['income statement', 'operations', 'earnings', 'profit', 'loss'],
-            'cash_flow': ['cash flow', 'cash flows'],
-            'equity': ['equity', 'stockholders', 'shareholders'],
-            'footnotes': ['note', 'footnote']
-        }
-        
-        self.unit_patterns = {
-            'millions': [r'in millions', r'\(in millions\)', r'\$ millions'],
-            'thousands': [r'in thousands', r'\(in thousands\)', r'\$ thousands'],
-            'billions': [r'in billions', r'\(in billions\)', r'\$ billions']
-        }
+        # Use shared patterns from financial_patterns module
+        self.statement_keywords = STATEMENT_KEYWORDS
+        self.unit_patterns = UNIT_PATTERNS_REGEX
 
     def enrich_table_metadata(self, content: str, table_title: str, existing_metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -72,7 +68,8 @@ class MetadataEnricher:
         content_lower = content.lower()
         for unit, patterns in self.unit_patterns.items():
             for pattern in patterns:
-                if re.search(pattern, content_lower):
+                # Patterns are compiled re.Pattern objects
+                if pattern.search(content_lower):
                     return unit
         return None
 

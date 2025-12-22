@@ -129,6 +129,73 @@ class DateUtils:
         """
         year, month, day = cls.parse_date_from_header(header)
         return (-year, -month, -day)
+    
+    @classmethod
+    def get_period_date(cls, year: Optional[int], quarter: Optional[str]) -> str:
+        """
+        Get standard period end date (YYYY-MM-DD) from year and quarter.
+        
+        Centralizes logic previously in TableConsolidator._get_period_date.
+        
+        Args:
+            year: Year (e.g., 2025)
+            quarter: Quarter string (e.g., 'Q1', 'Q4', '10-K')
+            
+        Returns:
+            Date string in YYYY-MM-DD format
+            
+        Examples:
+            (2025, 'Q1') -> '2025-03-31'
+            (2024, 'Q4') -> '2024-12-31'
+            (2024, '10-K') -> '2024-12-31'
+            (2025, None) -> '2025-12-31'
+        """
+        if not year:
+            return "Unknown"
+        
+        if not quarter:
+            return f"{year}-12-31"
+        
+        quarter_upper = quarter.upper()
+        
+        if "Q1" in quarter_upper:
+            return f"{year}-03-31"
+        elif "Q2" in quarter_upper:
+            return f"{year}-06-30"
+        elif "Q3" in quarter_upper:
+            return f"{year}-09-30"
+        elif "Q4" in quarter_upper or "10-K" in quarter_upper or "10K" in quarter_upper:
+            return f"{year}-12-31"
+        else:
+            return f"{year}-12-31"
+    
+    @classmethod
+    def quarter_to_num(cls, quarter: Optional[str]) -> int:
+        """
+        Convert quarter to number for chronological sorting.
+        
+        Centralizes logic previously in TableConsolidator._quarter_to_num.
+        
+        Args:
+            quarter: Quarter string (e.g., 'Q1', 'Q4', '10-K')
+            
+        Returns:
+            Integer 1-5 for sorting (Q1=1, Q2=2, Q3=3, Q4/10-K=4, Unknown=5)
+        """
+        if not quarter:
+            return 5
+        
+        quarter_upper = quarter.upper()
+        
+        if 'Q1' in quarter_upper:
+            return 1
+        elif 'Q2' in quarter_upper:
+            return 2
+        elif 'Q3' in quarter_upper:
+            return 3
+        elif 'Q4' in quarter_upper or '10K' in quarter_upper or '10-K' in quarter_upper:
+            return 4
+        return 5
 
 
 # Convenience functions for backward compatibility

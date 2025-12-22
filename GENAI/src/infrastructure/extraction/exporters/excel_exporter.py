@@ -21,7 +21,7 @@ Usage:
     # -> data/extracted/all_tables_combined.xlsx
     
     # For consolidated multi-file merge, use:
-    from src.infrastructure.extraction.formatters.consolidated_exporter import get_consolidated_exporter
+    from src.infrastructure.extraction.consolidation.consolidated_exporter import get_consolidated_exporter
 """
 
 __version__ = "2.1.0"
@@ -37,7 +37,7 @@ import re
 from src.utils import get_logger
 from src.core import get_paths
 from src.infrastructure.extraction.formatters.header_detector import HeaderDetector
-from src.infrastructure.extraction.formatters.excel_utils import ExcelUtils
+from src.utils.excel_utils import ExcelUtils
 
 logger = get_logger(__name__)
 
@@ -397,196 +397,16 @@ class ExcelTableExporter:
         # Row 1: Add "Back to Index" link placeholder
         all_rows.append(['← Back to Index'])
         
-        # Collect headers and metadata from ALL chunks
-        if tables:
-            first_table = tables[0]
-            metadata = first_table.get('metadata', {})
-            
-            # Get the cleaned title (without row ranges) for display
-            display_title = metadata.get('_cleaned_title', metadata.get('table_title', 'Untitled'))
-            
-            # === COLLECT ROW HEADERS FROM ALL CHUNKS ===
-            all_row_headers = []
-            all_row_sub_headers = []
-            has_row_hierarchy = False
-            
-            for table in tables:
-                table_metadata = table.get('metadata', {})
-                table_df = self._parse_table_content(table.get('content', ''))
-                
-                # Try to get row headers from metadata first
-                row_headers_meta = table_metadata.get('row_headers', '')
-                if row_headers_meta:
-                    if ',' in row_headers_meta:
-                        headers = [h.strip() for h in row_headers_meta.split(',')]
-                    else:
-                        headers = [row_headers_meta]
-                    all_row_headers.extend(headers)
-                elif not table_df.empty and len(table_df.columns) > 0:
-                    # Extract from first column of data
-                    for idx, val in enumerate(table_df.iloc[:, 0]):
-                        if pd.notna(val) and str(val).strip():
-                            row_label = str(val).strip()
-                            
-                            # Check if this row has any data in subsequent columns
-                            has_data = False
-                            if len(table_df.columns) > 1:
-                                row_data = table_df.iloc[idx, 1:]
-                                for cell_val in row_data:
-                                    if pd.notna(cell_val) and str(cell_val).strip() and str(cell_val).strip().lower() not in ['nan', '', '-', '—']:
-                                        has_data = True
-                                        break
-                            
-                            if not has_data and len(table_df.columns) > 1:
-                                # This is a section header (no data in row) → Level 1
-                                all_row_headers.append(row_label)
-                                has_row_hierarchy = True
-                            else:
-                                # This is a line item with data → Level 2
-                                all_row_sub_headers.append(row_label)
-            
-            # Filter out invalid values (keep duplicates for Level 1/2)
-            filtered_row_headers = [h for h in all_row_headers if h and h.lower() not in ['nan', 'none', '']]
-            filtered_row_sub_headers = [h for h in all_row_sub_headers if h and h.lower() not in ['nan', 'none', '']]
-            
-            # Row 2: Row Header (Level 1) - section headers without data (keeps duplicates)
-            row_headers_str = ', '.join(filtered_row_headers) if filtered_row_headers else ''
-            all_rows.append([f"Row Header (Level 1): {row_headers_str}"])
-            
-            # Row 3: Row Header (Level 2) - line items with data (keeps duplicates)
-            if filtered_row_sub_headers:
-                row_sub_headers_str = ', '.join(filtered_row_sub_headers)
-                all_rows.append([f"Row Header (Level 2): {row_sub_headers_str}"])
-            else:
-                all_rows.append([f"Row Header (Level 2):"])
-            
-            # Row 4: Product/Entity (unique row headers for this table)
-            # Exclude unit indicators like "$ in million", "in millions", etc.
-            UNIT_PATTERNS = [
-                '$ in million', '$ in billion', '$ in thousand',
-                'in millions', 'in billions', 'in thousands',
-                'dollars in millions', 'dollars in billions',
-                '(in millions)', '(in billions)', '(in thousands)',
-                'amounts in millions', 'amounts in billions',
-            ]
-            
-            def is_unit_indicator(text: str) -> bool:
-                """Check if text is a unit indicator."""
-                text_lower = text.lower().strip()
-                for pattern in UNIT_PATTERNS:
-                    if pattern in text_lower:
-                        return True
-                # Also exclude if it starts with $ and contains 'in'
-                if text_lower.startswith('$') and ' in ' in text_lower:
-                    return True
-                return False
-            
-            all_unique_entities = []
-            seen_entities = set()
-            # Only Level 2 (line items with data) are actual products/entities
-            # Level 1 section headers (like "Net revenues:") are just categories
-            # Product/Entity is UNIQUE (deduplicated)
-            for entity in filtered_row_sub_headers:
-                if entity and entity not in seen_entities and not is_unit_indicator(entity):
-                    seen_entities.add(entity)
-                    all_unique_entities.append(entity)
-            
-            entities_str = ', '.join(all_unique_entities) if all_unique_entities else ''
-            all_rows.append([f"Product/Entity: {entities_str}"])
-            
-            # === COLLECT COLUMN HEADERS FROM ALL CHUNKS ===
-            # Parse actual table content to detect multi-level headers
-            all_main_headers = []
-            all_main_headers_with_cols = []  # With column positions
-            all_sub_headers = []
-            detected_years = set()
-            
-            for table in tables:
-                content = table.get('content', '')
-                
-                # Parse the markdown table to detect header levels
-                headers_info = self._detect_column_header_levels(content)
-                
-                if headers_info['has_multi_level']:
-                    all_main_headers.extend(headers_info['level_1'])
-                    # Use level_1_with_cols if available (shows column positions)
-                    if headers_info.get('level_1_with_cols'):
-                        all_main_headers_with_cols.extend(headers_info['level_1_with_cols'])
-                    all_sub_headers.extend(headers_info['level_2'])
-                else:
-                    # Single level - put in level 1
-                    all_main_headers.extend(headers_info['level_1'])
-                
-                # Extract years from sub-headers (e.g., "2024", "March 31, 2023")
-                for header in headers_info.get('level_2', []) + headers_info.get('level_1', []):
-                    year_match = re.search(r'(20\d{2})', str(header))
-                    if year_match:
-                        detected_years.add(year_match.group(1))
-            
-            # Deduplicate headers while preserving order
-            unique_main = self._dedupe_preserve_order(all_main_headers)
-            unique_main_with_cols = self._dedupe_preserve_order(all_main_headers_with_cols)
-            unique_sub = self._dedupe_preserve_order(all_sub_headers)
-            
-            # Row 5: Column Header (Level 1) - use version with column positions if available
-            if unique_main_with_cols:
-                main_headers_str = ', '.join(unique_main_with_cols)
-                all_rows.append([f"Column Header (Level 1): {main_headers_str}"])
-            elif unique_main:
-                main_headers_str = ', '.join(unique_main)
-                all_rows.append([f"Column Header (Level 1): {main_headers_str}"])
-            else:
-                all_rows.append([f"Column Header (Level 1):"])
-            
-            # Row 6: Column Header (Level 2) - sub-headers with dates/years
-            if unique_sub:
-                sub_headers_str = ', '.join(unique_sub)
-                all_rows.append([f"Column Header (Level 2): {sub_headers_str}"])
-            else:
-                all_rows.append([f"Column Header (Level 2):"])
-            
-            # NEW: Row 7: Year(s) detected from column headers
-            if detected_years:
-                years_str = ', '.join(sorted(detected_years, reverse=True))
-                all_rows.append([f"Year(s): {years_str}"])
-            
-            # Row 7: Blank row
-            all_rows.append([])
-            
-            # Row 8: Table Title
-            all_rows.append([f"Table Title: {display_title}"])
-            
-            # Row 9: Blank row
-            all_rows.append([])
-        
-        # Row 10+: Table data (stacked if multiple chunks)
+        # Process each table with its own full metadata block
         for i, table in enumerate(tables):
-            metadata = table.get('metadata', {})
-            
-            # Add source header for each table occurrence
-            source_info = f"Source: {metadata.get('source_doc', 'Unknown')}, Page {metadata.get('page_no', 'N/A')}"
-            if metadata.get('year'):
-                source_info += f", {metadata.get('year')}"
-            if metadata.get('quarter'):
-                source_info += f" {metadata.get('quarter')}"
-            
-            all_rows.append([source_info])
-            
-            # Parse table content
-            table_df = self._parse_table_content(table.get('content', ''))
-            
-            if not table_df.empty:
-                # Add header row
-                all_rows.append(list(table_df.columns))
-                
-                # Add data rows
-                for _, row in table_df.iterrows():
-                    all_rows.append(list(row))
-            
-            # Add blank rows between tables (except after last)
-            if i < len(tables) - 1:
+            # Add 2 blank lines before each table (except first)
+            if i > 0:
                 all_rows.append([])
                 all_rows.append([])
+            
+            # Generate metadata + data rows for this table
+            table_rows = self._generate_single_table_rows(table)
+            all_rows.extend(table_rows)
         
         # Create DataFrame from all rows
         df = pd.DataFrame(all_rows)
@@ -615,6 +435,208 @@ class ExcelTableExporter:
         """Parse markdown/text table content to DataFrame."""
         from src.utils.table_utils import parse_markdown_table
         return parse_markdown_table(content, handle_colon_separator=False)
+    
+    def _generate_single_table_rows(self, table: Dict[str, Any]) -> List[List[Any]]:
+        """
+        Generate all rows (metadata + data) for a single table.
+        
+        This creates a complete block for one table:
+        - Row Header (Level 1): ...
+        - Row Header (Level 2): ...
+        - Product/Entity: ...
+        - Column Header (Level 1): ...
+        - Column Header (Level 2): ...
+        - Year(s): ...
+        - [blank]
+        - Table Title: ...
+        - Source: ...
+        - [Column headers row]
+        - [Data rows...]
+        
+        Args:
+            table: Single table dict with 'content' and 'metadata'
+            
+        Returns:
+            List of rows to add to the sheet
+        """
+        rows = []
+        metadata = table.get('metadata', {})
+        display_title = metadata.get('_cleaned_title', metadata.get('table_title', 'Untitled'))
+        
+        # Parse table content
+        table_df = self._parse_table_content(table.get('content', ''))
+        
+        # === COLLECT ROW HEADERS ===
+        all_row_headers = []      # L1 - section headers
+        all_row_sub_headers = []  # L2 - data row labels
+        
+        if not table_df.empty and len(table_df.columns) > 0:
+            for idx, val in enumerate(table_df.iloc[:, 0]):
+                if pd.notna(val) and str(val).strip():
+                    row_label = str(val).strip()
+                    
+                    # Check if this row has numeric data in subsequent columns
+                    has_numeric_data = False
+                    all_same_text = True
+                    
+                    if len(table_df.columns) > 1:
+                        row_data = table_df.iloc[idx, 1:]
+                        for cell_val in row_data:
+                            if pd.notna(cell_val) and str(cell_val).strip():
+                                cell_str = str(cell_val).strip().lower()
+                                if cell_str in ['nan', '', '-', '—']:
+                                    continue
+                                
+                                if cell_str != row_label.lower():
+                                    all_same_text = False
+                                
+                                cell_clean = str(cell_val).strip()
+                                if (cell_clean.startswith('$') or 
+                                    cell_clean.startswith('(') or
+                                    (cell_clean and cell_clean[0].isdigit()) or
+                                    any(c.isdigit() for c in cell_clean)):
+                                    has_numeric_data = True
+                                    break
+                    
+                    is_section_header = (not has_numeric_data) or all_same_text
+                    
+                    if is_section_header and len(table_df.columns) > 1:
+                        all_row_headers.append(row_label)
+                    else:
+                        all_row_sub_headers.append(row_label)
+        
+        # Clean footnotes from headers
+        filtered_row_headers = []
+        for h in all_row_headers:
+            if h and h.lower() not in ['nan', 'none', '']:
+                cleaned = ExcelUtils.clean_footnote_references(h)
+                if cleaned:
+                    filtered_row_headers.append(cleaned)
+        
+        filtered_row_sub_headers = []
+        for h in all_row_sub_headers:
+            if h and h.lower() not in ['nan', 'none', '']:
+                cleaned = ExcelUtils.clean_footnote_references(h)
+                if cleaned:
+                    filtered_row_sub_headers.append(cleaned)
+        
+        # Build L2 excluding L1 items
+        seen_l1 = set(filtered_row_headers)
+        l2_row_headers = [h for h in filtered_row_sub_headers if h not in seen_l1]
+        
+        # Row Header (Level 1)
+        row_headers_str = ', '.join(filtered_row_headers) if filtered_row_headers else ''
+        rows.append([f"Row Header (Level 1): {row_headers_str}"])
+        
+        # Row Header (Level 2)
+        row_sub_headers_str = ', '.join(l2_row_headers) if l2_row_headers else ''
+        rows.append([f"Row Header (Level 2): {row_sub_headers_str}"])
+        
+        # Use shared utility for unit detection
+        from src.utils.financial_patterns import is_unit_indicator
+        
+        unique_entities = []
+        seen_entities = set()
+        for h in l2_row_headers:
+            if h and h not in seen_entities and not is_unit_indicator(h):
+                unique_entities.append(h)
+                seen_entities.add(h)
+        
+        entities_str = ', '.join(unique_entities) if unique_entities else ''
+        rows.append([f"Product/Entity: {entities_str}"])
+        
+        # === COLUMN HEADERS ===
+        detected_years = set()
+        headers_info = self._detect_column_header_levels(table.get('content', ''))
+        
+        unique_main = self._dedupe_preserve_order(headers_info.get('level_1', []))
+        unique_sub = self._dedupe_preserve_order(headers_info.get('level_2', []))
+        
+        # Extract years from headers
+        for header in headers_info.get('level_2', []) + headers_info.get('level_1', []):
+            year_match = re.search(r'(20\d{2})', str(header))
+            if year_match:
+                detected_years.add(year_match.group(1))
+        
+        # Column Header (Level 1)
+        main_headers_str = ', '.join(unique_main) if unique_main else ''
+        rows.append([f"Column Header (Level 1): {main_headers_str}"])
+        
+        # Column Header (Level 2)
+        sub_headers_str = ', '.join(unique_sub) if unique_sub else ''
+        rows.append([f"Column Header (Level 2): {sub_headers_str}"])
+        
+        # Year(s)
+        if detected_years:
+            years_str = ', '.join(sorted(detected_years, reverse=True))
+            rows.append([f"Year(s): {years_str}"])
+        else:
+            rows.append([f"Year(s):"])
+        
+        # Blank row
+        rows.append([])
+        
+        # Table Title
+        rows.append([f"Table Title: {display_title}"])
+        
+        # Source
+        source_info = f"Source: {metadata.get('source_doc', 'Unknown')}, Page {metadata.get('page_no', 'N/A')}"
+        if metadata.get('year'):
+            source_info += f", {metadata.get('year')}"
+        if metadata.get('quarter'):
+            source_info += f" {metadata.get('quarter')}"
+        rows.append([source_info])
+        
+        # === TABLE DATA ===
+        if not table_df.empty:
+            # Column headers
+            def clean_header(c):
+                if pd.isna(c):
+                    return ''
+                if isinstance(c, float) and c == int(c):
+                    return str(int(c))
+                return str(c)
+            rows.append([clean_header(c) for c in table_df.columns])
+            
+            # Data rows with L1 cleaning
+            for _, row in table_df.iterrows():
+                cleaned_row = []
+                is_l1_row = False
+                
+                # Check if L1 row
+                if len(row) > 1:
+                    first_val = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+                    if first_val:
+                        has_numeric = False
+                        all_same = True
+                        for v in row.iloc[1:]:
+                            if pd.notna(v):
+                                v_str = str(v).strip()
+                                if v_str and v_str.lower() not in ['nan', '', '-', '—']:
+                                    if v_str.lower() != first_val.lower():
+                                        all_same = False
+                                    if (v_str.startswith('$') or v_str.startswith('(') or 
+                                        (v_str and v_str[0].isdigit()) or any(c.isdigit() for c in v_str)):
+                                        has_numeric = True
+                        is_l1_row = all_same or not has_numeric
+                
+                for i, v in enumerate(row):
+                    if pd.isna(v):
+                        cleaned_row.append(v)
+                    elif isinstance(v, float) and v == int(v) and 2000 <= v <= 2099:
+                        cleaned_row.append(str(int(v)))
+                    elif is_l1_row and i > 0:
+                        first_val = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+                        v_str = str(v).strip()
+                        if v_str.lower() == first_val.lower():
+                            cleaned_row.append('')
+                        else:
+                            cleaned_row.append(v)
+                    else:
+                        cleaned_row.append(v)
+                rows.append(cleaned_row)
+        
+        return rows
     
     def _add_hyperlinks(
         self,
@@ -778,7 +800,7 @@ class ExcelTableExporter:
         
         NOTE: This method delegates to ConsolidatedExcelExporter for cleaner separation.
         For direct access to consolidation features, use:
-            from src.infrastructure.extraction.formatters.consolidated_exporter import get_consolidated_exporter
+            from src.infrastructure.extraction.consolidation.consolidated_exporter import get_consolidated_exporter
         
         Args:
             output_filename: Output filename for consolidated report
@@ -787,7 +809,7 @@ class ExcelTableExporter:
         Returns:
             Dict with path, tables_merged, sources_merged, sheet_names
         """
-        from src.infrastructure.extraction.formatters.consolidated_exporter import get_consolidated_exporter
+        from src.infrastructure.extraction.consolidation.consolidated_exporter import get_consolidated_exporter
         
         consolidated_exporter = get_consolidated_exporter()
         return consolidated_exporter.merge_processed_files(

@@ -57,7 +57,15 @@ from src.infrastructure.extraction.consolidation import (
     MultiYearTableConsolidator,
     QuarterlyTableConsolidator,
     get_multi_year_consolidator,
-    get_quarterly_consolidator
+    get_quarterly_consolidator,
+    ConsolidatedExcelExporter,
+    get_consolidated_exporter,
+)
+from src.infrastructure.extraction.exporters import (
+    ExcelTableExporter,
+    get_excel_exporter,
+    ReportExporter,
+    get_report_exporter,
 )
 
 __version__ = "2.0.0"
@@ -92,6 +100,14 @@ __all__ = [
     'QuarterlyTableConsolidator',
     'get_multi_year_consolidator',
     'get_quarterly_consolidator',
+    'ConsolidatedExcelExporter',
+    'get_consolidated_exporter',
+    
+    # Exporters
+    'ExcelTableExporter',
+    'get_excel_exporter',
+    'ReportExporter',
+    'get_report_exporter',
     
     # Base classes
     'ExtractionBackend',

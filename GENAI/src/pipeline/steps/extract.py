@@ -116,7 +116,7 @@ class ExtractStep(StepInterface):
             
             # --- ADDED: Auto-merge all processed files into a consolidated report ---
             try:
-                from src.infrastructure.extraction.formatters.excel_exporter import get_excel_exporter
+                from src.infrastructure.extraction.exporters.excel_exporter import get_excel_exporter
                 exporter = get_excel_exporter()
                 logger.info("Merging all extracted tables into consolidated_tables.xlsx...")
                 merge_result = exporter.merge_processed_files()

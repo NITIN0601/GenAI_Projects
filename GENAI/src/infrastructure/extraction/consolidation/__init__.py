@@ -40,6 +40,13 @@ from .multi_year import (
     get_consolidation_engine,
 )
 
+# Consolidated Excel export (multi-file merge)
+from .consolidated_exporter import (
+    ConsolidatedExcelExporter,
+    get_consolidated_exporter,
+    reset_consolidated_exporter,
+)
+
 
 # Backward compatibility aliases
 MultiYearTableConsolidator = TableConsolidator
@@ -70,6 +77,11 @@ __all__ = [
     # Multi-PDF engine
     'TableConsolidationEngine',
     'get_consolidation_engine',
+    
+    # Consolidated Excel export
+    'ConsolidatedExcelExporter',
+    'get_consolidated_exporter',
+    'reset_consolidated_exporter',
     
     # Backward compatibility
     'MultiYearTableConsolidator',
