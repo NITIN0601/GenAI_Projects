@@ -566,6 +566,133 @@ class DoclingHelper:
         
         return tables
     
+    @staticmethod
+    def find_preceding_spanning_header(doc, table_item, page_no: int) -> str:
+        """
+        Find preceding TEXT items that could be a missing spanning header for this table.
+        
+        This handles cases where Docling extracts the spanning header (e.g., "Three Months 
+        Ended March 31, 2024") as a separate TEXT item instead of including it in the table.
+        
+        Dynamic detection using universal date/period patterns (no hardcoding):
+        - Month names (January, February, etc.)
+        - Year patterns (2020-2030)
+        - Period indicators (ended, ending, as of, at)
+        
+        Args:
+            doc: Docling document
+            table_item: The table item to find header for
+            page_no: Page number of the table
+            
+        Returns:
+            Spanning header text if found, empty string otherwise
+        """
+        import re
+        
+        # Universal date/period patterns (not domain-specific)
+        MONTH_NAMES = [
+            'january', 'february', 'march', 'april', 'may', 'june',
+            'july', 'august', 'september', 'october', 'november', 'december',
+            'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
+        ]
+        PERIOD_INDICATORS = ['ended', 'ending', 'as of', 'at ', 'for the', 'period']
+        YEAR_PATTERN = re.compile(r'\b20[0-3]\d\b')  # Years 2000-2039
+        
+        def is_date_period_header(text: str) -> bool:
+            """Check if text looks like a date/period header dynamically."""
+            text_lower = text.lower().strip()
+            
+            # Too short or too long for a header
+            if len(text_lower) < 10 or len(text_lower) > 100:
+                return False
+            
+            # Must contain a year
+            if not YEAR_PATTERN.search(text):
+                return False
+            
+            # Must contain a month name OR period indicator
+            has_month = any(month in text_lower for month in MONTH_NAMES)
+            has_period = any(ind in text_lower for ind in PERIOD_INDICATORS)
+            
+            return has_month or has_period
+        
+        try:
+            items_list = list(doc.iterate_items())
+            preceding_headers = []
+            found_table = False
+            
+            for item_data in items_list:
+                item = item_data[0] if isinstance(item_data, tuple) else item_data
+                
+                # Stop when we reach the target table
+                if item is table_item:
+                    found_table = True
+                    break
+                
+                # Get item's page
+                item_page = DoclingHelper.get_item_page(item)
+                
+                # Only consider items on the same page or immediately before
+                if item_page < page_no - 1 or item_page > page_no:
+                    continue
+                
+                # Check for TEXT label
+                if not hasattr(item, 'label'):
+                    continue
+                
+                label_name = item.label.name if hasattr(item.label, 'name') else str(item.label)
+                if label_name not in ['TEXT', 'CAPTION', 'TITLE']:
+                    continue
+                
+                # Get text content
+                text = getattr(item, 'text', '')
+                if not text:
+                    continue
+                
+                text = str(text).strip()
+                
+                # Check if this looks like a date/period header
+                if is_date_period_header(text):
+                    preceding_headers.append((item_page, text))
+            
+            # Return the closest matching header on the same page (or just before)
+            if preceding_headers:
+                # Prefer headers on the same page
+                same_page = [h for h in preceding_headers if h[0] == page_no]
+                if same_page:
+                    return same_page[-1][1]  # Last one before the table
+                # Fall back to previous page
+                return preceding_headers[-1][1]
+                
+        except Exception:
+            pass
+        
+        return ""
+    
+    @staticmethod
+    def prepend_spanning_header(table_markdown: str, spanning_header: str, num_columns: int) -> str:
+        """
+        Prepend a spanning header row to table markdown.
+        
+        Args:
+            table_markdown: Original table markdown
+            spanning_header: The header text to prepend
+            num_columns: Number of columns in the table
+            
+        Returns:
+            Modified markdown with spanning header prepended
+        """
+        if not spanning_header or not table_markdown or num_columns < 1:
+            return table_markdown
+        
+        # Create a header row where the spanning header repeats across all data columns
+        # Column 0 is typically empty (row labels column)
+        header_cells = [''] + [spanning_header] * (num_columns - 1)
+        header_row = '| ' + ' | '.join(header_cells) + ' |'
+        
+        # Prepend to existing markdown
+        return header_row + '\n' + table_markdown
+    
     # Class-level cache for TOC sections (to avoid re-parsing for every table)
     _toc_cache = {}
     
@@ -948,6 +1075,27 @@ class FootnoteExtractor:
                 footnotes.append(digit)
                 cleaned = cleaned.replace(sup, '')
         
+        # Handle attached comma-separated footnotes like "ROTCE2,3" or "ROTCE2, 3"
+        # Pattern: letter followed by digit(s) with optional commas, at end of string
+        attached_comma_match = re.search(r'([a-zA-Z])(\d+(?:,\s*\d+)*),?\s*$', cleaned)
+        if attached_comma_match:
+            # Get the footnote numbers
+            fn_part = attached_comma_match.group(2)
+            fn_nums = re.findall(r'\d+', fn_part)
+            if fn_nums:
+                footnotes.extend(fn_nums)
+                # Remove the footnotes but keep the last letter
+                cleaned = cleaned[:attached_comma_match.start()] + attached_comma_match.group(1)
+        
+        # Handle trailing comma-separated footnotes with space: "Text 2,3" or "Text 2, 3"
+        trailing_comma_match = re.search(r'\s+(\d+(?:,\s*\d+)+),?\s*$', cleaned)
+        if trailing_comma_match:
+            fn_part = trailing_comma_match.group(1)
+            fn_nums = re.findall(r'\d+', fn_part)
+            if fn_nums:
+                footnotes.extend(fn_nums)
+                cleaned = cleaned[:trailing_comma_match.start()].strip()
+        
         # Extract trailing single/multiple numbers like "Text 2" or "Text 2 3"
         trailing_match = re.search(r'\s+(\d(?:\s+\d)*)\s*$', cleaned)
         if trailing_match:
@@ -1091,12 +1239,64 @@ class CurrencyValueCleaner:
             "$647 $" -> ["$647"]  (trailing $ is noise)
             "$ 10,207 $ 2,762" -> ["$10,207", "$2,762"]
             "$ in millions" -> ["$ in millions"]  (preserve descriptive text)
+            "Financing $2,022 $136 $ (891)" -> ["Financing", "$2,022", "$136", "$(891)"]
+            "At March 31, 2025" -> ["At March 31, 2025"]  (preserve date headers)
         """
         if not cell:
             return [cell]
         
-        # IMPORTANT: If cell contains letters (a-zA-Z), it's descriptive text, not currency
-        # Preserve it as-is to avoid splitting "$ in millions" incorrectly
+        # IMPORTANT: Preserve date headers - don't split them
+        # Pattern: text containing month name + day + year
+        cell_lower = cell.lower()
+        date_months = ['january', 'february', 'march', 'april', 'may', 'june', 
+                       'july', 'august', 'september', 'october', 'november', 'december']
+        is_date_header = (
+            any(month in cell_lower for month in date_months) and
+            re.search(r'\b20[0-3]\d\b', cell)  # Contains year like 2024, 2025
+        )
+        if is_date_header:
+            return [cell]
+        
+        # Also preserve "At" or "As of" date prefixes even without full date
+        if cell_lower.startswith('at ') or cell_lower.startswith('as of '):
+            return [cell]
+        
+        # Check for pattern: text label followed by multiple currency values
+        # e.g., "Financing $2,022 $136 $ (891)" or "Total Equity $3,736 $954"
+        # Pattern: word(s) followed by $ and numbers
+        label_then_values = re.match(
+            r'^([A-Za-z][A-Za-z\s]*?)\s+(\$?\s*[\d,\(\)\-]+(?:\s+\$?\s*[\d,\(\)\-]+)+)\s*$',
+            cell
+        )
+        
+        if label_then_values:
+            label = label_then_values.group(1).strip()
+            values_part = label_then_values.group(2)
+            
+            # Split the values part by $ or whitespace
+            # Handle values like "$2,022", "$136", "$(891)", "(98)"
+            values = re.findall(
+                r'\$?\s*[\d,]+(?:\.\d+)?|\$?\s*\([\d,]+(?:\.\d+)?\)',
+                values_part
+            )
+            
+            if len(values) >= 2:
+                # Clean up each value
+                cleaned_values = []
+                for val in values:
+                    val = val.strip()
+                    if val:
+                        # Normalize spacing
+                        val = re.sub(r'\$\s+', '$', val)
+                        val = re.sub(r'\s+', ' ', val)
+                        if val and val not in ['$', '']:
+                            cleaned_values.append(val)
+                
+                if cleaned_values:
+                    return [label] + cleaned_values
+        
+        # IMPORTANT: If cell contains letters (a-zA-Z) and no obvious split pattern,
+        # it's likely descriptive text, preserve it as-is
         if re.search(r'[a-zA-Z]', cell):
             return [cell]
         
@@ -1198,7 +1398,14 @@ class CurrencyValueCleaner:
             for cell in parts:
                 split_values = cls._split_multi_value_cell(cell.strip())
                 for val in split_values:
-                    cleaned_cells.append(cls._clean_single_value(val))
+                    cleaned_val = cls._clean_single_value(val)
+                    
+                    # Filter out standalone footnote cells
+                    # Pattern: "2," or "3," or "1, 2," (digits/commas/spaces, ending in comma)
+                    if re.match(r'^[\d\s,]+,$', cleaned_val):
+                        continue
+                    
+                    cleaned_cells.append(cleaned_val)
             
             # Rebuild row
             cleaned_line = '| ' + ' | '.join(cleaned_cells) + ' |'

@@ -168,11 +168,53 @@ class DoclingBackend(ExtractionBackend):
         """
         from src.utils.extraction_utils import FootnoteExtractor, CurrencyValueCleaner
         
+        # Get page number early (needed for spanning header detection)
+        if page_no is None:
+            page_no = DoclingHelper.get_item_page(table_item)
+        
         # Get table text with doc argument to avoid deprecation warning
         if hasattr(table_item, 'export_to_markdown'):
             raw_table_text = table_item.export_to_markdown(doc=doc)
         else:
             raw_table_text = str(table_item.text)
+        
+        # === POST-PROCESS: Detect and add missing spanning headers ===
+        # If the table's first row doesn't look like a spanning header (date/period),
+        # check if there's a preceding TEXT item that should be the spanning header.
+        def table_has_spanning_header(md_text: str) -> bool:
+            """Check if table already has a spanning date/period header row."""
+            import re
+            lines = md_text.strip().split('\n')
+            if not lines:
+                return True  # Empty - nothing to add
+            
+            first_row = lines[0]
+            # Check for date patterns in first row
+            has_year = bool(re.search(r'\b20[0-3]\d\b', first_row))
+            has_period = any(ind in first_row.lower() for ind in 
+                           ['ended', 'ending', 'months', 'as of', 'at '])
+            return has_year and has_period
+        
+        def count_columns(md_text: str) -> int:
+            """Count columns in markdown table."""
+            lines = md_text.strip().split('\n')
+            for line in lines:
+                if '|' in line and not all(c in '|-: ' for c in line):
+                    return line.count('|') - 1  # Pipes minus outer ones
+            return 0
+        
+        # Check if table needs a spanning header
+        if not table_has_spanning_header(raw_table_text):
+            # Try to find a preceding TEXT item that's the missing header
+            preceding_header = DoclingHelper.find_preceding_spanning_header(
+                doc, table_item, page_no
+            )
+            if preceding_header:
+                num_cols = count_columns(raw_table_text)
+                raw_table_text = DoclingHelper.prepend_spanning_header(
+                    raw_table_text, preceding_header, num_cols
+                )
+                logger.debug(f"Prepended spanning header: {preceding_header[:50]}...")
         
         # Also try to get HTML for better structure preservation
         html_content = None
@@ -188,10 +230,6 @@ class DoclingBackend(ExtractionBackend):
         
         # Clean footnotes from row labels
         table_text, footnotes_map = FootnoteExtractor.clean_table_content(table_text_cleaned)
-        
-        # Get page number if not provided
-        if page_no is None:
-            page_no = DoclingHelper.get_item_page(table_item)
         
         # Default table_index_on_page to global index if not provided
         if table_index_on_page is None:

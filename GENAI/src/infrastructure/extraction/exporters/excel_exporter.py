@@ -505,31 +505,31 @@ class ExcelTableExporter:
                     else:
                         all_row_sub_headers.append(row_label)
         
-        # Clean footnotes from headers
+        # Filter headers (keep original values without cleaning - cleaning happens at display time)
         filtered_row_headers = []
         for h in all_row_headers:
             if h and h.lower() not in ['nan', 'none', '']:
-                cleaned = ExcelUtils.clean_footnote_references(h)
-                if cleaned:
-                    filtered_row_headers.append(cleaned)
+                filtered_row_headers.append(h)
         
         filtered_row_sub_headers = []
         for h in all_row_sub_headers:
             if h and h.lower() not in ['nan', 'none', '']:
-                cleaned = ExcelUtils.clean_footnote_references(h)
-                if cleaned:
-                    filtered_row_sub_headers.append(cleaned)
+                filtered_row_sub_headers.append(h)
         
         # Build L2 excluding L1 items
         seen_l1 = set(filtered_row_headers)
         l2_row_headers = [h for h in filtered_row_sub_headers if h not in seen_l1]
         
-        # Row Header (Level 1)
-        row_headers_str = ', '.join(filtered_row_headers) if filtered_row_headers else ''
+        # Clean footnotes ONLY for display (preserves original values above for matching)
+        display_row_headers = [ExcelUtils.clean_footnote_references(h) for h in filtered_row_headers if h]
+        display_l2_row_headers = [ExcelUtils.clean_footnote_references(h) for h in l2_row_headers if h]
+        
+        # Row Header (Level 1) - use display-cleaned values
+        row_headers_str = ', '.join(display_row_headers) if display_row_headers else ''
         rows.append([f"Row Header (Level 1): {row_headers_str}"])
         
-        # Row Header (Level 2)
-        row_sub_headers_str = ', '.join(l2_row_headers) if l2_row_headers else ''
+        # Row Header (Level 2) - use display-cleaned values
+        row_sub_headers_str = ', '.join(display_l2_row_headers) if display_l2_row_headers else ''
         rows.append([f"Row Header (Level 2): {row_sub_headers_str}"])
         
         # Use shared utility for unit detection
@@ -537,7 +537,7 @@ class ExcelTableExporter:
         
         unique_entities = []
         seen_entities = set()
-        for h in l2_row_headers:
+        for h in display_l2_row_headers:
             if h and h not in seen_entities and not is_unit_indicator(h):
                 unique_entities.append(h)
                 seen_entities.add(h)
@@ -549,29 +549,56 @@ class ExcelTableExporter:
         detected_years = set()
         headers_info = self._detect_column_header_levels(table.get('content', ''))
         
-        unique_main = self._dedupe_preserve_order(headers_info.get('level_1', []))
-        unique_sub = self._dedupe_preserve_order(headers_info.get('level_2', []))
+        # Get all header levels
+        level_0 = self._dedupe_preserve_order(headers_info.get('level_0', []))
+        level_1 = self._dedupe_preserve_order(headers_info.get('level_1', []))
+        level_2 = self._dedupe_preserve_order(headers_info.get('level_2', []))
         
-        # Extract years from headers
-        for header in headers_info.get('level_2', []) + headers_info.get('level_1', []):
+        # Extract years from all header levels
+        for header in level_0 + level_1 + level_2:
             year_match = re.search(r'(20\d{2})', str(header))
             if year_match:
                 detected_years.add(year_match.group(1))
         
-        # Column Header (Level 1)
-        main_headers_str = ', '.join(unique_main) if unique_main else ''
-        rows.append([f"Column Header (Level 1): {main_headers_str}"])
+        # Column Header (Level 0) - only show if present (top spanning header)
+        if level_0:
+            level_0_str = ', '.join(level_0)
+            rows.append([f"Column Header (Level 0): {level_0_str}"])
         
-        # Column Header (Level 2)
-        sub_headers_str = ', '.join(unique_sub) if unique_sub else ''
-        rows.append([f"Column Header (Level 2): {sub_headers_str}"])
+        # Column Header (Level 1) - always show (date periods or main headers)
+        level_1_str = ', '.join(level_1) if level_1 else ''
+        rows.append([f"Column Header (Level 1): {level_1_str}"])
         
-        # Year(s)
-        if detected_years:
-            years_str = ', '.join(sorted(detected_years, reverse=True))
-            rows.append([f"Year(s): {years_str}"])
+        # Column Header (Level 2) - always show (years or sub-headers)
+        level_2_str = ', '.join(level_2) if level_2 else ''
+        rows.append([f"Column Header (Level 2): {level_2_str}"])
+        
+        # Year/Quarter - format as Qn,YYYY (e.g., Q2,2024)
+        quarter = metadata.get('quarter', '')  # e.g., "Q2" 
+        year_from_meta = metadata.get('year', '')  # e.g., "2024"
+        
+        # Build formatted period strings
+        formatted_periods = []
+        if quarter and year_from_meta:
+            # If we have both quarter and year from metadata, use that
+            formatted_periods.append(f"{quarter},{year_from_meta}")
+        
+        # Also include any years detected from headers
+        for year in sorted(detected_years, reverse=True):
+            if quarter:
+                period = f"{quarter},{year}"
+                if period not in formatted_periods:
+                    formatted_periods.append(period)
+            else:
+                # No quarter info, just show year
+                if year not in formatted_periods:
+                    formatted_periods.append(year)
+        
+        if formatted_periods:
+            periods_str = ', '.join(formatted_periods)
+            rows.append([f"Year/Quarter: {periods_str}"])
         else:
-            rows.append([f"Year(s):"])
+            rows.append([f"Year/Quarter:"])
         
         # Blank row
         rows.append([])
@@ -586,6 +613,9 @@ class ExcelTableExporter:
         if metadata.get('quarter'):
             source_info += f" {metadata.get('quarter')}"
         rows.append([source_info])
+        
+        # Empty row after Source for visual separation
+        rows.append([])
         
         # === TABLE DATA ===
         if not table_df.empty:
@@ -622,18 +652,20 @@ class ExcelTableExporter:
                 
                 for i, v in enumerate(row):
                     if pd.isna(v):
-                        cleaned_row.append(v)
-                    elif isinstance(v, float) and v == int(v) and 2000 <= v <= 2099:
-                        cleaned_row.append(str(int(v)))
+                        cleaned_row.append('')
                     elif is_l1_row and i > 0:
                         first_val = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
                         v_str = str(v).strip()
                         if v_str.lower() == first_val.lower():
                             cleaned_row.append('')
                         else:
-                            cleaned_row.append(v)
+                            cleaned_row.append(ExcelUtils.clean_cell_value(v))
+                    elif i == 0:
+                        # First column (row label) - clean footnotes
+                        cleaned_row.append(ExcelUtils.clean_footnote_references(str(v)))
                     else:
-                        cleaned_row.append(v)
+                        # Data cells - clean year floats
+                        cleaned_row.append(ExcelUtils.clean_cell_value(v))
                 rows.append(cleaned_row)
         
         return rows
@@ -736,15 +768,20 @@ class ExcelTableExporter:
                     
                 ws = wb[sheet_name]
                 
-                # Find rows that start with "Source:" - the next row is the header
-                for row_num in range(1, min(ws.max_row + 1, 20)):  # Check first 20 rows
+                # Find ALL rows that start with "Source:" and merge their header rows
+                # (Multiple tables with same title can be stacked on one sheet)
+                for row_num in range(1, ws.max_row + 1):
                     cell_value = ws.cell(row=row_num, column=1).value
                     if cell_value and str(cell_value).startswith('Source:'):
-                        # Row after Source: is the header row (Level 1)
-                        header_row = row_num + 1
-                        if header_row <= ws.max_row:
-                            self._merge_row_cells(ws, header_row)
-                        break
+                        # Skip the blank row after Source: - headers start 2 rows after
+                        # Sheet structure: Source (row N) -> blank (N+1) -> headers (N+2, N+3, N+4...)
+                        # Tables can have up to 3 levels of column headers that need merging
+                        for header_offset in range(2, 5):  # Check rows +2, +3, +4
+                            header_row = row_num + header_offset
+                            if header_row <= ws.max_row:
+                                # Only merge if this row looks like a header (has repeated values)
+                                self._merge_row_cells(ws, header_row)
+                        # Don't break - continue to find more table blocks
             
             wb.save(output_path)
             

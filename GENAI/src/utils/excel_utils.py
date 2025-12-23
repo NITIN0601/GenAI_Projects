@@ -183,11 +183,28 @@ class ExcelUtils:
             text = text.replace(sup, replacement)
         
         # Remove footnote patterns (preserving case)
-        # Pattern: Trailing numbers before optional colon: "Text 1 :" or "Text 1,10 :"
-        text = re.sub(r'\s+[\d,]+\s*:?\s*$', '', text)
-        # Pattern: Just trailing numbers: "Text 2"
-        text = re.sub(r'\s+\d+(?:\s+\d+)*\s*$', '', text)
-        # Pattern: Parenthesized: "(1)"
+        # Be CONSERVATIVE to avoid false positives on meaningful text like "Level 2", "Tier 1"
+        
+        # Pattern: Footnote number BEFORE parenthetical unit: "assets 2 (in billions)" → "assets (in billions)"
+        text = re.sub(r'\s+\d+\s*(\(in\s+[^)]+\))', r' \1', text)
+        # Pattern: Footnote number followed by comma BEFORE parenthetical: "assets 2, (in" → "assets (in"
+        text = re.sub(r'\s+\d+,\s*(\(in\s+[^)]+\))', r' \1', text)
+        # Pattern: Trailing comma after number at end: " 2," or " 3," → remove
+        text = re.sub(r'\s+\d+,\s*$', '', text)
+        # Pattern: Trailing comma-separated numbers (clear footnote): " 2,3" or " 2, 3" or " 2,3,4"
+        text = re.sub(r'\s+\d+(?:,\s*\d+)+\s*$', '', text)
+        # Pattern: Just trailing comma at end (leftover): "offerings," → "offerings"
+        text = re.sub(r',\s*$', '', text)
+        # Pattern: Attached numbers with comma: "Offering2," or "ROTCE2,3" or "ROTCE2, 3"
+        text = re.sub(r'([a-zA-Z])\d+(?:,\s*\d+)*,?\s*$', r'\1', text)
+        # Pattern: Numbers attached DIRECTLY to text (no space) at end: "Capital Ratios9" → "Capital Ratios"
+        # This catches "Ratios9" but NOT "Level 2" (has space)
+        text = re.sub(r'([a-zA-Z])\d+\s*$', r'\1', text)
+        # Pattern: Trailing numbers before colon: "Text 1 :" or "Text 1,10 :"
+        text = re.sub(r'\s+[\d,]+\s*:\s*$', '', text)
+        # Pattern: Multiple trailing numbers (clear footnote): " 1 2 3" but NOT single " 2"
+        text = re.sub(r'\s+\d+(?:\s+\d+)+\s*$', '', text)
+        # Pattern: Parenthesized footnote numbers only: "(1)" but NOT "(in millions)"
         text = re.sub(r'\s*\(\d+\)\s*', ' ', text)
         # Pattern: Bracketed: "[1]"
         text = re.sub(r'\s*\[\d+\]\s*', ' ', text)
@@ -301,6 +318,42 @@ class ExcelUtils:
         if isinstance(val, float) and val == int(val):
             return str(int(val))
         return ExcelUtils.clean_year_string(val)
+    
+    @staticmethod
+    def clean_cell_value(val) -> str:
+        """
+        Clean a data cell value for display.
+        
+        Handles:
+        - Year floats: 2024.0 → '2024'
+        - Footnote references in text cells
+        - NaN values
+        
+        Args:
+            val: Cell value (string, int, float, or NaN)
+            
+        Returns:
+            Cleaned string value
+        """
+        import pandas as pd
+        
+        if pd.isna(val):
+            return ''
+        
+        # Handle year floats (2024.0 → 2024)
+        if isinstance(val, float):
+            if val == int(val) and 2000 <= val <= 2099:
+                return str(int(val))
+            # Other floats that are whole numbers
+            if val == int(val):
+                return str(int(val))
+        
+        val_str = str(val).strip()
+        
+        # Clean year floats in strings
+        val_str = ExcelUtils.clean_year_string(val_str)
+        
+        return val_str
     
     @staticmethod
     def detect_report_type(source: str) -> str:

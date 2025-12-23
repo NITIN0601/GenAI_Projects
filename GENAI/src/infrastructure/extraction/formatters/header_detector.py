@@ -52,63 +52,149 @@ class HeaderDetector:
             if '|' in lines[i] and lines[i].strip():
                 header_lines_before.append(lines[i])
         
-        # Check first data row AFTER separator for Level 2 (years, units)
-        level_2_row = None
-        first_data_row_idx = separator_idx + 1
-        if first_data_row_idx < len(lines) and '|' in lines[first_data_row_idx]:
-            potential_level_2 = lines[first_data_row_idx]
-            # Check if this row contains years (2020-2029) or unit indicators
-            if re.search(r'\b20[2-9]\d\b', potential_level_2) or cls._is_subheader_row(potential_level_2):
-                level_2_row = potential_level_2
+        # === DYNAMIC MULTI-LEVEL HEADER DETECTION ===
+        # Look for ALL header rows after separator until we hit a data row
+        # A header row contains: date periods, repeated spanning text, or units
+        # A data row contains: $ values, numbers, percentages in data cells
         
-        if len(header_lines_before) == 0:
-            # No headers before separator - check if level_2_row found
-            if level_2_row:
-                level_2_headers = cls._parse_header_line_skip_col1(level_2_row)
-                return {'has_multi_level': False, 'level_1': level_2_headers, 'level_1_with_cols': [], 'level_2': []}
-            return {'has_multi_level': False, 'level_1': [], 'level_1_with_cols': [], 'level_2': []}
+        def is_header_row(line: str) -> bool:
+            """Dynamically detect if a row is a header row (not data)."""
+            if not line or '|' not in line:
+                return False
+            
+            # Parse cells (skip first column which is row labels)
+            parts = [p.strip() for p in line.split('|') if p.strip()]
+            if len(parts) < 2:
+                return False
+            
+            data_cells = parts[1:]  # Skip row label column
+            
+            # Check for data indicators (means it's NOT a header row)
+            # BUT exclude year patterns (2000-2039) from this check
+            data_indicators = 0
+            for cell in data_cells:
+                if not cell:
+                    continue
+                # Skip if it's a year (4-digit year pattern)
+                if re.match(r'^20[0-3]\d$', cell):
+                    continue  # Years are headers, not data
+                # Currency values, numbers with $ or parentheses
+                if cell.startswith('$') or (cell.startswith('(') and cell.endswith(')')):
+                    data_indicators += 1
+                elif cell.replace(',', '').replace('.', '').replace('-', '').isdigit():
+                    # Check if it's a large number (likely data, not a year)
+                    clean_val = cell.replace(',', '').replace('.', '').replace('-', '')
+                    if len(clean_val) > 4:  # More than 4 digits = data
+                        data_indicators += 1
+            
+            # If most cells look like data, it's not a header row
+            if data_indicators > len(data_cells) / 2:
+                return False
+            
+            # Check for header patterns
+            # Date periods
+            if re.search(r'(months?|quarters?)\s+(ended|ending)', line, re.IGNORECASE):
+                return True
+            # Spanning headers (repeated values in adjacent cells)
+            if len(set(c.lower() for c in data_cells if c)) < len([c for c in data_cells if c]):
+                return True
+            # Year patterns
+            if re.search(r'\b20[0-3]\d\b', line):
+                return True
+            # Unit indicators
+            if '$ in' in line.lower() or 'in millions' in line.lower():
+                return True
+            # "At" or "As of" date patterns
+            if re.search(r'\b(at|as of)\s+\w+\s+\d+', line, re.IGNORECASE):
+                return True
+            
+            return False
         
-        # Parse header row before separator (Level 1) - WITH column tracking
-        level_1_with_positions = cls._parse_header_with_columns(header_lines_before[0])
-        
-        # Extract just the unique header names
-        level_1_unique = cls._dedupe_spanning_headers([h['text'] for h in level_1_with_positions])
-        
-        # Format with column positions: "Header (cols 2-3)"
-        level_1_with_cols = []
-        for h in level_1_with_positions:
-            if h['text']:
-                if h['start_col'] == h['end_col']:
-                    col_info = f"(col {h['start_col']})"
+        # Collect all header rows after separator
+        all_header_rows = []
+        for i in range(separator_idx + 1, min(separator_idx + 5, len(lines))):  # Check up to 4 rows
+            if i < len(lines) and '|' in lines[i]:
+                if is_header_row(lines[i]):
+                    all_header_rows.append(lines[i])
                 else:
-                    col_info = f"(cols {h['start_col']}-{h['end_col']})"
-                level_1_with_cols.append(f"{h['text']} {col_info}")
-        # Deduplicate the with_cols list
-        level_1_with_cols = cls._dedupe_spanning_headers(level_1_with_cols)
+                    break  # Stop when we hit a data row
         
-        # Parse Level 2 if found
-        level_2_headers = []
-        if level_2_row:
-            level_2_headers = cls._parse_header_line_skip_col1(level_2_row)
+        if len(header_lines_before) == 0 and len(all_header_rows) == 0:
+            return {'has_multi_level': False, 'level_0': [], 'level_1': [], 'level_1_with_cols': [], 'level_2': []}
         
-        # Determine if multi-level
-        has_multi_level = len(level_1_unique) > 0 and len(level_2_headers) > 0
+        # Build header levels dynamically:
+        # - Level 0: Top spanning headers BEFORE separator (e.g., "Average Monthly Balance")
+        # - Level 1: Date period headers AFTER separator (e.g., "Three Months Ended June 30,")
+        # - Level 2: Year/final sub-headers (e.g., "2024", "2023")
         
-        if has_multi_level:
-            return {
-                'has_multi_level': True,
-                'level_1': level_1_unique,           # Spanning headers (deduplicated)
-                'level_1_with_cols': level_1_with_cols,  # With column positions
-                'level_2': level_2_headers           # Sub-headers (years)
-            }
-        else:
-            # Single level - combine
-            all_headers = level_1_unique + level_2_headers
-            return {
-                'has_multi_level': False,
-                'level_1': all_headers,
-                'level_2': []
-            }
+        level_0_headers = []  # NEW: Top-level spanning header
+        level_0_with_cols = []
+        level_1_headers = []  # Date periods
+        level_2_headers = []  # Years
+        
+        # Parse header rows before separator (Level 0 - top spanning)
+        if header_lines_before:
+            level_0_with_positions = cls._parse_header_with_columns(header_lines_before[0])
+            level_0_headers = cls._dedupe_spanning_headers([h['text'] for h in level_0_with_positions])
+            
+            # Format with column positions
+            for h in level_0_with_positions:
+                if h['text']:
+                    if h['start_col'] == h['end_col']:
+                        col_info = f"(col {h['start_col']})"
+                    else:
+                        col_info = f"(cols {h['start_col']}-{h['end_col']})"
+                    level_0_with_cols.append(f"{h['text']} {col_info}")
+            level_0_with_cols = cls._dedupe_spanning_headers(level_0_with_cols)
+        
+        # Parse header rows after separator - distribute to Level 1 and Level 2
+        for idx, header_row in enumerate(all_header_rows):
+            row_headers = cls._parse_header_line_skip_col1(header_row)
+            
+            # Check if this row contains years (likely Level 2)
+            has_years = bool(re.search(r'\b20[0-3]\d\b', header_row))
+            
+            if has_years:
+                # Row with years goes to Level 2
+                level_2_headers.extend(row_headers)
+            else:
+                # Date period rows go to Level 1
+                level_1_headers.extend(row_headers)
+        
+        # Deduplicate
+        level_1_headers = cls._dedupe_spanning_headers(level_1_headers)
+        level_2_headers = cls._dedupe_spanning_headers(level_2_headers)
+        
+        # === SMART LEVEL ASSIGNMENT ===
+        # If we only have 2 levels total (Level 0 + Level 2, or just Level 0),
+        # shift everything down so Level 0 is empty and main headers go to Level 1
+        total_levels = sum([
+            len(level_0_headers) > 0,
+            len(level_1_headers) > 0,
+            len(level_2_headers) > 0
+        ])
+        
+        if total_levels <= 2 and len(level_0_headers) > 0 and len(level_1_headers) == 0:
+            # Only 2 levels: shift Level 0 → Level 1, leave Level 0 empty
+            level_1_headers = level_0_headers
+            level_0_headers = []
+            level_0_with_cols = []
+        
+        # Determine if multi-level (has at least 2 levels populated)
+        has_multi_level = sum([
+            len(level_0_headers) > 0,
+            len(level_1_headers) > 0,
+            len(level_2_headers) > 0
+        ]) >= 2
+        
+        return {
+            'has_multi_level': has_multi_level,
+            'level_0': level_0_headers,           # Top spanning (e.g., "Average Monthly Balance")
+            'level_0_with_cols': level_0_with_cols,
+            'level_1': level_1_headers,           # Date periods (e.g., "Three Months Ended")
+            'level_1_with_cols': [],              # TODO: add if needed
+            'level_2': level_2_headers            # Years (e.g., "2024", "2023")
+        }
     
     @classmethod
     def _is_subheader_row(cls, line: str) -> bool:

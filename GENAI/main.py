@@ -10,6 +10,7 @@ Pipeline Steps:
 5. search    - Perform search on FAISS (without LLM)
 6. query     - Send to LLM with prompt, get response
 7. consolidate - Get consolidated table as timeseries CSV/Excel
+8. process-advanced - Merge tables with identical row labels (NEW)
 
 Usage:
     # Pipeline steps
@@ -52,6 +53,7 @@ from src.pipeline.steps import (
     run_search,
     run_query,
     run_consolidate,
+    run_process_advanced,
 )
 
 # Import CLI helpers
@@ -128,18 +130,58 @@ def download(
 @app.command()
 def extract(
     source: str = typer.Option(None, "--source", "-s", help="PDF directory"),
-    force: bool = typer.Option(False, "--force", "-f", help="Force re-extraction")
+    force: bool = typer.Option(False, "--force", "-f", help="Force re-extraction"),
+    skip_advanced: bool = typer.Option(False, "--skip-advanced", help="Skip process-advanced step"),
+    skip_consolidate: bool = typer.Option(False, "--skip-consolidate", help="Skip consolidate step")
 ) -> None:
     """
     Step 2: Extract tables from PDFs using Docling.
     
+    Full pipeline: extract → process-advanced → consolidate
+    
     Example:
         python main.py extract --source ../raw_data
+        python main.py extract --force  # Full re-extraction
+        python main.py extract --skip-advanced --skip-consolidate  # Extraction only
     """
     console.print("\n[bold green]📄 Step 2: Extract Tables[/bold green]\n")
     
+    # Step 1: Extract
+    console.print("[bold]Step 1: Extract Tables from PDFs[/bold]")
     result = run_extract(source_dir=source, force=force)
-    handle_pipeline_result(result)
+    
+    if not result.success:
+        console.print(f"[red]✗ Extraction failed: {result.error}[/red]")
+        raise typer.Exit(code=1)
+    
+    console.print(f"[green]✓ {result.message}[/green]")
+    
+    # Step 2: Process Advanced (merge tables with identical row labels)
+    if not skip_advanced:
+        console.print("\n[bold]Step 2: Advanced Processing (Table Merging)[/bold]")
+        advanced_result = run_process_advanced()
+        
+        if advanced_result.success:
+            console.print(f"[green]✓ {advanced_result.message}[/green]")
+        else:
+            console.print(f"[yellow]⚠ Advanced processing: {advanced_result.error}[/yellow]")
+    else:
+        console.print("\n[dim]Step 2: Advanced Processing (skipped)[/dim]")
+    
+    # Step 3: Consolidate
+    if not skip_consolidate:
+        console.print("\n[bold]Step 3: Consolidate Tables[/bold]")
+        consolidate_result = run_consolidate(table_title=None, output_format='both')
+        
+        if consolidate_result.success:
+            console.print(f"[green]✓ {consolidate_result.message}[/green]")
+        else:
+            console.print(f"[yellow]⚠ Consolidation: {consolidate_result.error}[/yellow]")
+    else:
+        console.print("\n[dim]Step 3: Consolidate (skipped)[/dim]")
+    
+    console.print("\n[bold green]✓ Extraction Pipeline Complete![/bold green]")
+    console.print()
 
 
 # ============================================================================
@@ -380,6 +422,52 @@ def consolidate(
 
 
 # ============================================================================
+# STEP 10: PROCESS ADVANCED (Table Merging)
+# ============================================================================
+
+@app.command("process-advanced")
+def process_advanced(
+    source: str = typer.Option(None, "--source", "-s", help="Source directory (default: data/processed)"),
+    dest: str = typer.Option(None, "--dest", "-d", help="Destination directory (default: data/processed_advanced)")
+) -> None:
+    """
+    Step 10: Advanced processing - merge tables with identical row labels.
+    
+    Reads xlsx files from data/processed/, merges tables within the same sheet
+    that have matching Column A (row labels), and outputs to data/processed_advanced/.
+    
+    Examples:
+        python main.py process-advanced
+        python main.py process-advanced --source ./data/processed --dest ./data/processed_advanced
+    """
+    console.print("\n[bold green]📊 Step 10: Advanced Table Processing[/bold green]\n")
+    console.print("[cyan]Merging tables with identical row labels...[/cyan]\n")
+    
+    result = run_process_advanced(source_dir=source, dest_dir=dest)
+    
+    if not result.success:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
+        raise typer.Exit(code=1)
+    
+    console.print(f"[green]✓ {result.message}[/green]")
+    console.print(f"[dim]Files processed: {result.data.get('files_processed', 0)}[/dim]")
+    console.print(f"[dim]Files with merges: {result.data.get('files_with_merges', 0)}[/dim]")
+    console.print(f"[dim]Tables merged: {result.data.get('tables_merged', 0)}[/dim]")
+    
+    if result.data.get('output_files'):
+        console.print("\n[bold]Output Files:[/bold]")
+        for path in result.data['output_files']:
+            console.print(f"  [cyan]{path}[/cyan]")
+    
+    if result.data.get('errors'):
+        console.print("\n[bold yellow]Warnings:[/bold yellow]")
+        for err in result.data['errors']:
+            console.print(f"  [yellow]⚠ {err}[/yellow]")
+    
+    console.print()
+
+
+# ============================================================================
 # INTERACTIVE MODE
 # ============================================================================
 
@@ -421,13 +509,15 @@ def pipeline(
     yr: str = typer.Option(..., "--yr", help="Year or range"),
     m: Optional[str] = typer.Option(None, "--m", help="Month filter"),
     source: str = typer.Option(None, "--source", help="PDF directory"),
-    force: bool = typer.Option(False, "--force", help="Force re-processing")
+    force: bool = typer.Option(False, "--force", help="Force re-processing"),
+    skip_embed: bool = typer.Option(False, "--skip-embed", help="Skip embedding step")
 ) -> None:
     """
-    Run complete pipeline: Download → Extract → Embed.
+    Run complete pipeline: Download → Extract → Process Advanced → Consolidate → Embed.
     
     Example:
         python main.py pipeline --yr 20-25
+        python main.py pipeline --yr 25 --skip-embed  # Skip embedding
     """
     console.print("\n[bold green]🚀 Running Complete Pipeline[/bold green]\n")
     
@@ -444,7 +534,7 @@ def pipeline(
         console.print(f"  [yellow]⚠ {download_result.error}[/yellow]")
     
     # Step 2: Extract
-    console.print("\n[bold]Step 2: Extract[/bold]")
+    console.print("\n[bold]Step 2: Extract Tables[/bold]")
     extract_result = run_extract(source_dir=source, force=force)
     if extract_result.success:
         console.print(f"  [green]✓ {extract_result.message}[/green]")
@@ -452,14 +542,33 @@ def pipeline(
         console.print(f"  [red]✗ {extract_result.error}[/red]")
         raise typer.Exit(code=1)
     
-    # Steps 3-4: Embed
-    console.print("\n[bold]Steps 3-4: Embed + Store[/bold]")
-    embed_result = run_embed(extracted_data=extract_result.data)
-    if embed_result.success:
-        console.print(f"  [green]✓ {embed_result.message}[/green]")
+    # Step 3: Process Advanced (merge tables with identical row labels)
+    console.print("\n[bold]Step 3: Advanced Processing (Table Merging)[/bold]")
+    advanced_result = run_process_advanced()
+    if advanced_result.success:
+        console.print(f"  [green]✓ {advanced_result.message}[/green]")
     else:
-        console.print(f"  [red]✗ {embed_result.error}[/red]")
-        raise typer.Exit(code=1)
+        console.print(f"  [yellow]⚠ {advanced_result.error}[/yellow]")
+    
+    # Step 4: Consolidate tables
+    console.print("\n[bold]Step 4: Consolidate Tables[/bold]")
+    consolidate_result = run_consolidate(table_title=None, output_format='both')
+    if consolidate_result.success:
+        console.print(f"  [green]✓ {consolidate_result.message}[/green]")
+    else:
+        console.print(f"  [yellow]⚠ {consolidate_result.error}[/yellow]")
+    
+    # Step 5: Embed (optional)
+    if not skip_embed:
+        console.print("\n[bold]Step 5: Embed + Store[/bold]")
+        embed_result = run_embed(extracted_data=extract_result.data)
+        if embed_result.success:
+            console.print(f"  [green]✓ {embed_result.message}[/green]")
+        else:
+            console.print(f"  [red]✗ {embed_result.error}[/red]")
+            raise typer.Exit(code=1)
+    else:
+        console.print("\n[dim]Step 5: Embed (skipped)[/dim]")
     
     console.print("\n[bold green]✓ Pipeline Complete![/bold green]")
     console.print("[cyan]Ready for queries. Try:[/cyan]")

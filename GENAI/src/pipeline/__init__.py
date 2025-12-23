@@ -30,6 +30,7 @@ class PipelineStep(Enum):
     QUERY = "query"
     CONSOLIDATE = "consolidate"
     EXPORT = "export"
+    PROCESS_ADVANCED = "process_advanced"
 
 
 @dataclass

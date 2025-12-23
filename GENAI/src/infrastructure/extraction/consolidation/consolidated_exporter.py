@@ -37,7 +37,9 @@ class ConsolidatedExcelExporter:
     def __init__(self):
         """Initialize exporter with paths from PathManager."""
         paths = get_paths()
-        self.processed_dir = Path(paths.PROCEEDINGS_DIR) if hasattr(paths, 'PROCEEDINGS_DIR') else Path("data/processed")
+        # Read from processed_advanced (after table merging) for correct pipeline flow:
+        # extract -> process_advanced -> consolidate
+        self.processed_dir = Path(paths.data_dir) / "processed_advanced" if hasattr(paths, 'data_dir') else Path("data/processed_advanced")
         self.extracted_dir = Path(paths.EXTRACTED_DIR) if hasattr(paths, 'EXTRACTED_DIR') else Path("data/extracted")
         
         # Ensure directories exist
@@ -475,10 +477,9 @@ class ConsolidatedExcelExporter:
                         continue  # Skip date headers like "At March 31, 2025"
                     norm_val = self._normalize_row_label(val)
                     if norm_val and norm_val not in normalized_row_labels:
-                        # Clean footnote references for display (preserves case)
-                        cleaned_val = ExcelUtils.clean_footnote_references(val)
-                        normalized_row_labels[norm_val] = cleaned_val
-                        row_labels.append(cleaned_val)
+                        # Store original value for now - footnote cleaning happens at display time
+                        normalized_row_labels[norm_val] = val_str
+                        row_labels.append(val_str)
             
             # Extract column data with ORIGINAL headers from source
             # After slicing, the df structure is:
@@ -588,7 +589,9 @@ class ConsolidatedExcelExporter:
         )
         
         # Build result dataframe
-        result_data = {'Row Label': row_labels}
+        # Clean footnotes from row labels for final display
+        display_row_labels = [ExcelUtils.clean_footnote_references(label) for label in row_labels]
+        result_data = {'Row Label': display_row_labels}
         used_headers = {"row label"}
         
         # Track Level 1 and Level 2 headers separately for multi-level output
@@ -620,6 +623,9 @@ class ConsolidatedExcelExporter:
                 value = row_data_map.get(norm_label, '')
                 # Clean currency values: '$1,234' -> 1234.0, keep 'N/A' and '-' as strings
                 cleaned_value = self._clean_currency_value(value)
+                # Also clean year floats (2024.0 -> '2024')
+                if isinstance(cleaned_value, str):
+                    cleaned_value = ExcelUtils.clean_cell_value(cleaned_value)
                 col_data.append(cleaned_value)
             
             result_data[header] = col_data
@@ -654,7 +660,8 @@ class ConsolidatedExcelExporter:
         
         # Row Header Level 1: Section rows where first cell has text but rest is empty
         # These are rows like "Revenues" where only the first cell has content
-        row_headers_l1 = []
+        # Collect RAW values first, clean for display later
+        row_headers_l1_raw = []
         for table_info in tables:
             df = table_info['data']
             if len(df) > 3:  # Skip if too few rows
@@ -665,21 +672,24 @@ class ConsolidatedExcelExporter:
                     rest_empty = all(pd.isna(v) or str(v).strip() == '' or str(v).strip() == 'nan' 
                                     for v in row.iloc[1:])
                     if first_cell and rest_empty and first_cell not in ['Row Label', 'nan']:
-                        cleaned = ExcelUtils.clean_footnote_references(first_cell)
-                        if cleaned and cleaned not in row_headers_l1:
-                            row_headers_l1.append(cleaned)
+                        if first_cell not in row_headers_l1_raw:
+                            row_headers_l1_raw.append(first_cell)
             break  # Only check first table since they should have same structure
         
-        # Row Header Level 2: All data row labels (non-section rows)
-        row_headers_l2 = []
+        # Row Header Level 2: All data row labels (non-section rows) - keep raw for matching
+        row_headers_l2_raw = []
         for label in row_labels:
             if label and not str(label).startswith('$'):
                 label_str = str(label).strip()
                 # Skip if it's a section header (in L1)
-                if label_str not in row_headers_l1 and label_str not in row_headers_l2:
-                    row_headers_l2.append(label_str)
+                if label_str not in row_headers_l1_raw and label_str not in row_headers_l2_raw:
+                    row_headers_l2_raw.append(label_str)
         
-        # Product/Entity: Unique entities from L2 row headers (deduplicated, first 5)
+        # NOW apply footnote cleaning ONLY for display purposes
+        row_headers_l1 = [ExcelUtils.clean_footnote_references(h) for h in row_headers_l1_raw if h]
+        row_headers_l2 = [ExcelUtils.clean_footnote_references(h) for h in row_headers_l2_raw if h]
+        
+        # Product/Entity: Unique entities from L2 row headers (deduplicated, first 5), cleaned for display
         products = row_headers_l2[:5]
         
         # Column Headers - from the stored level1_headers and level2_headers
