@@ -467,13 +467,14 @@ class PipelineManager:
 
 # Global instance (singleton pattern like VectorDBManager)
 _pipeline_manager: Optional[PipelineManager] = None
+_pipeline_manager_lock = __import__('threading').Lock()
 
 
 def get_pipeline_manager(**kwargs) -> PipelineManager:
     """
     Get or create global pipeline manager.
     
-    Follows same pattern as:
+    Thread-safe singleton pattern following same design as:
     - get_vectordb_manager()
     - get_embedding_manager()
     - get_search_orchestrator()
@@ -490,7 +491,10 @@ def get_pipeline_manager(**kwargs) -> PipelineManager:
     global _pipeline_manager
     
     if _pipeline_manager is None:
-        _pipeline_manager = PipelineManager(**kwargs)
+        with _pipeline_manager_lock:
+            # Double-check locking pattern
+            if _pipeline_manager is None:
+                _pipeline_manager = PipelineManager(**kwargs)
     
     return _pipeline_manager
 

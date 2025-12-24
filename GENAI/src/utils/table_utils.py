@@ -334,11 +334,92 @@ def parse_markdown_table(
         # Replace 'nan' strings with empty strings
         df = df.replace('nan', '')
         
+        # === COLUMN DEDUPLICATION ===
+        # Remove duplicate columns (Docling sometimes creates duplicates from merged PDF cells)
+        # Keep the first occurrence if headers match and data is identical
+        df = _deduplicate_columns(df)
+        
+        # === FOOTNOTE CLEANING ===
+        # Remove footnote references from row labels (first column)
+        if len(df.columns) > 0:
+            first_col = df.columns[0]
+            df[first_col] = df[first_col].apply(_clean_footnote_from_label)
+        
         return df
         
     except Exception as e:
         logger.error(f"Error parsing table content: {e}")
         return pd.DataFrame()
+
+
+def _deduplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Remove duplicate columns from DataFrame.
+    
+    Compares columns by both header name AND data values.
+    If two columns have same header and identical data, keep only the first.
+    """
+    if df.empty or len(df.columns) < 2:
+        return df
+    
+    seen_signatures = {}  # (header_norm, data_tuple) -> column_index
+    columns_to_keep = []
+    
+    for col_idx, col_name in enumerate(df.columns):
+        # Create signature: normalized header + tuple of all values
+        header_norm = str(col_name).strip().lower()
+        data_values = tuple(str(v).strip().lower() for v in df.iloc[:, col_idx].tolist())
+        signature = (header_norm, data_values)
+        
+        if signature not in seen_signatures:
+            seen_signatures[signature] = col_idx
+            columns_to_keep.append(col_idx)
+        else:
+            # Duplicate found - skip this column
+            logger.debug(f"Removing duplicate column: {col_name} (matches column {seen_signatures[signature]})")
+    
+    if len(columns_to_keep) < len(df.columns):
+        logger.info(f"Removed {len(df.columns) - len(columns_to_keep)} duplicate columns")
+        return df.iloc[:, columns_to_keep]
+    
+    return df
+
+
+def _clean_footnote_from_label(label) -> str:
+    """
+    Clean footnote references from row labels.
+    
+    Examples:
+        'Fixed Income 4' -> 'Fixed Income'
+        'Total Assets 1,2' -> 'Total Assets'
+        'Net Revenue (3)' -> 'Net Revenue'
+    """
+    # Handle None, NaN, and pandas Series safely
+    if label is None:
+        return ''
+    
+    # Convert to string first to avoid Series ambiguity
+    try:
+        label_str = str(label).strip()
+    except Exception:
+        return ''
+    
+    # Check for nan string
+    if label_str.lower() == 'nan' or label_str == '':
+        return ''
+    
+    label = label_str
+    
+    # Pattern 1: Trailing number separated by space (e.g., "Fixed Income 4")
+    label = re.sub(r'\s+\d{1,2}$', '', label)
+    
+    # Pattern 2: Trailing number with comma (e.g., "Total 1,2,3")
+    label = re.sub(r'\s+\d+(?:,\d+)*$', '', label)
+    
+    # Pattern 3: Footnote in parentheses (e.g., "Revenue (1)")
+    label = re.sub(r'\s*\(\d+(?:,\d+)*\)$', '', label)
+    
+    return label.strip()
 
 
 def quarter_to_month(quarter: str) -> int:

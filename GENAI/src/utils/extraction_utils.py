@@ -15,6 +15,9 @@ import os
 from docling.document_converter import DocumentConverter
 from docling_core.types.doc import DocItemLabel
 from src.domain.tables import TableMetadata
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # =============================================================================
@@ -491,8 +494,8 @@ class DoclingHelper:
                             section_name = section_name.title()
                         toc_sections[page] = section_name
             
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Error extracting TOC sections: {e}")
         
         return toc_sections
     
@@ -664,8 +667,8 @@ class DoclingHelper:
                 # Fall back to previous page
                 return preceding_headers[-1][1]
                 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Error finding preceding spanning header: {e}")
         
         return ""
     
@@ -694,7 +697,21 @@ class DoclingHelper:
         return header_row + '\n' + table_markdown
     
     # Class-level cache for TOC sections (to avoid re-parsing for every table)
+    # Cache is cleared after each PDF extraction to prevent memory growth
     _toc_cache = {}
+    
+    @staticmethod
+    def clear_toc_cache(doc_id: int = None) -> None:
+        """
+        Clear TOC cache to free memory after PDF extraction completes.
+        
+        Args:
+            doc_id: Specific doc ID to clear, or None to clear all
+        """
+        if doc_id is not None:
+            DoclingHelper._toc_cache.pop(doc_id, None)
+        else:
+            DoclingHelper._toc_cache.clear()
     
     @staticmethod
     def extract_section_name(doc, table_item, page_no: int, toc_sections: dict = None) -> str:
@@ -868,8 +885,8 @@ class DoclingHelper:
                     result = result.title()
                 return result
                 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Error extracting section name: {e}")
         
         return ""
     
@@ -1020,8 +1037,8 @@ class DoclingHelper:
                         
                         if title and len(title) > 3:
                             return clean_title(title)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Error extracting table title: {e}")
         
         # Fallback: Table with page reference
         return f"Table {table_index + 1} (Page {page_no})"
@@ -1422,14 +1439,17 @@ class PDFMetadataExtractor:
         """
         Compute MD5 hash of PDF file.
         
+        Delegates to consolidated implementation in helpers module
+        which uses chunked reading for better memory efficiency.
+        
         Args:
             pdf_path: Path to PDF file
             
         Returns:
             MD5 hash string
         """
-        with open(pdf_path, 'rb') as f:
-            return hashlib.md5(f.read()).hexdigest()
+        from src.utils.helpers import compute_file_hash
+        return compute_file_hash(pdf_path)
     
     @staticmethod
     def extract_year(filename: str) -> Optional[int]:

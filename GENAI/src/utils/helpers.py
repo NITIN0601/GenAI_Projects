@@ -2,7 +2,7 @@
 
 import hashlib
 from pathlib import Path
-from typing import List
+from typing import Any, List
 import os
 
 
@@ -49,7 +49,7 @@ def ensure_directory(directory: str):
     Path(directory).mkdir(parents=True, exist_ok=True)
 
 
-def format_number(value: any) -> str:
+def format_number(value: Any) -> str:
     """
     Format number for display.
     

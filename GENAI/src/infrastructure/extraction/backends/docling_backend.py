@@ -134,6 +134,10 @@ class DoclingBackend(ExtractionBackend):
             # Extract metadata
             result.metadata = self._extract_metadata(pdf_path, doc)
             
+            # Clear TOC cache for this document to free memory
+            # (once xlsx is written, we don't need the in-memory TOC anymore)
+            DoclingHelper.clear_toc_cache(id(doc))
+            
             # Note: quality_score is computed by QualityAssessor in strategy.py
             # Not setting it here to avoid confusion with actual computed score
             

@@ -185,6 +185,23 @@ class ExcelUtils:
         # Remove footnote patterns (preserving case)
         # Be CONSERVATIVE to avoid false positives on meaningful text like "Level 2", "Tier 1"
         
+        # === NEW: Handle footnotes BEFORE % symbol ===
+        # Pattern: Footnote number attached to word before %: "engagement1 %" → "engagement %"
+        # This handles cases like "engagement1 %Proud" from PDF where 1 is a superscript footnote
+        text = re.sub(r'([a-zA-Z])(\d{1,2})\s+(%)', r'\1 \3', text)
+        # Pattern: Footnote number with space before %: "officer 2 %" → "officer %"  
+        # But be careful not to match "Level 2" which is valid
+        text = re.sub(r'([a-zA-Z])\s+(\d{1,2})\s+(%)', r'\1 \3', text)
+        # Pattern: Comma-separated footnotes before %: "officer2,3 %" → "officer %"
+        text = re.sub(r'([a-zA-Z])(\d{1,2}(?:,\s*\d{1,2})*)\s+(%)', r'\1 \3', text)
+        
+        # === NEW: Handle trailing single digit footnotes (1-3) ===
+        # These are the most common footnote markers, safe to remove at end of string
+        # Pattern: Trailing single digit 1-3 at end: "diverse 3" → "diverse"
+        text = re.sub(r'\s+[123]\s*$', '', text)
+        # Pattern: Attached single digit 1-3 at end: "diverse3" → "diverse"  
+        text = re.sub(r'([a-zA-Z])[123]\s*$', r'\1', text)
+        
         # Pattern: Footnote number BEFORE parenthetical unit: "assets 2 (in billions)" → "assets (in billions)"
         text = re.sub(r'\s+\d+\s*(\(in\s+[^)]+\))', r' \1', text)
         # Pattern: Footnote number followed by comma BEFORE parenthetical: "assets 2, (in" → "assets (in"

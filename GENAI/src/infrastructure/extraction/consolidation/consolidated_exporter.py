@@ -15,7 +15,7 @@ Features:
 import glob
 import re
 import pandas as pd
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 from collections import defaultdict
 
@@ -233,54 +233,74 @@ class ConsolidatedExcelExporter:
                 if data_start_row > 0 and len(table_df) > data_start_row:
                     table_df = table_df.iloc[data_start_row:].reset_index(drop=True)
                 
-                # Compute row signature for strict matching
-                raw_rows = table_df.iloc[:, 0].astype(str).tolist() if not table_df.empty else []
-                norm_rows = []
-                for r in raw_rows:
-                    r_clean = r.strip()
-                    if not r_clean: 
-                        continue
-                    r_lower = r_clean.lower()
-                    if r_lower == 'row label': 
-                        continue
-                    if r_lower.startswith('source:'): 
-                        continue
-                    if r_lower.startswith('page '): 
-                        continue
-                    if r_lower.startswith('$ in'): 
-                        continue
-                    norm_rows.append(self._normalize_row_label(r_clean))
+                # Split embedded sub-tables (e.g., "Investments" + "Income (loss)" in same table)
+                subtables = self._split_into_subtables(table_df, 0)
                 
-                row_sig = "|".join(norm_rows)
-                
-                # Create grouping key: Section + Title + Structure
-                normalized_title = self._normalize_title_for_grouping(full_title)
-                if section and section.strip():
-                    normalized_key = f"{section.strip()}::{normalized_title}::{row_sig}"
-                else:
-                    normalized_key = f"Default::{normalized_title}::{row_sig}"
-                
-                all_tables_by_full_title[normalized_key].append({
-                    'data': table_df,
-                    'metadata': metadata,
-                    'sheet_name': sheet_name,
-                    'original_title': full_title,
-                    'section': section,
-                    'row_sig': row_sig
-                })
-                
-                if normalized_key not in title_to_sheet_name:
-                    clean_display = full_title.replace('→ ', '').strip() if full_title.startswith('→') else full_title
-                    if section and section.strip():
-                        display_with_section = f"{section.strip()} - {clean_display}"
-                    else:
-                        display_with_section = clean_display
+                # Process each sub-table as a separate table entry
+                for subtable_idx, (subtable_df, _) in enumerate(subtables):
+                    if subtable_df.empty or len(subtable_df) < 2:
+                        continue
                     
-                    title_to_sheet_name[normalized_key] = {
-                        'display_title': display_with_section,
-                        'section': section.strip() if section else '',
-                        'original_title': full_title,
-                    }
+                    # Compute row signature for this sub-table
+                    raw_rows = subtable_df.iloc[:, 0].astype(str).tolist() if not subtable_df.empty else []
+                    norm_rows = []
+                    for r in raw_rows:
+                        r_clean = r.strip()
+                        if not r_clean: 
+                            continue
+                        r_lower = r_clean.lower()
+                        if r_lower == 'row label': 
+                            continue
+                        if r_lower.startswith('source:'): 
+                            continue
+                        if r_lower.startswith('page '): 
+                            continue
+                        if r_lower.startswith('$ in'): 
+                            continue
+                        # Skip embedded header patterns
+                        if self._is_embedded_header_row(r_clean, []):
+                            continue
+                        norm_rows.append(self._normalize_row_label(r_clean))
+                    
+                    row_sig = "|".join(norm_rows)
+                    
+                    # Skip if no valid rows found
+                    if not row_sig:
+                        continue
+                    
+                    # Create grouping key: Section + Title + [SubtableIdx] + Structure
+                    normalized_title = self._normalize_title_for_grouping(full_title)
+                    subtable_suffix = f"::sub{subtable_idx}" if len(subtables) > 1 else ""
+                    
+                    if section and section.strip():
+                        normalized_key = f"{section.strip()}::{normalized_title}{subtable_suffix}::{row_sig}"
+                    else:
+                        normalized_key = f"Default::{normalized_title}{subtable_suffix}::{row_sig}"
+                    
+                    all_tables_by_full_title[normalized_key].append({
+                        'data': subtable_df,
+                        'metadata': metadata,
+                        'sheet_name': sheet_name,
+                        'original_title': full_title if len(subtables) == 1 else f"{full_title} (Part {subtable_idx + 1})",
+                        'section': section,
+                        'row_sig': row_sig,
+                        'subtable_idx': subtable_idx
+                    })
+                    
+                    if normalized_key not in title_to_sheet_name:
+                        clean_display = full_title.replace('→ ', '').strip() if full_title.startswith('→') else full_title
+                        if len(subtables) > 1:
+                            clean_display = f"{clean_display} (Part {subtable_idx + 1})"
+                        if section and section.strip():
+                            display_with_section = f"{section.strip()} - {clean_display}"
+                        else:
+                            display_with_section = clean_display
+                        
+                        title_to_sheet_name[normalized_key] = {
+                            'display_title': display_with_section,
+                            'section': section.strip() if section else '',
+                            'original_title': full_title,
+                        }
                     
             except Exception as e:
                 logger.debug(f"Skipping sheet {sheet_name}: {e}")
@@ -312,6 +332,178 @@ class ConsolidatedExcelExporter:
         Delegates to ExcelUtils.clean_currency_value for centralized logic.
         """
         return ExcelUtils.clean_currency_value(val)
+    
+    def _is_embedded_header_row(self, row_label: str, row_values: list) -> bool:
+        """
+        Detect if a row is an embedded sub-table header rather than a data row.
+        
+        Embedded headers look like:
+        - "Three Months Ended June" | "Three Months Ended June 30," | "Six Months Ended..."
+        - "2024" | "2023" | "2024" | "2023" (year row)
+        - "At March 31, 2025" | "At December 31, 2024"
+        
+        Returns True if this row should be treated as a header, not data.
+        """
+        label_lower = str(row_label).strip().lower() if row_label else ''
+        
+        # Pattern 1: Row label contains date period patterns
+        header_patterns = [
+            'three months ended',
+            'six months ended',
+            'nine months ended',
+            'twelve months ended',
+            'fiscal year ended',
+            'year ended',
+            'at march', 'at june', 'at september', 'at december',
+            'at january', 'at february', 'at april', 'at may',
+            'at july', 'at august', 'at october', 'at november',
+        ]
+        for pattern in header_patterns:
+            if pattern in label_lower:
+                return True
+        
+        # Pattern 2: Row label is just a year (2020-2030)
+        if label_lower.isdigit() and len(label_lower) == 4:
+            year = int(label_lower)
+            if 2020 <= year <= 2030:
+                return True
+        
+        # Pattern 3: All values in the row look like headers (dates, years, or empty)
+        # This catches year rows like ["2024", "2023", "2024", "2023"]
+        if row_values:
+            non_empty_vals = [str(v).strip() for v in row_values if pd.notna(v) and str(v).strip()]
+            if non_empty_vals:
+                all_look_like_headers = all(
+                    (v.isdigit() and len(v) == 4 and 2020 <= int(v) <= 2030) or  # Years
+                    any(p in v.lower() for p in ['ended', 'at ', 'march', 'june', 'september', 'december']) or  # Date text
+                    v.lower() in ['nan', '']
+                    for v in non_empty_vals
+                )
+                if all_look_like_headers:
+                    return True
+        
+        return False
+    
+    def _split_into_subtables(self, df: pd.DataFrame, data_start_idx: int = 0) -> List[Tuple[pd.DataFrame, int]]:
+        """
+        Split a DataFrame at embedded header rows into separate sub-tables.
+        
+        Returns list of (sub_df, header_row_offset) tuples.
+        Each sub-table starts at an embedded header row.
+        """
+        if df.empty or len(df) < 2:
+            return [(df, data_start_idx)]
+        
+        subtables = []
+        current_start = data_start_idx
+        
+        # Skip initial metadata/header rows (first 4 rows after data_start)
+        # Look for embedded headers starting from row 4 onwards
+        for i in range(data_start_idx + 4, len(df)):
+            row = df.iloc[i]
+            first_cell = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+            row_values = row.tolist()
+            
+            # Check if this row is an embedded header (new sub-table start)
+            if self._is_embedded_header_row(first_cell, row_values):
+                # Save previous sub-table if it has data
+                if i > current_start:
+                    subtables.append((df.iloc[current_start:i].reset_index(drop=True), current_start))
+                current_start = i
+        
+        # Add final sub-table
+        if current_start < len(df):
+            subtables.append((df.iloc[current_start:].reset_index(drop=True), current_start))
+        
+        return subtables if subtables else [(df, data_start_idx)]
+    
+    def _find_header_rows(self, df: pd.DataFrame) -> Tuple[int, int, int]:
+        """
+        Dynamically find L1 header, L2 header, and data start row indices.
+        
+        Returns:
+            (l1_row, l2_row, data_start_row) - Row indices in the DataFrame
+        """
+        l1_row = None
+        l2_row = None
+        data_start = None
+        
+        for i in range(len(df)):
+            row = df.iloc[i]
+            first_cell = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+            
+            # Skip metadata rows
+            if first_cell.startswith('Source:') or first_cell == '' or first_cell.startswith('←'):
+                # Check if this is a header row (empty first cell but other cells have content)
+                other_cells = [str(v).strip() for v in row.iloc[1:].tolist() if pd.notna(v) and str(v).strip()]
+                if other_cells and first_cell == '':
+                    # This looks like a spanning header row (L1)
+                    if l1_row is None:
+                        l1_row = i
+                continue
+            
+            # Check if row is a unit/header indicator ($ in millions, $ in billions)
+            if first_cell.lower().startswith('$ in'):
+                if l2_row is None:
+                    l2_row = i
+                continue
+            
+            # Check if first cell is a year (L2 header)
+            if first_cell.isdigit() and len(first_cell) == 4 and 2020 <= int(first_cell) <= 2030:
+                if l2_row is None:
+                    l2_row = i
+                continue
+            
+            # Check if this is a date period header pattern
+            if any(p in first_cell.lower() for p in ['months ended', 'at march', 'at june', 'at december']):
+                if l1_row is None:
+                    l1_row = i
+                continue
+            
+            # This looks like actual data
+            if data_start is None and first_cell and first_cell not in ['Row Label', 'nan']:
+                data_start = i
+                break
+        
+        # Default fallbacks - be conservative about L2
+        if l1_row is None:
+            l1_row = 2  # Default: row after Source and blank
+        
+        # Only set l2_row if we actually found one - don't assume l1_row + 1 is L2
+        # If l2_row is None, check if the row after L1 looks like a header row
+        if l2_row is None and l1_row is not None and l1_row + 1 < len(df):
+            next_row = df.iloc[l1_row + 1]
+            first_cell = str(next_row.iloc[0]).strip() if pd.notna(next_row.iloc[0]) else ''
+            
+            # Check if this row looks like a L2 header (unit row or year row)
+            is_l2_header = False
+            if first_cell.lower().startswith('$ in'):
+                is_l2_header = True
+            elif first_cell.isdigit() and len(first_cell) == 4:
+                is_l2_header = True
+            elif first_cell == '':
+                # Empty first cell with years in other cells
+                other_cells = [str(v).strip() for v in next_row.iloc[1:].tolist() if pd.notna(v) and str(v).strip()]
+                if other_cells and all(
+                    (c.isdigit() and len(c) == 4 and 2020 <= int(c) <= 2030) or
+                    c.lower() in ['nan', '']
+                    for c in other_cells
+                ):
+                    is_l2_header = True
+            
+            if is_l2_header:
+                l2_row = l1_row + 1
+        
+        # Data starts after the last header row we found
+        if data_start is None:
+            if l2_row is not None:
+                data_start = l2_row + 1
+            elif l1_row is not None:
+                data_start = l1_row + 1
+            else:
+                data_start = 3
+        
+        return (l1_row, l2_row, data_start)
     
     def _create_consolidated_index(
         self,
@@ -462,8 +654,8 @@ class ConsolidatedExcelExporter:
             if df.empty or len(df.columns) < 2:
                 continue
             
-            # First column is row labels - filter out metadata rows
-            for val in df.iloc[:, 0].tolist():
+            # First column is row labels - filter out metadata rows and embedded headers
+            for row_idx, val in enumerate(df.iloc[:, 0].tolist()):
                 if pd.notna(val):
                     val_str = str(val).strip()
                     # Skip metadata patterns
@@ -473,8 +665,12 @@ class ConsolidatedExcelExporter:
                         continue
                     if val_str.startswith('← Back') or val_str == 'Row Label':
                         continue
-                    if val_str.startswith('At ') and ('20' in val_str or 'March' in val_str or 'June' in val_str):
-                        continue  # Skip date headers like "At March 31, 2025"
+                    
+                    # Skip embedded header rows (sub-table headers like "Three Months Ended")
+                    row_values = df.iloc[row_idx].tolist() if row_idx < len(df) else []
+                    if self._is_embedded_header_row(val_str, row_values):
+                        continue
+                    
                     norm_val = self._normalize_row_label(val)
                     if norm_val and norm_val not in normalized_row_labels:
                         # Store original value for now - footnote cleaning happens at display time
@@ -482,30 +678,36 @@ class ConsolidatedExcelExporter:
                         row_labels.append(val_str)
             
             # Extract column data with ORIGINAL headers from source
-            # After slicing, the df structure is:
-            #   Row 0: Source: ... (metadata)
-            #   Row 1: Level 1 spanning headers (e.g., "", "", "", "", "%Change" or "Three Months Ended...")
-            #   Row 2: Level 2 sub-headers (e.g., "$ in millions", "2024", "2023")
-            #   Row 3+: Data rows
+            # Use dynamic header row detection instead of hardcoded indices
+            l1_row, l2_row, data_start = self._find_header_rows(df)
+            
+            # Track spanning L1 headers for cell merging later
+            current_l1_header = ''
+            l1_header_spans = {}  # {header: [start_col, end_col]}
             
             for col_idx in range(1, len(df.columns)):
-                # Get Level 1 header (from row 1 - spanning header row)
-                # L1 headers are like "Three Months Ended...", "Six Months Ended..."
-                # They span multiple columns, so we need to check if this column has a value
+                # Get Level 1 header (spanning header row)
                 level1_header = ''
-                if len(df) > 1:
-                    val = df.iloc[1, col_idx]
+                if l1_row is not None and l1_row < len(df):
+                    val = df.iloc[l1_row, col_idx]
                     if pd.notna(val) and str(val).strip() and str(val).strip() != 'nan':
                         val_str = ExcelUtils.clean_year_string(val)
                         # L1 headers are descriptive text, not currency values
                         if not (val_str.startswith('$') and any(c.isdigit() for c in val_str)):
                             level1_header = val_str
+                            current_l1_header = val_str
+                            # Start tracking this spanning header
+                            if val_str not in l1_header_spans:
+                                l1_header_spans[val_str] = [col_idx, col_idx]
+                    elif current_l1_header:
+                        # Empty cell - extend the current spanning header
+                        level1_header = current_l1_header
+                        l1_header_spans[current_l1_header][1] = col_idx
                 
-                # Get Level 2 header (from row 2 - sub-header row with dates/years)
-                # L2 headers are like "At December 31, 2024", "2024", "2023", "$ in millions"
+                # Get Level 2 header (sub-header row with dates/years)
                 level2_header = ''
-                if len(df) > 2:
-                    val = df.iloc[2, col_idx]
+                if l2_row is not None and l2_row < len(df):
+                    val = df.iloc[l2_row, col_idx]
                     if pd.notna(val) and str(val).strip() and str(val).strip() != 'nan':
                         val_str = ExcelUtils.clean_year_string(val)
                         level2_header = val_str
@@ -533,8 +735,15 @@ class ConsolidatedExcelExporter:
                 col_values = df.iloc[:, col_idx].tolist()
                 
                 row_data_map = {}
-                for row_label, value in zip(source_row_labels, col_values):
+                for row_idx, (row_label, value) in enumerate(zip(source_row_labels, col_values)):
                     if pd.notna(row_label):
+                        # Get full row values to detect embedded headers
+                        row_values = df.iloc[row_idx].tolist() if row_idx < len(df) else []
+                        
+                        # Skip embedded header rows (sub-table headers like "Three Months Ended")
+                        if self._is_embedded_header_row(row_label, row_values):
+                            continue
+                        
                         norm_row = self._normalize_row_label(row_label)
                         if norm_row:
                             row_data_map[norm_row] = value
