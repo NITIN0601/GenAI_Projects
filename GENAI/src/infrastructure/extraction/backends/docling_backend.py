@@ -10,28 +10,120 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Any, List, TYPE_CHECKING
 
+from functools import lru_cache
+
 from src.utils import get_logger
 
-# Lazy import to avoid downloading models on module import
-DocumentConverter = None
-DocItemLabel = None
-TableItem = None
-
-def _ensure_docling_imported():
-    """Lazy import of docling to avoid model downloads on module import."""
-    global DocumentConverter, DocItemLabel, TableItem
-    if DocumentConverter is None:
-        from docling.document_converter import DocumentConverter as DC
-        from docling_core.types.doc import DocItemLabel as DIL, TableItem as TI
-        DocumentConverter = DC
-        DocItemLabel = DIL
-        TableItem = TI
+# Lazy import using @lru_cache to avoid downloading models on module import
+@lru_cache(maxsize=1)
+def _get_docling_imports():
+    """
+    Lazy import of docling to avoid model downloads on module import.
+    Uses @lru_cache for thread-safe singleton pattern.
+    """
+    from docling.document_converter import DocumentConverter
+    from docling_core.types.doc import DocItemLabel, TableItem
+    return DocumentConverter, DocItemLabel, TableItem
 
 from src.infrastructure.extraction.base import ExtractionBackend, ExtractionResult, BackendType
 from src.infrastructure.embeddings.chunking import TableChunker
 from src.utils.extraction_utils import PDFMetadataExtractor, DoclingHelper
 
 logger = get_logger(__name__)
+
+
+# =============================================================================
+# MODULE-LEVEL HELPER FUNCTIONS (extracted from _extract_table_chunks)
+# =============================================================================
+
+def _clean_cell_internal_duplicate(cell_text: str) -> str:
+    """Remove duplicated text within a single cell (e.g., 'Text A Text A' -> 'Text A')."""
+    cell_stripped = cell_text.strip()
+    if not cell_stripped or len(cell_stripped) < 10:
+        return cell_text  # Too short to have meaningful duplicate
+    
+    # Check if cell contains the same text twice
+    half_len = len(cell_stripped) // 2
+    first_half = cell_stripped[:half_len].strip()
+    second_half = cell_stripped[half_len:].strip()
+    
+    if first_half and first_half == second_half:
+        # Return only the first half, preserving original spacing
+        leading_space = len(cell_text) - len(cell_text.lstrip())
+        return ' ' * leading_space + first_half
+    
+    return cell_text
+
+
+def clean_row_header_duplicates(md_text: str) -> str:
+    """
+    Remove duplicate row header cells caused by Docling's colspan handling.
+    
+    Handles two patterns:
+    1. Adjacent cells: | Text | Text | $100 | → | Text |  | $100 |
+    2. Within a cell:  | Text Text | $100 | → | Text |  | $100 |
+    
+    Only affects the first column (row headers). Data columns are never touched.
+    """
+    lines = md_text.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        # Skip non-table lines and separator rows
+        if '|' not in line or all(c in '|-: ' for c in line.strip()):
+            cleaned_lines.append(line)
+            continue
+        
+        cells = line.split('|')
+        
+        # Need at least 3 cells (empty + first col + second col + ...)
+        if len(cells) < 4:
+            cleaned_lines.append(line)
+            continue
+        
+        first_cell = cells[1].strip()
+        second_cell = cells[2].strip() if len(cells) > 2 else ''
+        
+        # Pattern 1: Check for duplicated text WITHIN the first cell
+        cleaned_first = _clean_cell_internal_duplicate(cells[1])
+        if cleaned_first != cells[1]:
+            cells[1] = cleaned_first
+            cells.insert(2, ' ')
+            logger.debug(f"Cleaned internal duplicate: '{first_cell[:40]}...'")
+        # Pattern 2: Check for adjacent cells with identical content
+        elif (first_cell and 
+              second_cell == first_cell and 
+              len(first_cell) > 3 and 
+              not first_cell.replace(',', '').replace('.', '').replace('$', '').replace('%', '').isdigit()):
+            cells[2] = ' '
+            logger.debug(f"Cleaned duplicate row header: '{first_cell[:40]}...'")
+        
+        cleaned_lines.append('|'.join(cells))
+    
+    return '\n'.join(cleaned_lines)
+
+
+def _table_has_spanning_header(md_text: str) -> bool:
+    """Check if table already has a spanning date/period header row."""
+    import re
+    lines = md_text.strip().split('\n')
+    if not lines:
+        return True  # Empty - nothing to add
+    
+    first_row = lines[0]
+    has_year = bool(re.search(r'\b20[0-3]\d\b', first_row))
+    has_period = any(ind in first_row.lower() for ind in 
+                   ['ended', 'ending', 'months', 'as of', 'at '])
+    return has_year and has_period
+
+
+def _count_columns(md_text: str) -> int:
+    """Count columns in markdown table."""
+    lines = md_text.strip().split('\n')
+    for line in lines:
+        if '|' in line and not all(c in '|-: ' for c in line):
+            return line.count('|') - 1  # Pipes minus outer ones
+    return 0
 
 
 class DoclingBackend(ExtractionBackend):
@@ -56,11 +148,13 @@ class DoclingBackend(ExtractionBackend):
         Args:
             flatten_headers: Flatten multi-line headers
         """
+        from config.settings import settings
+        
         self.flatten_headers = flatten_headers
         # Use very large chunk_size to pass tables through without splitting
         # Actual chunking for embeddings happens in the embed pipeline
         self.chunker = TableChunker(
-            chunk_size=100000,  # Effectively no chunking
+            chunk_size=settings.DOCLING_CHUNK_SIZE,  # Configurable via .env
             overlap=0,
             flatten_headers=flatten_headers
         )
@@ -77,8 +171,8 @@ class DoclingBackend(ExtractionBackend):
         Returns:
             ExtractionResult with tables and metadata
         """
-        # Lazy import docling when actually needed
-        _ensure_docling_imported()
+        # Lazy import docling when actually needed (uses lru_cache for efficiency)
+        DocumentConverter, DocItemLabel, TableItem = _get_docling_imports()
         
         start_time = time.time()
         result = ExtractionResult(
@@ -131,8 +225,14 @@ class DoclingBackend(ExtractionBackend):
             result.tables = [self._chunk_to_dict(chunk) for chunk in all_chunks]
             result.page_count = len(set(chunk.metadata.page_no for chunk in all_chunks))
             
+            # Track failed tables for monitoring (count warnings from table failures)
+            failed_count = len([w for w in result.warnings if 'extraction failed' in w])
+            if failed_count > 0:
+                result.metadata['failed_tables_count'] = failed_count
+                logger.warning(f"{failed_count}/{len(tables)} tables failed to extract")
+            
             # Extract metadata
-            result.metadata = self._extract_metadata(pdf_path, doc)
+            result.metadata = {**self._extract_metadata(pdf_path, doc), **result.metadata}
             
             # Clear TOC cache for this document to free memory
             # (once xlsx is written, we don't need the in-memory TOC anymore)
@@ -182,39 +282,21 @@ class DoclingBackend(ExtractionBackend):
         else:
             raw_table_text = str(table_item.text)
         
+        # === POST-PROCESS: Clean duplicate row headers from colspan handling ===
+        # Docling's export_to_markdown duplicates cell content when a row header
+        # has colspan attribute. Uses module-level clean_row_header_duplicates function.
+        raw_table_text = clean_row_header_duplicates(raw_table_text)
+        
         # === POST-PROCESS: Detect and add missing spanning headers ===
         # If the table's first row doesn't look like a spanning header (date/period),
         # check if there's a preceding TEXT item that should be the spanning header.
-        def table_has_spanning_header(md_text: str) -> bool:
-            """Check if table already has a spanning date/period header row."""
-            import re
-            lines = md_text.strip().split('\n')
-            if not lines:
-                return True  # Empty - nothing to add
-            
-            first_row = lines[0]
-            # Check for date patterns in first row
-            has_year = bool(re.search(r'\b20[0-3]\d\b', first_row))
-            has_period = any(ind in first_row.lower() for ind in 
-                           ['ended', 'ending', 'months', 'as of', 'at '])
-            return has_year and has_period
-        
-        def count_columns(md_text: str) -> int:
-            """Count columns in markdown table."""
-            lines = md_text.strip().split('\n')
-            for line in lines:
-                if '|' in line and not all(c in '|-: ' for c in line):
-                    return line.count('|') - 1  # Pipes minus outer ones
-            return 0
-        
-        # Check if table needs a spanning header
-        if not table_has_spanning_header(raw_table_text):
+        if not _table_has_spanning_header(raw_table_text):
             # Try to find a preceding TEXT item that's the missing header
             preceding_header = DoclingHelper.find_preceding_spanning_header(
                 doc, table_item, page_no
             )
             if preceding_header:
-                num_cols = count_columns(raw_table_text)
+                num_cols = _count_columns(raw_table_text)
                 raw_table_text = DoclingHelper.prepend_spanning_header(
                     raw_table_text, preceding_header, num_cols
                 )

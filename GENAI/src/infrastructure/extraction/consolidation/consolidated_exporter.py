@@ -23,8 +23,14 @@ from src.utils import get_logger
 from src.core import get_paths
 from src.utils.date_utils import DateUtils
 from src.utils.excel_utils import ExcelUtils
+from config.settings import settings
 
 logger = get_logger(__name__)
+
+# =============================================================================
+# CONSTANTS (from settings for .env configurability)
+# =============================================================================
+VALID_YEAR_RANGE = (settings.EXTRACTION_YEAR_MIN, settings.EXTRACTION_YEAR_MAX)
 
 
 class ConsolidatedExcelExporter:
@@ -45,6 +51,41 @@ class ConsolidatedExcelExporter:
         # Ensure directories exist
         self.processed_dir.mkdir(parents=True, exist_ok=True)
         self.extracted_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _parse_year_quarter_from_source(self, source: str) -> Tuple[str, str]:
+        """
+        Parse year and quarter from source filename pattern.
+        
+        Patterns:
+        - 10k1224.pdf → 2024, Q4 (10-K filed Dec 2024)
+        - 10q0325.pdf → 2025, Q1 (10-Q filed Mar 2025) 
+        - 10q0624.pdf → 2024, Q2 (10-Q filed Jun 2024)
+        
+        Args:
+            source: Source filename (e.g., '10k1224.pdf', '10q0325_tables')
+            
+        Returns:
+            Tuple of (year, quarter) where quarter is 'Q4' for 10-K or 'Q1'-'Q4' for 10-Q
+        """
+        # Pattern: 10k MMYY or 10q MMYY
+        match = re.search(r'(10[kq])(\d{2})(\d{2})', source.lower())
+        if match:
+            report_type = match.group(1)  # 10k or 10q
+            month = int(match.group(2))
+            year = 2000 + int(match.group(3))
+            
+            if report_type == '10k':
+                return str(year), 'Q4'
+            else:
+                # Map month to quarter
+                quarter_map = {3: 'Q1', 6: 'Q2', 9: 'Q3', 12: 'Q4', 1: 'Q4', 2: 'Q4'}
+                # Handle edge cases: Jan/Feb filings are typically Q4 of previous year
+                if month in [1, 2]:
+                    year -= 1
+                quarter = quarter_map.get(month, f'Q{(month-1)//3 + 1}')
+                return str(year), quarter
+        
+        return '', ''
     
     def merge_processed_files(
         self,
@@ -97,11 +138,32 @@ class ConsolidatedExcelExporter:
             logger.warning("No tables collected for merging")
             return {}
         
-        # Assign numeric sheet names (1, 2, 3...) like individual xlsx files
+        # PASS 1: Evaluate which tables have data (without creating sheets)
+        # This prevents gaps in sheet numbering
+        non_empty_tables = {}
+        for normalized_key, tables in all_tables_by_full_title.items():
+            if self._evaluate_table_has_data(tables, transpose=transpose):
+                non_empty_tables[normalized_key] = tables
+        
+        logger.info(f"Found {len(non_empty_tables)} non-empty tables out of {len(all_tables_by_full_title)}")
+        
+        # Sort tables by page number for TOC-based ordering
+        # Use minimum page number from any source, then section, then title
+        def get_sort_key(k):
+            mapping = title_to_sheet_name.get(k, {})
+            min_page = mapping.get('min_page', 9999)
+            return (
+                min_page,
+                mapping.get('section', ''),
+                mapping.get('original_title', k)
+            )
+        
+        sorted_keys = sorted(non_empty_tables.keys(), key=get_sort_key)
+        
+        # Assign sheet numbers ONLY to non-empty tables (no gaps)
         sheet_number = 1
-        for normalized_key in all_tables_by_full_title.keys():
+        for normalized_key in sorted_keys:
             mapping = title_to_sheet_name.get(normalized_key, {})
-            # Use simple numeric ID as sheet name
             mapping['unique_sheet_name'] = str(sheet_number)
             title_to_sheet_name[normalized_key] = mapping
             sheet_number += 1
@@ -111,36 +173,52 @@ class ConsolidatedExcelExporter:
         
         try:
             with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-                # Create Master Index
-                self._create_consolidated_index(writer, all_tables_by_full_title, title_to_sheet_name)
-                
-                # Create merged sheets
-                for normalized_key, tables in all_tables_by_full_title.items():
+                # PASS 2: Create sheets only for non-empty tables
+                # Track which sheets are successfully created
+                created_tables = {}
+                for normalized_key in sorted_keys:
+                    tables = non_empty_tables[normalized_key]
                     mapping = title_to_sheet_name.get(normalized_key, {})
                     sheet_name = mapping.get('unique_sheet_name')
                     if sheet_name:
-                        self._create_merged_table_sheet(writer, sheet_name, tables, transpose=transpose)
+                        sheet_created = self._create_merged_table_sheet(writer, sheet_name, tables, transpose=transpose)
+                        if sheet_created:
+                            created_tables[normalized_key] = tables
+                        else:
+                            logger.debug(f"Sheet {sheet_name} was not created (no data after processing)")
+                
+                # Create Index with ONLY successfully created sheets
+                self._create_consolidated_index(writer, created_tables, title_to_sheet_name)
             
             # Add hyperlinks
-            self._add_hyperlinks(output_path, all_tables_by_full_title, title_to_sheet_name)
+            self._add_hyperlinks(output_path, created_tables, title_to_sheet_name)
             
             # Apply currency formatting to numeric cells
-            self._apply_currency_format(output_path, all_tables_by_full_title, title_to_sheet_name)
+            self._apply_currency_format(output_path, created_tables, title_to_sheet_name)
+            
+            # Validate Index links match sheet names
+            validation_result = self._validate_index_sheet_links(output_path)
+            if not validation_result['valid']:
+                logger.warning(f"Validation failed - missing sheets: {validation_result['missing_sheets']}")
+            else:
+                logger.info("Validation passed: all Index links have matching sheets")
             
             logger.info(f"Created consolidated report at {output_path}")
-            logger.info(f"  - Tables merged: {len(all_tables_by_full_title)}")
+            logger.info(f"  - Tables merged: {len(created_tables)}")
             logger.info(f"  - Sources: {len(xlsx_files)}")
             
             return {
                 'path': str(output_path),
-                'tables_merged': len(all_tables_by_full_title),
+                'tables_merged': len(created_tables),
                 'sources_merged': len(xlsx_files),
-                'sheet_names': [m.get('unique_sheet_name', '') for m in title_to_sheet_name.values()]
+                'sheet_names': [title_to_sheet_name[k].get('unique_sheet_name', '') for k in created_tables.keys()],
+                'validation': validation_result
             }
             
         except Exception as e:
             logger.error(f"Failed to create consolidated report: {e}", exc_info=True)
             return {}
+
     
     def _process_xlsx_file(
         self,
@@ -177,26 +255,57 @@ class ConsolidatedExcelExporter:
             if len(matching_rows) > 0:
                 row = matching_rows.iloc[0]
                 section = str(row.get('Section', '')) if 'Section' in row.index else ''
+                source_name = str(row.get('Source', Path(xlsx_path).stem))
+                
+                # Get year/quarter from Index columns, or parse from filename
+                year_val = row.get('Year', '')
+                quarter_val = row.get('Quarter', '')
+                
+                # If year/quarter not in Index, parse from source filename
+                if not year_val or str(year_val) in ['', 'nan', 'NaN']:
+                    parsed_year, parsed_quarter = self._parse_year_quarter_from_source(source_name)
+                    year_val = parsed_year
+                    quarter_val = parsed_quarter
+                
                 metadata = {
-                    'source': row.get('Source', Path(xlsx_path).stem),
-                    'year': row.get('Year', ''),
-                    'quarter': row.get('Quarter', ''),
-                    'report_type': self._detect_report_type(str(row.get('Source', ''))),
+                    'source': source_name,
+                    'year': year_val,
+                    'quarter': quarter_val,
+                    'report_type': self._detect_report_type(source_name),
                     'section': section,
+                    'page': row.get('PageNo', ''),
                 }
             else:
                 section = ''
+                source_name = Path(xlsx_path).stem
+                # Parse year/quarter from filename
+                parsed_year, parsed_quarter = self._parse_year_quarter_from_source(source_name)
+                
                 metadata = {
-                    'source': Path(xlsx_path).stem,
-                    'year': '',
-                    'quarter': '',
-                    'report_type': '',
+                    'source': source_name,
+                    'year': parsed_year,
+                    'quarter': parsed_quarter,
+                    'report_type': self._detect_report_type(source_name),
                     'section': '',
+                    'page': '',
                 }
             
             # Read table content (skip header rows)
             try:
                 table_df = pd.read_excel(xlsx_path, sheet_name=sheet_name, header=None)
+                
+                # Extract Main Header (Level 0) from source metadata if present
+                main_header = ''
+                for idx in range(min(10, len(table_df))):  # Metadata is in first 10 rows
+                    first_cell = str(table_df.iloc[idx, 0]) if pd.notna(table_df.iloc[idx, 0]) else ''
+                    # Check for both old and new label names
+                    if first_cell.startswith('Main Header:') or first_cell.startswith('Column Header (Level 0):'):
+                        # Extract value after the colon
+                        main_header = first_cell.split(':', 1)[1].strip() if ':' in first_cell else ''
+                        break
+                
+                # Store main_header in metadata for consolidated output
+                metadata['main_header'] = main_header
                 
                 # Dynamically find where data starts by looking for "Source:" row
                 # Individual xlsx structure:
@@ -257,6 +366,19 @@ class ConsolidatedExcelExporter:
                             continue
                         if r_lower.startswith('$ in'): 
                             continue
+                        # Skip metadata row patterns (these vary between files)
+                        if r_lower.startswith('row header'):
+                            continue
+                        if r_lower.startswith('column header'):
+                            continue
+                        if r_lower.startswith('product/entity'):
+                            continue
+                        if r_lower.startswith('table title'):
+                            continue
+                        if r_lower.startswith('year(s)'):
+                            continue
+                        if r_lower.startswith('← back'):
+                            continue
                         # Skip embedded header patterns
                         if self._is_embedded_header_row(r_clean, []):
                             continue
@@ -272,10 +394,14 @@ class ConsolidatedExcelExporter:
                     normalized_title = self._normalize_title_for_grouping(full_title)
                     subtable_suffix = f"::sub{subtable_idx}" if len(subtables) > 1 else ""
                     
+                    # Use full row signature to ensure exact structure matching
+                    # Tables with any row differences will remain separate
+                    row_sig_full = "|".join(norm_rows)
+                    
                     if section and section.strip():
-                        normalized_key = f"{section.strip()}::{normalized_title}{subtable_suffix}::{row_sig}"
+                        normalized_key = f"{section.strip()}::{normalized_title}{subtable_suffix}::{row_sig_full}"
                     else:
-                        normalized_key = f"Default::{normalized_title}{subtable_suffix}::{row_sig}"
+                        normalized_key = f"Default::{normalized_title}{subtable_suffix}::{row_sig_full}"
                     
                     all_tables_by_full_title[normalized_key].append({
                         'data': subtable_df,
@@ -296,11 +422,52 @@ class ConsolidatedExcelExporter:
                         else:
                             display_with_section = clean_display
                         
+                        # Parse page number for sorting (prefer 10-Q over 10-K for TOC order)
+                        page_val = metadata.get('page', '')
+                        report_type = metadata.get('report_type', '')
+                        is_10q = '10-Q' in str(report_type).upper() or '10q' in str(metadata.get('source', '')).lower()
+                        
+                        try:
+                            page_num = int(page_val) if page_val and str(page_val) != 'nan' else 9999
+                        except (ValueError, TypeError):
+                            page_num = 9999
+                        
                         title_to_sheet_name[normalized_key] = {
                             'display_title': display_with_section,
                             'section': section.strip() if section else '',
                             'original_title': full_title,
+                            'min_page': page_num,  # For TOC-based sorting
+                            'has_10q_page': is_10q,  # Prefer 10-Q page numbers
                         }
+                    else:
+                        # Update min_page: prefer 10-Q pages over 10-K pages
+                        page_val = metadata.get('page', '')
+                        report_type = metadata.get('report_type', '')
+                        is_10q = '10-Q' in str(report_type).upper() or '10q' in str(metadata.get('source', '')).lower()
+                        
+                        try:
+                            page_num = int(page_val) if page_val and str(page_val) != 'nan' else 9999
+                        except (ValueError, TypeError):
+                            page_num = 9999
+                        
+                        existing_entry = title_to_sheet_name[normalized_key]
+                        existing_has_10q = existing_entry.get('has_10q_page', False)
+                        existing_min = existing_entry.get('min_page', 9999)
+                        
+                        # Priority: 10-Q page > 10-K page (regardless of page number)
+                        if is_10q and not existing_has_10q:
+                            # Replace with 10-Q page
+                            existing_entry['min_page'] = page_num
+                            existing_entry['has_10q_page'] = True
+                        elif is_10q and existing_has_10q:
+                            # Both are 10-Q, use min page
+                            if page_num < existing_min:
+                                existing_entry['min_page'] = page_num
+                        elif not is_10q and not existing_has_10q:
+                            # Both are 10-K, use min page
+                            if page_num < existing_min:
+                                existing_entry['min_page'] = page_num
+                        # If existing is 10-Q and new is 10-K, keep existing
                     
             except Exception as e:
                 logger.debug(f"Skipping sheet {sheet_name}: {e}")
@@ -333,6 +500,107 @@ class ConsolidatedExcelExporter:
         """
         return ExcelUtils.clean_currency_value(val)
     
+    def _evaluate_table_has_data(self, tables: List[Dict[str, Any]], transpose: bool = False) -> bool:
+        """
+        Evaluate if merged tables would have data (without creating a sheet).
+        
+        This mirrors the logic in _create_merged_table_sheet but only checks 
+        if columns with data exist.
+        
+        Args:
+            tables: List of table dictionaries to merge
+            transpose: If True, check for transpose format
+            
+        Returns:
+            True if merged table would have data, False otherwise
+        """
+        if not tables:
+            return False
+        
+        all_columns = {}
+        
+        for table_info in tables:
+            df = table_info['data']
+            meta = table_info['metadata']
+            
+            if df.empty or len(df.columns) < 2:
+                continue
+            
+            # Check for data columns (simplified version of _create_merged_table_sheet logic)
+            l1_row, l2_row, data_start = self._find_header_rows(df)
+            
+            for col_idx in range(1, len(df.columns)):
+                # Get column header
+                header = ''
+                if l2_row is not None and l2_row < len(df):
+                    val = df.iloc[l2_row, col_idx]
+                    if pd.notna(val) and str(val).strip() and str(val).strip() != 'nan':
+                        header = ExcelUtils.clean_year_string(str(val))
+                
+                if not header:
+                    header = f"Col_{col_idx}"
+                
+                # Check if column has actual data values
+                col_values = df.iloc[:, col_idx].tolist()
+                non_empty = [v for v in col_values if pd.notna(v) and str(v).strip() and str(v).strip() != 'nan']
+                # Filter out header-like values
+                non_empty = [x for x in non_empty if str(x).strip() != header]
+                non_empty = [x for x in non_empty if not (
+                    str(x).startswith('$') and 'in' in str(x).lower() or
+                    str(x).isdigit() and len(str(x)) == 4 and 2000 <= int(str(x)) <= 2099
+                )]
+                
+                if non_empty:
+                    all_columns[header] = True
+        
+        return len(all_columns) > 0
+    
+    def _validate_index_sheet_links(self, output_path: Path) -> dict:
+        """
+        Verify all Index links have matching sheets.
+        
+        Args:
+            output_path: Path to the consolidated xlsx file
+            
+        Returns:
+            Dict with missing_sheets, orphan_sheets, and valid flag
+        """
+        try:
+            from openpyxl import load_workbook
+            
+            wb = load_workbook(output_path)
+            sheet_names = set(wb.sheetnames) - {'Index'}
+            
+            index_df = pd.read_excel(output_path, sheet_name='Index')
+            
+            # Extract link values (removing → prefix)
+            link_values = set()
+            for link in index_df['Link'].dropna().astype(str).tolist():
+                clean_link = link.replace('→ ', '').strip()
+                if clean_link:
+                    link_values.add(clean_link)
+            
+            missing_sheets = link_values - sheet_names
+            orphan_sheets = sheet_names - link_values
+            
+            return {
+                'missing_sheets': missing_sheets,
+                'orphan_sheets': orphan_sheets,
+                'valid': len(missing_sheets) == 0,
+                'total_links': len(link_values),
+                'total_sheets': len(sheet_names)
+            }
+            
+        except Exception as e:
+            logger.error(f"Validation error: {e}")
+            return {
+                'missing_sheets': set(),
+                'orphan_sheets': set(),
+                'valid': False,
+                'error': str(e)
+            }
+
+    
     def _is_embedded_header_row(self, row_label: str, row_values: list) -> bool:
         """
         Detect if a row is an embedded sub-table header rather than a data row.
@@ -346,27 +614,28 @@ class ConsolidatedExcelExporter:
         """
         label_lower = str(row_label).strip().lower() if row_label else ''
         
-        # Pattern 1: Row label contains date period patterns
-        header_patterns = [
-            'three months ended',
-            'six months ended',
-            'nine months ended',
-            'twelve months ended',
-            'fiscal year ended',
-            'year ended',
-            'at march', 'at june', 'at september', 'at december',
-            'at january', 'at february', 'at april', 'at may',
-            'at july', 'at august', 'at october', 'at november',
+        # Pattern 0: Metadata row patterns (these should ALWAYS be filtered)
+        metadata_patterns = [
+            'column header', 'row header', 'year/quarter', 'year(s):', 
+            'table title:', 'source:', 'product/entity:'
         ]
-        for pattern in header_patterns:
+        for pattern in metadata_patterns:
             if pattern in label_lower:
                 return True
         
-        # Pattern 2: Row label is just a year (2020-2030)
-        if label_lower.isdigit() and len(label_lower) == 4:
-            year = int(label_lower)
-            if 2020 <= year <= 2030:
+        # Import domain patterns from centralized config
+        from src.utils.domain_patterns import (
+            DATE_HEADER_PATTERNS, VALID_YEAR_RANGE, is_year_value
+        )
+        
+        # Pattern 1: Row label contains date period patterns
+        for pattern in DATE_HEADER_PATTERNS:
+            if pattern in label_lower:
                 return True
+        
+        # Pattern 2: Row label is just a year (within valid range)
+        if is_year_value(label_lower):
+            return True
         
         # Pattern 3: All values in the row look like headers (dates, years, or empty)
         # This catches year rows like ["2024", "2023", "2024", "2023"]
@@ -374,8 +643,8 @@ class ConsolidatedExcelExporter:
             non_empty_vals = [str(v).strip() for v in row_values if pd.notna(v) and str(v).strip()]
             if non_empty_vals:
                 all_look_like_headers = all(
-                    (v.isdigit() and len(v) == 4 and 2020 <= int(v) <= 2030) or  # Years
-                    any(p in v.lower() for p in ['ended', 'at ', 'march', 'june', 'september', 'december']) or  # Date text
+                    is_year_value(v) or  # Years
+                    any(p in v.lower() for p in DATE_HEADER_PATTERNS) or  # Date text
                     v.lower() in ['nan', '']
                     for v in non_empty_vals
                 )
@@ -449,7 +718,7 @@ class ConsolidatedExcelExporter:
                 continue
             
             # Check if first cell is a year (L2 header)
-            if first_cell.isdigit() and len(first_cell) == 4 and 2020 <= int(first_cell) <= 2030:
+            if first_cell.isdigit() and len(first_cell) == 4 and VALID_YEAR_RANGE[0] <= int(first_cell) <= VALID_YEAR_RANGE[1]:
                 if l2_row is None:
                     l2_row = i
                 continue
@@ -485,7 +754,7 @@ class ConsolidatedExcelExporter:
                 # Empty first cell with years in other cells
                 other_cells = [str(v).strip() for v in next_row.iloc[1:].tolist() if pd.notna(v) and str(v).strip()]
                 if other_cells and all(
-                    (c.isdigit() and len(c) == 4 and 2020 <= int(c) <= 2030) or
+                    (c.isdigit() and len(c) == 4 and VALID_YEAR_RANGE[0] <= int(c) <= VALID_YEAR_RANGE[1]) or
                     c.lower() in ['nan', '']
                     for c in other_cells
                 ):
@@ -536,7 +805,7 @@ class ConsolidatedExcelExporter:
                 if meta.get('report_type'):
                     report_types.add(str(meta['report_type']))
                 
-                # Build source reference: Q1,2025_page or FY2024_page
+                # Build source reference: Q1,2025_page or Q4,2024_page
                 year_val = str(int(meta['year'])) if isinstance(meta.get('year'), float) else str(meta.get('year', ''))
                 quarter_val = str(meta.get('quarter', ''))
                 page_val = str(meta.get('page', ''))
@@ -544,7 +813,7 @@ class ConsolidatedExcelExporter:
                 if quarter_val and year_val:
                     ref = f"{quarter_val},{year_val}"
                 elif year_val:
-                    ref = f"FY{year_val}"
+                    ref = f"Q4,{year_val}"
                 else:
                     ref = str(meta.get('source', 'Unknown'))[:10]
                 
@@ -586,49 +855,34 @@ class ConsolidatedExcelExporter:
             })
         
         df = pd.DataFrame(index_data)
-        # Sort by Section, then by Table Title
-        df = df.sort_values(['Section', 'Table Title'])
-        # Re-number after sorting and set Link to match #
+        # Keep the order from input (already sorted by page number in merge_processed_files)
+        # Set # to row number for display (1-based)
         df['#'] = range(1, len(df) + 1)
-        df['Link'] = df['#'].astype(str)
         
-        # Update title_to_sheet_name with new numeric sheet names based on sorted order
-        for idx, row in df.iterrows():
-            normalized_key = row['_normalized_key']
-            sheet_num = str(row['#'])
-            if normalized_key in title_to_sheet_name:
-                title_to_sheet_name[normalized_key]['unique_sheet_name'] = sheet_num
+        # Set Link to use the PRE-ASSIGNED sheet name from title_to_sheet_name
+        # (NOT re-numbering based on sorted position)
+        df['Link'] = df['_normalized_key'].map(
+            lambda k: title_to_sheet_name.get(k, {}).get('unique_sheet_name', '')
+        )
         
         # Drop the hidden column before saving
         df = df.drop(columns=['_normalized_key'])
         df.to_excel(writer, sheet_name='Index', index=False)
+
         
-        # Auto-adjust column widths
+        # Auto-adjust column widths (using settings for configurability)
         worksheet = writer.sheets['Index']
         for idx, col in enumerate(df.columns):
             col_letter = self._get_column_letter(idx)
             max_content_len = df[col].astype(str).map(len).max() if len(df) > 0 else 0
             header_len = len(col)
-            max_len = max(max_content_len, header_len) + 2
+            calculated_len = max(max_content_len, header_len) + 2
             
-            if col == '#':
-                max_len = 5
-            elif col == 'Section':
-                max_len = min(max_len, 35)
-            elif col == 'Table Title':
-                max_len = min(max_len, 50)
-            elif col == 'TableCount':
-                max_len = 10
-            elif col == 'Sources':
-                max_len = min(max_len, 45)  # Wider for Q1,2025_p48 format
-            elif col == 'Report Types':
-                max_len = min(max_len, 15)
-            elif col in ['Years', 'Quarters']:
-                max_len = min(max_len, 20)
-            elif col == 'Link':
-                max_len = min(max_len, 32)
-            else:
-                max_len = min(max_len, 20)
+            # Use configured width from settings, or default
+            configured_width = settings.INDEX_COLUMN_WIDTHS.get(
+                col, settings.INDEX_COLUMN_WIDTHS.get('_default', 20)
+            )
+            max_len = min(calculated_len, configured_width) if col != '#' else configured_width
             
             worksheet.column_dimensions[col_letter].width = max_len
     
@@ -638,10 +892,14 @@ class ConsolidatedExcelExporter:
         title: str,
         tables: List[Dict[str, Any]],
         transpose: bool = False
-    ) -> None:
-        """Create merged sheet with tables from multiple sources."""
+    ) -> bool:
+        """Create merged sheet with tables from multiple sources.
+        
+        Returns:
+            True if sheet has data, False if empty (sheet not created)
+        """
         if not tables:
-            return
+            return False
         
         all_columns = {}
         row_labels = []
@@ -760,13 +1018,24 @@ class ConsolidatedExcelExporter:
                 if not non_empty_data:
                     continue
                 
-                # Check for duplicates
+                # Check for duplicates - skip if SAME header AND same data already exists
+                # This prevents multiple "At December 31, 2024" columns with identical data
                 is_duplicate = False
                 col_data_str = str(sorted([(k, str(v).strip()) for k, v in row_data_map.items()]))
                 
                 for existing_key, existing_val in all_columns.items():
                     existing_data_str = str(sorted([(k, str(v).strip()) for k, v in existing_val.get('row_data_map', {}).items()]))
+                    existing_header = existing_val.get('header', '').lower().strip()
+                    
+                    # Duplicate if: same header OR same data
+                    # This catches:
+                    # 1. Same period from different sources with same data
+                    # 2. Same data with slightly different header text
                     if col_data_str == existing_data_str:
+                        is_duplicate = True
+                        break
+                    # Also check if header matches (same period, different data would still be kept)
+                    if existing_header == norm_header and col_data_str == existing_data_str:
                         is_duplicate = True
                         break
                 
@@ -787,14 +1056,15 @@ class ConsolidatedExcelExporter:
                     }
         
         if not all_columns:
-            pd.DataFrame([{'← Back to Index': ''}]).to_excel(writer, sheet_name=title, index=False)
-            return
+            # Don't create empty sheets - just return False
+            return False
         
-        # Sort columns by date (DESCENDING - newest first)
+        # Sort columns by date (ASCENDING - chronological order: oldest first)
+        # e.g., Dec 2024, Mar 2025, Jun 2025, Sep 2025
         sorted_cols = sorted(
             all_columns.items(),
             key=lambda x: x[1]['sort_key'],
-            reverse=True  # Newest first
+            reverse=False  # Oldest first (chronological)
         )
         
         # Build result dataframe
@@ -823,8 +1093,19 @@ class ConsolidatedExcelExporter:
             used_headers.add(header.lower())
             
             # Store Level 1 and Level 2 headers
-            level1_headers.append(level1 if level1 else '')
-            level2_headers.append(level2 if level2 else header)  # Fallback to combined header
+            # If L1 is the same as L2 (both are just years), set L1 to empty to avoid duplication
+            l1_val = ExcelUtils.ensure_string_header(level1) if level1 else ''
+            l2_val = ExcelUtils.ensure_string_header(level2) if level2 else header
+            
+            # If L1 is just a year (same as L2), clear it to avoid duplicate headers
+            if l1_val and l2_val and l1_val == l2_val:
+                l1_val = ''
+            # If L1 is a year and L2 is also a year, L1 should be empty
+            if l1_val and l1_val.isdigit() and len(l1_val) == 4:
+                l1_val = ''  # Years belong in L2 only
+            
+            level1_headers.append(l1_val)
+            level2_headers.append(l2_val)
             
             col_data = []
             for original_label in row_labels:
@@ -835,12 +1116,26 @@ class ConsolidatedExcelExporter:
                 # Also clean year floats (2024.0 -> '2024')
                 if isinstance(cleaned_value, str):
                     cleaned_value = ExcelUtils.clean_cell_value(cleaned_value)
+                # Ensure numeric values are float (not int) for table data
+                elif isinstance(cleaned_value, int):
+                    cleaned_value = float(cleaned_value)
                 col_data.append(cleaned_value)
             
             result_data[header] = col_data
         
         # Store header info for later cell merging
-        self._last_level1_headers = level1_headers
+        # Deduplicate adjacent identical Level 1 headers (keep first, empty rest)
+        # e.g., ["At Dec 31, 2024", "At Dec 31, 2024", "At Dec 31, 2024"] -> ["At Dec 31, 2024", "", ""]
+        deduped_level1 = []
+        prev_l1 = None
+        for l1 in level1_headers:
+            if l1 and l1 == prev_l1:
+                deduped_level1.append('')  # Duplicate - empty it
+            else:
+                deduped_level1.append(l1)
+                prev_l1 = l1 if l1 else prev_l1
+        
+        self._last_level1_headers = deduped_level1
         self._last_level2_headers = level2_headers
         
         result_df = pd.DataFrame(result_data)
@@ -864,6 +1159,12 @@ class ConsolidatedExcelExporter:
         all_sources = sorted(set(t['metadata'].get('source', '') for t in tables if t['metadata'].get('source')))
         all_years = sorted(set(str(t['metadata'].get('year', '')) for t in tables if t['metadata'].get('year')), reverse=True)
         all_quarters = sorted(set(str(t['metadata'].get('quarter', '')) for t in tables if t['metadata'].get('quarter')))
+        # Collect Main Headers from source tables (Level 0 spanning headers like "Average Monthly Balance")
+        all_main_headers = sorted(set(
+            str(t['metadata'].get('main_header', '')).strip() 
+            for t in tables 
+            if t['metadata'].get('main_header') and str(t['metadata'].get('main_header')).strip()
+        ))
         original_title = tables[0].get('original_title', title) if tables else title
         section = tables[0].get('section', '') if tables else ''
         
@@ -928,29 +1229,36 @@ class ConsolidatedExcelExporter:
         # Row 0: Back link
         metadata_rows.append({first_col: '← Back to Index'})
         
-        # Row 1: Row Header (Level 1) - section headers (rows where first cell has text, rest empty)
+        # Row 1: Category (Parent) - section headers (formerly Row Header Level 1)
         row_l1_display = ', '.join(row_headers_l1[:5]) if row_headers_l1 else ''
-        metadata_rows.append({first_col: f"Row Header (Level 1): {row_l1_display}"})
+        metadata_rows.append({first_col: f"Category (Parent): {row_l1_display}"})
         
-        # Row 2: Row Header (Level 2) - data row labels
-        metadata_rows.append({first_col: f"Row Header (Level 2): {', '.join(row_headers_l2[:10])}"})
+        # Row 2: Line Items - data row labels (formerly Row Header Level 2)
+        metadata_rows.append({first_col: f"Line Items: {', '.join(row_headers_l2[:10])}"})
         
         # Row 3: Product/Entity (unique elements from L2 row headers)
         metadata_rows.append({first_col: f"Product/Entity: {', '.join(products)}"})
         
-        # Row 4: Column Header (Level 1) - spanning headers like "Three Months Ended..."
+        # Row 4: Main Header - top-level spanning header (Level 0), only if present
+        if all_main_headers:
+            main_header_str = ', '.join(all_main_headers[:3])  # Limit to 3
+            metadata_rows.append({first_col: f"Main Header: {main_header_str}"})
+        
+        # Row 5: Period Type - spanning headers (formerly Column Header Level 1)
         col_l1_str = ', '.join(col_headers_l1_display[:6]) if col_headers_l1_display else ''
-        metadata_rows.append({first_col: f"Column Header (Level 1): {col_l1_str}"})
+        metadata_rows.append({first_col: f"Period Type: {col_l1_str}"})
         
-        # Row 5: Column Header (Level 2) - sub-headers like "December 31, 2024", "2024"
-        col_l2_str = ', '.join(col_headers_l2_display[:10]) if col_headers_l2_display else ''
-        metadata_rows.append({first_col: f"Column Header (Level 2): {col_l2_str}"})
-        
-        # Row 6: Year(s)
-        if all_years:
-            metadata_rows.append({first_col: f"Year(s): {', '.join(all_years)}"})
-        else:
-            metadata_rows.append({first_col: "Year(s):"})
+        # Row 6: Year(s) - combined from column headers and metadata
+        # Merge detected years from headers with years from source metadata
+        combined_years = set()
+        for h in col_headers_l2_display:
+            # Extract years from header strings like "December 31, 2024"
+            year_match = re.search(r'(20\d{2})', str(h))
+            if year_match:
+                combined_years.add(year_match.group(1))
+        combined_years.update(all_years)
+        years_str = ', '.join(sorted(combined_years, reverse=True)[:6]) if combined_years else ''
+        metadata_rows.append({first_col: f"Year(s): {years_str}"})
         
         # Row 7: Blank
         metadata_rows.append({first_col: ''})
@@ -973,21 +1281,42 @@ class ConsolidatedExcelExporter:
         metadata_df = metadata_df[result_df.columns]
         
         # Add column header rows between metadata and data (multi-level headers)
-        # Use centralized ExcelUtils.ensure_string_header
+        # Convert all header values to strings to prevent float display (e.g., 2025.0)
+        
+        def _convert_header_value(val):
+            """Convert header value to clean string. Years stay as strings to prevent float conversion."""
+            if val is None or val == '':
+                return ''
+            # Always use ensure_string_header which handles float→int→string conversion
+            return ExcelUtils.ensure_string_header(val)
         
         # Create Level 1 header row (e.g., "Three Months Ended June 30,")
-        level1_row = [ExcelUtils.ensure_string_header(h) for h in self._last_level1_headers]
-        level1_df = pd.DataFrame([level1_row], columns=result_df.columns)
+        level1_row = [_convert_header_value(h) for h in self._last_level1_headers]
+        level1_df = pd.DataFrame([level1_row], columns=result_df.columns, dtype=str)
         
         # Create Level 2 header row (e.g., "2024", "2023", "% Change")
-        level2_row = [ExcelUtils.ensure_string_header(h) for h in self._last_level2_headers]
-        level2_df = pd.DataFrame([level2_row], columns=result_df.columns)
+        # Use dtype=str to prevent Excel converting year strings to floats (2025.0)
+        level2_row = [_convert_header_value(h) for h in self._last_level2_headers]
+        level2_df = pd.DataFrame([level2_row], columns=result_df.columns, dtype=str)
         
         # Concatenate: metadata + level1_header + level2_header + data
+        # Note: Data rows (result_df) keep their numeric types for currency values
         final_df = pd.concat([metadata_df, level1_df, level2_df, result_df], ignore_index=True)
+        
+        # Fix header rows: Convert any float years (e.g., 2025.0) back to strings
+        # Header rows are 0-12 (metadata + L1 + L2), data starts at row 13
+        header_row_count = len(metadata_df) + 2  # metadata + L1 + L2
+        for row_idx in range(header_row_count):
+            for col_idx in range(len(final_df.columns)):
+                val = final_df.iloc[row_idx, col_idx]
+                # Convert float years to integer strings (2025.0 -> "2025")
+                if isinstance(val, float) and not pd.isna(val):
+                    if val == int(val):  # It's a whole number
+                        final_df.iloc[row_idx, col_idx] = str(int(val))
         
         # Write without pandas headers (we've included them in the data)
         final_df.to_excel(writer, sheet_name=title, index=False, header=False)
+        return True  # Sheet has data
     
     def _add_hyperlinks(
         self,
@@ -1075,51 +1404,72 @@ class ConsolidatedExcelExporter:
                 
                 ws = wb[sheet_name]
                 
-                # Fix both header rows - convert year floats to strings
-                # Row 11: Level 1 headers (e.g., "Three Months Ended June 30,")
-                # Row 12: Level 2 headers (e.g., "2024", "2023")
-                # Use centralized ExcelUtils for year cleaning
-                for header_row in [11, 12]:
-                    for col in range(1, ws.max_column + 1):
-                        cell = ws.cell(row=header_row, column=col)
-                        if cell.value is not None:
-                            # Use centralized utility for consistent year cleaning
-                            cell.value = ExcelUtils.clean_year_string(cell.value)
+                # Dynamically find header and data rows by looking for "Row Label" marker
+                row_label_row = None
+                for r in range(1, min(20, ws.max_row + 1)):
+                    cell_val = ws.cell(row=r, column=1).value
+                    if cell_val and str(cell_val).strip() == 'Row Label':
+                        row_label_row = r
+                        break
+                
+                if row_label_row is None:
+                    row_label_row = 13  # Fallback to expected position
+                
+                # Header rows are 2 rows before Row Label row
+                level1_header_row = row_label_row - 2
+                level2_header_row = row_label_row - 1
+                data_start_row = row_label_row + 1
+                
+                # Fix header rows - convert year floats to int (not float like 2024.0)
+                for header_row in [level1_header_row, level2_header_row]:
+                    if header_row > 0:
+                        for col in range(1, ws.max_column + 1):
+                            cell = ws.cell(row=header_row, column=col)
+                            if cell.value is not None:
+                                # Handle float years directly (e.g., 2024.0 -> 2024 int)
+                                if isinstance(cell.value, float) and cell.value == int(cell.value):
+                                    # Convert to int for years, keep as int for other whole numbers
+                                    cell.value = int(cell.value)
+                                elif isinstance(cell.value, str):
+                                    # Clean string years (e.g., '2024.0' -> 2024 int)
+                                    cleaned = ExcelUtils.clean_year_string(cell.value)
+                                    if cleaned.isdigit() and len(cleaned) == 4:
+                                        year = int(cleaned)
+                                        if 2000 <= year <= 2099:
+                                            cell.value = year
                 
                 # Merge cells for spanning Level 1 headers
                 # Detect consecutive columns with same Level 1 header value
-                # Level 1 headers are in row 12, Level 2 in row 13
                 col = 2  # Start from column B (column A is Row Label)
                 while col <= ws.max_column:
-                    cell_value = ws.cell(row=12, column=col).value
+                    cell_value = ws.cell(row=level1_header_row, column=col).value
                     if cell_value and str(cell_value).strip():
                         # Find how many consecutive columns have same/empty value
                         span_end = col
                         for next_col in range(col + 1, ws.max_column + 1):
-                            next_value = ws.cell(row=12, column=next_col).value
+                            next_value = ws.cell(row=level1_header_row, column=next_col).value
                             # Span if next cell is empty or has same value
                             if not next_value or str(next_value).strip() == '' or str(next_value).strip() == str(cell_value).strip():
                                 span_end = next_col
                                 # Clear the spanned cell (will be merged)
                                 if next_value and str(next_value).strip() == str(cell_value).strip():
-                                    ws.cell(row=12, column=next_col).value = ''
+                                    ws.cell(row=level1_header_row, column=next_col).value = ''
                             else:
                                 break
                         
                         # Merge if span is more than 1 column
                         if span_end > col:
-                            ws.merge_cells(start_row=12, start_column=col, end_row=12, end_column=span_end)
+                            ws.merge_cells(start_row=level1_header_row, start_column=col, end_row=level1_header_row, end_column=span_end)
                             # Center the merged cell
                             from openpyxl.styles import Alignment
-                            ws.cell(row=12, column=col).alignment = Alignment(horizontal='center')
+                            ws.cell(row=level1_header_row, column=col).alignment = Alignment(horizontal='center')
                         
                         col = span_end + 1
                     else:
                         col += 1
                 
-                # Data starts at row 14 (after 10 metadata rows + 2 header rows = 12 rows, then row 13 is L2 header)
-                # Column B onwards contains data (column A is row labels)
-                for row in range(14, ws.max_row + 1):
+                # Apply currency format to data cells
+                for row in range(data_start_row, ws.max_row + 1):
                     for col in range(2, ws.max_column + 1):
                         cell = ws.cell(row=row, column=col)
                         # Apply currency format only to numeric cells

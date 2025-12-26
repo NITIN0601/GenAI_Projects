@@ -15,9 +15,11 @@ from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment
 from copy import copy
+from functools import lru_cache
 
 from src.utils import get_logger
 from src.core import get_paths
+from src.utils.domain_patterns import TABLE_HEADER_PATTERNS, DATA_LABEL_PATTERNS
 
 logger = get_logger(__name__)
 
@@ -200,7 +202,7 @@ class TableMerger:
                 # Check all columns for data (not just column 1)
                 # This ensures we capture header rows like year rows that have empty col 1
                 row_has_data = False
-                for col in range(1, min(10, ws.max_column + 1)):
+                for col in range(1, ws.max_column + 1):
                     cell_val = ws.cell(row=data_start, column=col).value
                     if cell_val is not None and str(cell_val).strip():
                         row_has_data = True
@@ -267,16 +269,11 @@ class TableMerger:
         - Currency unit rows (e.g., "$ in millions")
         - Empty header spacer rows
         """
-        # Patterns that indicate a header row
-        header_patterns = ['$ in millions', '$ in billions', '$ in thousands', 
-                          'three months ended', 'six months ended', 'nine months ended',
-                          'at june', 'at december', 'at march', 'at september',
-                          'trading', 'fees', 'net interest', 'total']
+        # Use centralized patterns from domain_patterns.py
+        header_patterns = TABLE_HEADER_PATTERNS
         
         # Patterns that indicate this is NOT a header (actual data row labels)
-        data_label_patterns = ['financing', 'execution', 'equity', 'fixed income',
-                               'common', 'tangible', 'average', 'assets', 'liabilities',
-                               'revenues', 'expenses', 'income', 'loss']
+        data_label_patterns = DATA_LABEL_PATTERNS
         
         data_start = block['start_row']
         header_rows_found = []
@@ -550,8 +547,8 @@ class TableMerger:
                 target_cell.fill = copy(source_cell.fill)
             if source_cell.number_format:
                 target_cell.number_format = source_cell.number_format
-        except Exception:
-            pass  # Ignore style copy errors
+        except Exception as e:
+            logger.debug(f"Style copy error (non-critical): {e}")
     
     def _clear_block(self, ws, block: Dict) -> None:
         """Clear a table block after it has been merged."""
@@ -575,23 +572,16 @@ class TableMerger:
                     max_col = max(max_col, col_num)
         return max_col
 
-
 # =============================================================================
-# SINGLETON PATTERN
+# SINGLETON PATTERN (using lru_cache for thread-safety)
 # =============================================================================
 
-_merger_instance: Optional[TableMerger] = None
-
-
+@lru_cache(maxsize=1)
 def get_table_merger() -> TableMerger:
     """Get or create TableMerger singleton instance."""
-    global _merger_instance
-    if _merger_instance is None:
-        _merger_instance = TableMerger()
-    return _merger_instance
+    return TableMerger()
 
 
 def reset_table_merger() -> None:
     """Reset the merger singleton (for testing)."""
-    global _merger_instance
-    _merger_instance = None
+    get_table_merger.cache_clear()

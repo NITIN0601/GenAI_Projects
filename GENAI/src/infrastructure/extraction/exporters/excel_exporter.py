@@ -524,13 +524,13 @@ class ExcelTableExporter:
         display_row_headers = [ExcelUtils.clean_footnote_references(h) for h in filtered_row_headers if h]
         display_l2_row_headers = [ExcelUtils.clean_footnote_references(h) for h in l2_row_headers if h]
         
-        # Row Header (Level 1) - use display-cleaned values
+        # Category (Parent) - section headers (formerly Row Header Level 1)
         row_headers_str = ', '.join(display_row_headers) if display_row_headers else ''
-        rows.append([f"Row Header (Level 1): {row_headers_str}"])
+        rows.append([f"Category (Parent): {row_headers_str}"])
         
-        # Row Header (Level 2) - use display-cleaned values
+        # Line Items - data row labels (formerly Row Header Level 2)
         row_sub_headers_str = ', '.join(display_l2_row_headers) if display_l2_row_headers else ''
-        rows.append([f"Row Header (Level 2): {row_sub_headers_str}"])
+        rows.append([f"Line Items: {row_sub_headers_str}"])
         
         # Use shared utility for unit detection
         from src.utils.financial_patterns import is_unit_indicator
@@ -560,18 +560,18 @@ class ExcelTableExporter:
             if year_match:
                 detected_years.add(year_match.group(1))
         
-        # Column Header (Level 0) - only show if present (top spanning header)
+        # Main Header - only show if present (top spanning header, formerly Level 0)
         if level_0:
             level_0_str = ', '.join(level_0)
-            rows.append([f"Column Header (Level 0): {level_0_str}"])
+            rows.append([f"Main Header: {level_0_str}"])
         
-        # Column Header (Level 1) - always show (date periods or main headers)
+        # Period Type - date periods or main headers (formerly Level 1)
         level_1_str = ', '.join(level_1) if level_1 else ''
-        rows.append([f"Column Header (Level 1): {level_1_str}"])
+        rows.append([f"Period Type: {level_1_str}"])
         
-        # Column Header (Level 2) - always show (years or sub-headers)
+        # Year(s) - years or sub-headers (formerly Level 2)
         level_2_str = ', '.join(level_2) if level_2 else ''
-        rows.append([f"Column Header (Level 2): {level_2_str}"])
+        rows.append([f"Year(s): {level_2_str}"])
         
         # Year/Quarter - format as Qn,YYYY (e.g., Q2,2024)
         quarter = metadata.get('quarter', '')  # e.g., "Q2" 

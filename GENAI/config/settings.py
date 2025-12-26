@@ -10,7 +10,7 @@ Supports:
 
 from pydantic_settings import BaseSettings
 from pydantic import SecretStr
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, Dict
 import os
 
 
@@ -152,6 +152,27 @@ class Settings(BaseSettings):
     
     # Quality threshold for extraction
     EXTRACTION_MIN_QUALITY: float = 60.0
+    
+    # Year detection range for column headers (e.g., 2024, 2025)
+    EXTRACTION_YEAR_MIN: int = 2000
+    EXTRACTION_YEAR_MAX: int = 2035
+    
+    # Docling chunking (set very high to extract complete tables)
+    DOCLING_CHUNK_SIZE: int = 100000
+    
+    # Index sheet column widths for consolidated output
+    INDEX_COLUMN_WIDTHS: Dict[str, int] = {
+        '#': 5,
+        'Section': 35,
+        'Table Title': 50,
+        'TableCount': 10,
+        'Sources': 45,
+        'Report Types': 15,
+        'Years': 20,
+        'Quarters': 20,
+        'Link': 32,
+        '_default': 20
+    }
     
     # Caching
     EXTRACTION_CACHE_ENABLED: bool = True

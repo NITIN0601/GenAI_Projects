@@ -341,9 +341,9 @@ def parse_markdown_table(
         
         # === FOOTNOTE CLEANING ===
         # Remove footnote references from row labels (first column)
+        # Use .iloc[:, 0] to access first column by position (avoids FutureWarning)
         if len(df.columns) > 0:
-            first_col = df.columns[0]
-            df[first_col] = df[first_col].apply(_clean_footnote_from_label)
+            df.iloc[:, 0] = df.iloc[:, 0].apply(_clean_footnote_from_label)
         
         return df
         

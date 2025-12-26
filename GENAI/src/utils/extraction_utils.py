@@ -170,105 +170,120 @@ class DoclingHelper:
         
         # If we have local model weights, use them (set offline mode to prevent any downloads)
         if artifacts_path:
-            # Prevent any accidental model weight downloads when using local files
-            os.environ['HF_HUB_OFFLINE'] = '1'
-            os.environ['TRANSFORMERS_OFFLINE'] = '1'
+            # Save original environment values to restore later (prevents global state pollution)
+            original_hf_offline = os.environ.get('HF_HUB_OFFLINE')
+            original_tf_offline = os.environ.get('TRANSFORMERS_OFFLINE')
             
-            from docling.datamodel.pipeline_options import PdfPipelineOptions
-            from docling.datamodel.base_models import InputFormat
-            from docling.document_converter import PdfFormatOption
-            
-            # Determine OCR engine based on platform
-            ocr_override = os.environ.get('DOCLING_OCR_ENGINE', '').lower()
-            system = platform.system()
-            
-            if ocr_override == 'rapidocr':
-                use_rapidocr = True
-            elif ocr_override == 'ocrmac':
-                use_rapidocr = False
-            else:
-                # Auto-detect: macOS uses OcrMac, Windows/Linux use RapidOCR
-                use_rapidocr = (system != 'Darwin')
-            
-            # Configure OCR options
-            ocr_options = None
-            if use_rapidocr:
-                from docling.datamodel.pipeline_options import RapidOcrOptions
-                
-                # Build paths to local RapidOCR models
-                rapidocr_base = Path(artifacts_path) / 'RapidOcr' / 'onnx' / 'PP-OCRv4'
-                det_model = rapidocr_base / 'det' / 'ch_PP-OCRv4_det_infer.onnx'
-                rec_model = rapidocr_base / 'rec' / 'ch_PP-OCRv4_rec_infer.onnx'
-                cls_model = rapidocr_base / 'cls' / 'ch_ppocr_mobile_v2.0_cls_infer.onnx'
-                
-                # Check if models exist, fall back to package defaults if not
-                if det_model.exists() and rec_model.exists():
-                    ocr_options = RapidOcrOptions(
-                        det_model_path=str(det_model),
-                        rec_model_path=str(rec_model),
-                        cls_model_path=str(cls_model) if cls_model.exists() else None,
-                    )
-                    logger.info(f"Using RapidOCR with local models from: {rapidocr_base}")
-                else:
-                    # Use default RapidOCR (models from pip package)
-                    ocr_options = RapidOcrOptions()
-                    logger.info("Using RapidOCR with default bundled models")
-            else:
-                from docling.datamodel.pipeline_options import OcrMacOptions
-                ocr_options = OcrMacOptions()
-                logger.info("Using OcrMac (macOS native OCR)")
-            
-            # Configure tableformer mode (accurate vs fast)
-            table_mode = os.environ.get('DOCLING_TABLE_MODE', 'accurate').lower()
-            
-            # Configure image scale for better quality (higher = better but slower)
             try:
-                image_scale = float(os.environ.get('DOCLING_IMAGE_SCALE', '1.0'))
-                image_scale = max(1.0, min(4.0, image_scale))  # Clamp between 1.0 and 4.0
-            except ValueError:
-                image_scale = 1.0
-            
-            # Import TableFormerMode for table structure detection
-            try:
-                from docling.datamodel.pipeline_options import TableFormerMode, TableStructureOptions
+                # Prevent any accidental model weight downloads when using local files
+                os.environ['HF_HUB_OFFLINE'] = '1'
+                os.environ['TRANSFORMERS_OFFLINE'] = '1'
                 
-                if table_mode == 'fast':
-                    table_structure_options = TableStructureOptions(
-                        mode=TableFormerMode.FAST,
-                        do_cell_matching=True
-                    )
-                    logger.info("Using TableFormer FAST mode")
+                from docling.datamodel.pipeline_options import PdfPipelineOptions
+                from docling.datamodel.base_models import InputFormat
+                from docling.document_converter import PdfFormatOption
+                
+                # Determine OCR engine based on platform
+                ocr_override = os.environ.get('DOCLING_OCR_ENGINE', '').lower()
+                system = platform.system()
+                
+                if ocr_override == 'rapidocr':
+                    use_rapidocr = True
+                elif ocr_override == 'ocrmac':
+                    use_rapidocr = False
                 else:
-                    table_structure_options = TableStructureOptions(
-                        mode=TableFormerMode.ACCURATE,
-                        do_cell_matching=True
-                    )
-                    logger.info("Using TableFormer ACCURATE mode (higher quality)")
+                    # Auto-detect: macOS uses OcrMac, Windows/Linux use RapidOCR
+                    use_rapidocr = (system != 'Darwin')
                 
-                pipeline_options = PdfPipelineOptions(
-                    artifacts_path=artifacts_path,
-                    ocr_options=ocr_options,
-                    do_table_structure=True,
-                    table_structure_options=table_structure_options,
-                    images_scale=image_scale,
+                # Configure OCR options
+                ocr_options = None
+                if use_rapidocr:
+                    from docling.datamodel.pipeline_options import RapidOcrOptions
+                    
+                    # Build paths to local RapidOCR models
+                    rapidocr_base = Path(artifacts_path) / 'RapidOcr' / 'onnx' / 'PP-OCRv4'
+                    det_model = rapidocr_base / 'det' / 'ch_PP-OCRv4_det_infer.onnx'
+                    rec_model = rapidocr_base / 'rec' / 'ch_PP-OCRv4_rec_infer.onnx'
+                    cls_model = rapidocr_base / 'cls' / 'ch_ppocr_mobile_v2.0_cls_infer.onnx'
+                    
+                    # Check if models exist, fall back to package defaults if not
+                    if det_model.exists() and rec_model.exists():
+                        ocr_options = RapidOcrOptions(
+                            det_model_path=str(det_model),
+                            rec_model_path=str(rec_model),
+                            cls_model_path=str(cls_model) if cls_model.exists() else None,
+                        )
+                        logger.info(f"Using RapidOCR with local models from: {rapidocr_base}")
+                    else:
+                        # Use default RapidOCR (models from pip package)
+                        ocr_options = RapidOcrOptions()
+                        logger.info("Using RapidOCR with default bundled models")
+                else:
+                    from docling.datamodel.pipeline_options import OcrMacOptions
+                    ocr_options = OcrMacOptions()
+                    logger.info("Using OcrMac (macOS native OCR)")
+                
+                # Configure tableformer mode (accurate vs fast)
+                table_mode = os.environ.get('DOCLING_TABLE_MODE', 'accurate').lower()
+                
+                # Configure image scale for better quality (higher = better but slower)
+                try:
+                    image_scale = float(os.environ.get('DOCLING_IMAGE_SCALE', '1.0'))
+                    image_scale = max(1.0, min(4.0, image_scale))  # Clamp between 1.0 and 4.0
+                except ValueError:
+                    image_scale = 1.0
+                
+                # Import TableFormerMode for table structure detection
+                try:
+                    from docling.datamodel.pipeline_options import TableFormerMode, TableStructureOptions
+                    
+                    if table_mode == 'fast':
+                        table_structure_options = TableStructureOptions(
+                            mode=TableFormerMode.FAST,
+                            do_cell_matching=True
+                        )
+                        logger.info("Using TableFormer FAST mode")
+                    else:
+                        table_structure_options = TableStructureOptions(
+                            mode=TableFormerMode.ACCURATE,
+                            do_cell_matching=True
+                        )
+                        logger.info("Using TableFormer ACCURATE mode (higher quality)")
+                    
+                    pipeline_options = PdfPipelineOptions(
+                        artifacts_path=artifacts_path,
+                        ocr_options=ocr_options,
+                        do_table_structure=True,
+                        table_structure_options=table_structure_options,
+                        images_scale=image_scale,
+                    )
+                except ImportError:
+                    # Fallback for older docling versions without TableFormerMode
+                    logger.warning("TableFormerMode not available, using default table detection")
+                    pipeline_options = PdfPipelineOptions(
+                        artifacts_path=artifacts_path,
+                        ocr_options=ocr_options,
+                    )
+                
+                if image_scale > 1.0:
+                    logger.info(f"Using image scale: {image_scale}x")
+                
+                converter = DocumentConverter(
+                    format_options={
+                        InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+                    }
                 )
-            except ImportError:
-                # Fallback for older docling versions without TableFormerMode
-                logger.warning("TableFormerMode not available, using default table detection")
-                pipeline_options = PdfPipelineOptions(
-                    artifacts_path=artifacts_path,
-                    ocr_options=ocr_options,
-                )
-            
-            if image_scale > 1.0:
-                logger.info(f"Using image scale: {image_scale}x")
-            
-            converter = DocumentConverter(
-                format_options={
-                    InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
-                }
-            )
-            return converter.convert(pdf_path)
+                return converter.convert(pdf_path)
+            finally:
+                # Restore original environment state (prevents pollution of global state)
+                if original_hf_offline is None:
+                    os.environ.pop('HF_HUB_OFFLINE', None)
+                else:
+                    os.environ['HF_HUB_OFFLINE'] = original_hf_offline
+                if original_tf_offline is None:
+                    os.environ.pop('TRANSFORMERS_OFFLINE', None)
+                else:
+                    os.environ['TRANSFORMERS_OFFLINE'] = original_tf_offline
         
         # No local model weights found - check if downloads are allowed
         if allow_download:
@@ -312,25 +327,10 @@ class DoclingHelper:
         """
         toc_sections = {}
         
-        # Known section title patterns (to distinguish from footnotes)
-        VALID_SECTION_STARTERS = [
-            'introduction', 'executive', 'business', 'institutional', 'wealth',
-            'investment', 'supplemental', 'accounting', 'critical', 'liquidity',
-            'balance', 'regulatory', 'quantitative', 'qualitative', 'market',
-            'credit', 'country', 'report', 'consolidated', 'notes', 'financial',
-            'controls', 'legal', 'risk', 'other', 'exhibits', 'signatures',
-            'cash', 'fair', 'derivative', 'securities', 'collateral', 'loans',
-            'deposits', 'borrowings', 'commitments', 'variable', 'total', 'equity',
-            'interest', 'income', 'taxes', 'segment', 'geographic', 'revenue',
-            'basis', 'presentation', 'policies', 'assets', 'liabilities',
-        ]
-        
-        # Words that indicate a footnote (NOT a section)
-        FOOTNOTE_INDICATORS = [
-            'amounts', 'includes', 'based on', 'represents', 'related to',
-            'percent', 'excludes', 'primarily', 'net of', 'see note',
-            'does not', 'prior to', 'inclusive of', 'applicable',
-        ]
+        # Import domain patterns from centralized config
+        from src.utils.domain_patterns import (
+            VALID_SECTION_STARTERS, FOOTNOTE_INDICATORS
+        )
         
         try:
             items_list = list(doc.iterate_items())
@@ -747,26 +747,10 @@ class DoclingHelper:
             if section:
                 return section
         
-        # Strategy 2+: Fall back to pattern matching
-        # IMPORTANT: Only use actual BUSINESS SEGMENT names - NOT table titles!
-        # These are the top-level sections that group tables in Morgan Stanley reports
-        BUSINESS_SEGMENTS = [
-            'institutional securities',
-            'wealth management', 
-            'investment management',
-            'corporate',
-            'intersegment eliminations',
-            'inter-segment eliminations',
-        ]
-        
-        # Additional section headers that are valid (but less specific)
-        GENERAL_SECTION_HEADERS = [
-            'management\'s discussion and analysis',
-            'consolidated financial statements',
-            'notes to consolidated financial statements',
-            'risk disclosures',
-            'financial data supplement',
-        ]
+        # Import domain patterns from centralized config
+        from src.utils.domain_patterns import (
+            BUSINESS_SEGMENTS, GENERAL_SECTION_HEADERS
+        )
         
         try:
             items_list = list(doc.iterate_items())
