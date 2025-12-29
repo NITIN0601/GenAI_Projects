@@ -34,11 +34,13 @@ from src.utils.cleanup import (
     quick_clean,
     full_clean
 )
-from src.utils.table_utils import (
-    parse_markdown_table,
-    quarter_to_number,
-    quarter_to_month,
-    get_period_end_date,
+from src.utils.table_utils import parse_markdown_table
+from src.utils.date_utils import DateUtils
+from src.utils.excel_utils import ExcelUtils
+from src.utils.metadata_builder import (
+    MetadataBuilder,
+    TableMetadata,
+    MetadataLabels,
 )
 
 # Re-export tracing from infrastructure for convenience
@@ -71,12 +73,18 @@ __all__ = [
     'full_clean',
     # Table utilities
     'parse_markdown_table',
-    'quarter_to_number',
-    'quarter_to_month',
-    'get_period_end_date',
+    # Date utilities
+    'DateUtils',
+    # Excel utilities
+    'ExcelUtils',
+    # Metadata utilities
+    'MetadataBuilder',
+    'TableMetadata',
+    'MetadataLabels',
     # Tracing (re-exported from infrastructure.observability)
     'setup_tracing',
     'is_tracing_enabled',
     'traceable_function',
     'get_tracing_callbacks',
 ]
+

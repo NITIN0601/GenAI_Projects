@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional
 from src.pipeline.base import StepInterface, StepResult, StepStatus, PipelineContext
 from src.pipeline import PipelineResult, PipelineStep
 from src.utils import get_logger
+from src.infrastructure.extraction.exporters.table_merger import TABLE_FILE_PATTERN
 
 logger = get_logger(__name__)
 
@@ -51,7 +52,7 @@ class ProcessAdvancedStep(StepInterface):
             logger.warning(f"Source directory does not exist: {source_path}")
             return False
         
-        xlsx_files = list(source_path.glob("*_tables.xlsx"))
+        xlsx_files = list(source_path.glob(TABLE_FILE_PATTERN))
         if not xlsx_files:
             logger.warning(f"No xlsx files in {source_path}")
             return False
@@ -88,11 +89,14 @@ class ProcessAdvancedStep(StepInterface):
             results = merger.process_all_files()
             
             if results['errors']:
-                logger.warning(f"Processed with {len(results['errors'])} errors")
+                logger.warning(f"Processed with {len(results['errors'])} errors: {results['errors']}")
+                status = StepStatus.PARTIAL_SUCCESS if results['files_processed'] > 0 else StepStatus.FAILED
+            else:
+                status = StepStatus.SUCCESS
             
             return StepResult(
                 step_name=self.name,
-                status=StepStatus.SUCCESS,
+                status=status,
                 data={
                     'files_processed': results['files_processed'],
                     'files_with_merges': results['files_with_merges'],
@@ -138,9 +142,17 @@ def run_process_advanced(
     step = ProcessAdvancedStep(source_dir=source_dir, dest_dir=dest_dir)
     ctx = PipelineContext()
     
-    # Skip validation failure - just run with defaults
+    # Validate - if it fails, return early with SKIPPED status
     if not step.validate(ctx):
-        logger.warning("Validation failed, but continuing with step execution")
+        logger.warning("Validation failed - no files to process")
+        return PipelineResult(
+            step=PipelineStep.PROCESS_ADVANCED,
+            success=False,
+            data={},
+            message="No files to process - validation failed",
+            error="Validation failed: source directory empty or missing",
+            metadata={}
+        )
     
     result = step.execute(ctx)
     

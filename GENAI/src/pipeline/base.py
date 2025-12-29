@@ -30,6 +30,7 @@ class StepStatus(Enum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"
+    PARTIAL_SUCCESS = "partial_success"  # Completed with some errors
     FAILED = "failed"
     SKIPPED = "skipped"
 
@@ -48,7 +49,7 @@ class StepResult:
     
     @property
     def success(self) -> bool:
-        return self.status == StepStatus.SUCCESS
+        return self.status in (StepStatus.SUCCESS, StepStatus.PARTIAL_SUCCESS)
     
     @property
     def failed(self) -> bool:

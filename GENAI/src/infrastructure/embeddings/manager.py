@@ -208,11 +208,6 @@ class EmbeddingManager:
         """Embed multiple texts (implements EmbeddingProvider protocol)."""
         return self.embed_documents(texts)
     
-    # Backward compatibility methods
-    def generate_embedding(self, text: str) -> List[float]:
-        """Alias for embed_query (backward compatibility)."""
-        return self.embed_query(text)
-    
     def get_dimension(self) -> int:
         """
         Get embedding dimension (auto-detected from model).

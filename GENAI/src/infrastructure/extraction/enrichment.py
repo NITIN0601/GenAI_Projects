@@ -11,7 +11,7 @@ Handles detection of:
 import re
 from typing import Dict, Any, Optional, List, Tuple
 from src.utils import get_logger
-from src.utils.financial_patterns import (
+from src.utils.financial_domain import (
     UNIT_PATTERNS_REGEX,
     STATEMENT_KEYWORDS,
     detect_units,

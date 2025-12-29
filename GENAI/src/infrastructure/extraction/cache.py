@@ -71,6 +71,10 @@ class ExtractionCache:
             with open(cache_file, 'rb') as f:
                 result = pickle.load(f)
             
+            # Post-process: normalize section_name whitespace in cached tables
+            # This fixes 'Manageme nt' issues from old cached extraction results
+            self._normalize_cached_sections(result)
+            
             logger.info(f"Cache hit for {pdf_path} (backend: {result.backend.value})")
             return result
             
@@ -78,6 +82,21 @@ class ExtractionCache:
             logger.error(f"Error loading cache for {pdf_path}: {e}")
             cache_file.unlink()
             return None
+    
+    def _normalize_cached_sections(self, result: ExtractionResult) -> None:
+        """Normalize section_name in cached extraction results to fix OCR issues."""
+        import re
+        from src.utils.excel_utils import ExcelUtils
+        
+        for table in result.tables:
+            if isinstance(table, dict) and 'metadata' in table:
+                meta = table['metadata']
+                if 'section_name' in meta and meta['section_name']:
+                    section = meta['section_name']
+                    # Fix OCR broken words and normalize whitespace
+                    section = ExcelUtils.fix_ocr_broken_words(section)
+                    section = re.sub(r'\s+', ' ', section).strip()
+                    meta['section_name'] = section
     
     def set(self, pdf_path: str, result: ExtractionResult) -> None:
         """

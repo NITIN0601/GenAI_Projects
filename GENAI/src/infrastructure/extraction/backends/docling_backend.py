@@ -3,9 +3,20 @@ Docling backend for PDF extraction.
 
 Refactored from existing extract_page_by_page.py to use unified interface.
 Includes all improvements: chunking, spanning headers, metadata extraction.
+
+100% LOCAL OPERATION (OFFLINE MODE):
+- All models loaded from src/model/doclingPackage/
+- No internet downloads (HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1)
+- Windows/Linux: RapidOCR with local ONNX models
+- macOS: OcrMac (Apple Vision framework)
 """
 
+__version__ = "1.0.0"
+__author__ = "dundaymo"
+
+import os
 import time
+import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Any, List, TYPE_CHECKING
@@ -14,22 +25,57 @@ from functools import lru_cache
 
 from src.utils import get_logger
 
+logger = get_logger(__name__)
+
+
 # Lazy import using @lru_cache to avoid downloading models on module import
 @lru_cache(maxsize=1)
 def _get_docling_imports():
     """
     Lazy import of docling to avoid model downloads on module import.
     Uses @lru_cache for thread-safe singleton pattern.
+    
+    WINDOWS OFFLINE MODE:
+    - Auto-detects local models in src/model/doclingPackage/
+    - Sets DOCLING_LOCAL_MODEL_DIR for extraction_utils to use
+    - Calls _ensure_docling_imported() which configures RapidOCR offline
     """
+    # Auto-detect local model bundle in the repo
+    repo_root = Path(__file__).resolve().parents[4]
+    local_model_path = repo_root / 'src' / 'model' / 'doclingPackage'
+    
+    # Set OFFLINE MODE environment variables to prevent any network downloads
+    if local_model_path.exists():
+        if os.environ.get('DOCLING_LOCAL_MODEL_DIR') is None:
+            os.environ['DOCLING_LOCAL_MODEL_DIR'] = str(local_model_path)
+        # Force offline mode for HuggingFace and Transformers
+        os.environ['HF_HUB_OFFLINE'] = '1'
+        os.environ['TRANSFORMERS_OFFLINE'] = '1'
+        
+        # RapidOCR offline mode (Windows/Linux):
+        # - Disable visualization to prevent font download attempts
+        # - Set local ONNX model paths if they exist
+        import platform
+        if platform.system() != 'Darwin':  # Not macOS (macOS uses OcrMac)
+            os.environ['RAPIDOCR_DISABLE_VIS'] = '1'  # Disable visualization
+            # Check for local RapidOCR models
+            rapidocr_models = local_model_path / 'rapidocr'
+            if rapidocr_models.exists():
+                os.environ['RAPIDOCR_MODEL_DIR'] = str(rapidocr_models)
+                logging.getLogger(__name__).info(f" RapidOCR OFFLINE: Using local ONNX models")
+        
+        logging.getLogger(__name__).info(f" OFFLINE MODE: Using local Docling models from: {local_model_path}")
+    
+    # Now import the specific symbols we need
     from docling.document_converter import DocumentConverter
     from docling_core.types.doc import DocItemLabel, TableItem
     return DocumentConverter, DocItemLabel, TableItem
 
+
 from src.infrastructure.extraction.base import ExtractionBackend, ExtractionResult, BackendType
 from src.infrastructure.embeddings.chunking import TableChunker
-from src.utils.extraction_utils import PDFMetadataExtractor, DoclingHelper
-
-logger = get_logger(__name__)
+from src.infrastructure.extraction.helpers import DoclingHelper
+from src.utils.extraction_utils import PDFMetadataExtractor
 
 
 # =============================================================================
@@ -130,11 +176,25 @@ class DoclingBackend(ExtractionBackend):
     """
     Docling extraction backend - extracts COMPLETE tables from PDFs.
     
+    100% LOCAL OPERATION (OFFLINE MODE):
+    - All models loaded from src/model/doclingPackage/
+    - No internet downloads (HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1)
+    - English language support ✓
+    
+    Models Used (All Local):
+    1. Layout Model: docling-layout-heron (model.safetensors ~220MB)
+    2. TableFormer: model.onnx for table structure detection
+    3. RapidOCR: PP-OCRv4 ONNX models (det, rec, cls) for text recognition
+    
+    Platform-Specific OCR:
+    - Windows/Linux: RapidOCR with local ONNX models (visualization disabled)
+    - macOS: OcrMac (Apple Vision framework)
+    
     Features:
     - Page-by-page processing
     - Complete table extraction (no chunking - chunking is done in embedding stage)
     - Centered spanning headers
-    - Multi-line header flattening
+    - Multi-line header flattening  
     - Complete metadata extraction
     
     Note: Chunking for RAG/embeddings is handled separately in the embedding pipeline,
@@ -171,6 +231,13 @@ class DoclingBackend(ExtractionBackend):
         Returns:
             ExtractionResult with tables and metadata
         """
+        # Validate input file exists
+        pdf_file = Path(pdf_path)
+        if not pdf_file.exists():
+            raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+        if not pdf_file.is_file():
+            raise ValueError(f"Path is not a file: {pdf_path}")
+        
         # Lazy import docling when actually needed (uses lru_cache for efficiency)
         DocumentConverter, DocItemLabel, TableItem = _get_docling_imports()
         
@@ -180,11 +247,15 @@ class DoclingBackend(ExtractionBackend):
             pdf_path=pdf_path
         )
         
+        # Track doc for finally cleanup (prevents TOC memory leak)
+        doc = None
+        
         try:
-            # Convert PDF with Docling
-            logger.info(f"Extracting {pdf_path} with Docling...")
+            # Convert PDF with Docling (100% local models, offline mode)
+            logger.info(f" Extracting {pdf_path} with Docling (LOCAL models, OFFLINE mode)...")
             try:
                 doc_result = DoclingHelper.convert_pdf(pdf_path)
+                logger.info(f" PDF conversion successful - using local models only")
             except Exception as e:
                 # Log full error and re-raise to make failures visible
                 logger.exception(f"Docling conversion failed for {pdf_path}: {e}")
@@ -234,16 +305,17 @@ class DoclingBackend(ExtractionBackend):
             # Extract metadata
             result.metadata = {**self._extract_metadata(pdf_path, doc), **result.metadata}
             
-            # Clear TOC cache for this document to free memory
-            # (once xlsx is written, we don't need the in-memory TOC anymore)
-            DoclingHelper.clear_toc_cache(id(doc))
-            
             # Note: quality_score is computed by QualityAssessor in strategy.py
             # Not setting it here to avoid confusion with actual computed score
             
         except Exception as e:
             logger.error(f"Docling extraction failed: {e}")
             result.error = str(e)
+        finally:
+            # ALWAYS clear TOC cache for this document to prevent memory leak
+            # This runs whether extraction succeeded or failed
+            if doc is not None:
+                DoclingHelper.clear_toc_cache(id(doc))
         
         result.extraction_time = time.time() - start_time
         logger.info(f"Extraction completed in {result.extraction_time:.2f}s")

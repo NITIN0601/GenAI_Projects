@@ -56,6 +56,43 @@ class ExcelUtils:
         
         return sanitized.strip() or "Sheet"
     
+    # Known OCR broken words from Docling PDF extraction (space inserted mid-word)
+    OCR_FIXES = {
+        'Manageme nt': 'Management',
+        'manageme nt': 'management',
+        'Institutio nal': 'Institutional',
+        'institutio nal': 'institutional',
+        'Investme nt': 'Investment',
+        'investme nt': 'investment',
+        'Securitie s': 'Securities',
+        'securitie s': 'securities',
+        'Advisor-led': 'Advisor-Led',
+        'Self-directed': 'Self-Directed',
+    }
+    
+    @staticmethod
+    def fix_ocr_broken_words(text: str) -> str:
+        """
+        Fix known OCR broken words from Docling PDF extraction.
+        
+        Handles cases like:
+        - 'Manageme nt' -> 'Management' (space inserted mid-word)
+        - 'Advisor-led' -> 'Advisor-Led' (capitalization)
+        
+        Args:
+            text: Text to fix
+            
+        Returns:
+            Fixed text
+        """
+        if not text:
+            return text
+        
+        result = text
+        for broken, fixed in ExcelUtils.OCR_FIXES.items():
+            result = result.replace(broken, fixed)
+        return result
+    
     @staticmethod
     def normalize_title_for_grouping(title: str, clean_row_ranges: bool = True) -> str:
         """
@@ -76,7 +113,10 @@ class ExcelUtils:
         if not title:
             return ""
         
-        result = title.lower().strip()
+        # First fix OCR broken words
+        result = ExcelUtils.fix_ocr_broken_words(title)
+        
+        result = result.lower().strip()
         
         if clean_row_ranges:
             # Remove row range patterns like (Rows 1-10)
@@ -100,6 +140,7 @@ class ExcelUtils:
         Normalize row label for matching during consolidation.
         
         Removes footnote markers, superscripts, and extra whitespace.
+        Normalizes punctuation, dashes, and ampersands for consistent matching.
         
         Handles patterns like:
         - 'Cash and Cash Equivalents 1 :' -> 'cash and cash equivalents'
@@ -107,6 +148,9 @@ class ExcelUtils:
         - 'Customer receivables and Other 1,10 :' -> 'customer receivables and other'
         - 'Total assets (1)(2)' -> 'total assets'
         - 'Net income¹²' -> 'net income'
+        - 'Fees & Commissions' -> 'fees and commissions'
+        - 'Long–term' (en-dash) -> 'long-term' (hyphen)
+        - 'Revenue (a)(b)' -> 'revenue'
         
         Args:
             label: Row label to normalize
@@ -123,6 +167,15 @@ class ExcelUtils:
         
         label = str(label).strip()
         
+        # Normalize Unicode dashes to ASCII hyphen
+        # en-dash (–), em-dash (—), minus sign (−), etc.
+        dash_chars = ['–', '—', '−', '‐', '‑', '―']
+        for dash in dash_chars:
+            label = label.replace(dash, '-')
+        
+        # Normalize ampersand to "and"
+        label = re.sub(r'\s*&\s*', ' and ', label)
+        
         # Remove unicode superscript characters
         superscript_map = {
             '¹': '', '²': '', '³': '', '⁴': '', '⁵': '',
@@ -136,17 +189,19 @@ class ExcelUtils:
         label = re.sub(r'\s+[\d,]+\s*:?\s*$', '', label)
         # Pattern: Just trailing numbers: "Text 2" or "Text 1 2 3"
         label = re.sub(r'\s+\d+(?:\s+\d+)*\s*$', '', label)
-        # Pattern: Parenthesized: "(1)" or "(1)(2)"
+        # Pattern: Parenthesized numbers: "(1)" or "(1)(2)"
         label = re.sub(r'\s*\(\d+\)\s*', ' ', label)
+        # Pattern: Parenthesized letters: "(a)" or "(a)(b)"
+        label = re.sub(r'\s*\([a-zA-Z]\)\s*', ' ', label)
         # Pattern: Bracketed: "[1]" or "[2]"
         label = re.sub(r'\s*\[\d+\]\s*', ' ', label)
         # Pattern: Braced: "{1}" or "{2}"
         label = re.sub(r'\s*\{\d+\}\s*', ' ', label)
         # Pattern: Asterisks
         label = re.sub(r'\*+', ' ', label)
-        # Pattern: Trailing colon or period
-        label = re.sub(r'[:\.]+\s*$', '', label)
-        # Normalize whitespace
+        # Pattern: Trailing colon, period, or comma
+        label = re.sub(r'[:,\.]+\s*$', '', label)
+        # Normalize multiple spaces
         label = re.sub(r'\s+', ' ', label)
         
         return label.lower().strip()
@@ -337,37 +392,125 @@ class ExcelUtils:
         return ExcelUtils.clean_year_string(val)
     
     @staticmethod
-    def clean_cell_value(val) -> str:
+    def parse_currency_to_float(val_str: str):
         """
-        Clean a data cell value for display.
+        Parse a currency string to a float.
         
         Handles:
-        - Year floats: 2024.0 → '2024'
-        - Footnote references in text cells
-        - NaN values
+        - '$12.7' → 12.7
+        - '$1,234.56' → 1234.56
+        - '$(5.2)' → -5.2 (negative)
+        - '(1,234)' → -1234.0 (negative without $)
+        
+        DOES NOT convert percentages - they stay as strings for Excel formatting:
+        - '12.5%' → None (stays as '12.5%' string)
+        
+        Args:
+            val_str: String value to parse
+            
+        Returns:
+            Float if currency/number, None otherwise
+        """
+        import re
+        
+        if not val_str or not isinstance(val_str, str):
+            return None
+        
+        val_str = val_str.strip()
+        if not val_str:
+            return None
+        
+        # Skip if it's a date-like string (e.g., "March 31, 2024")
+        if re.search(r'(January|February|March|April|May|June|July|August|September|October|November|December)', val_str, re.IGNORECASE):
+            return None
+        
+        # Skip percentages - they should stay as strings for Excel formatting
+        # "34 %" or "34%" should NOT be converted to 0.34
+        if '%' in val_str:
+            return None
+        
+        # Check for negative (parentheses)
+        is_negative = False
+        if val_str.startswith('(') and val_str.endswith(')'):
+            is_negative = True
+            val_str = val_str[1:-1].strip()
+        
+        # Check for negative with $ inside parens: $(123)
+        if val_str.startswith('$(') and val_str.endswith(')'):
+            is_negative = True
+            val_str = val_str[2:-1].strip()
+        
+        # Remove dollar sign
+        has_dollar = '$' in val_str
+        val_str = val_str.replace('$', '').strip()
+        
+        # Remove commas
+        val_str = val_str.replace(',', '')
+        
+        # Remove leading/trailing dashes that are placeholders
+        if val_str in ['-', '—', '–', '']:
+            return None
+        
+        # Skip if it looks like a plain year (2020-2030) without currency markers
+        # Only parse as currency if had $, (), or commas
+        if not has_dollar and not is_negative:
+            try:
+                year_val = float(val_str)
+                if 2000 <= year_val <= 2099 and year_val == int(year_val):
+                    return None  # Don't parse years as currency
+            except ValueError:
+                pass
+        
+        # Try to parse as float
+        try:
+            result = float(val_str)
+            if is_negative:
+                result = -result
+            return result
+        except ValueError:
+            return None
+    
+    @staticmethod
+    def clean_cell_value(val):
+        """
+        Clean a data cell value. Returns float for currency/numbers, string otherwise.
+        
+        Handles:
+        - Currency: '$12.7' → 12.7 (float)
+        - Negatives: '$(5.2)' → -5.2 (float)
+        - Year floats: 2024.0 → 2024 (int)
+        - NaN values → ''
         
         Args:
             val: Cell value (string, int, float, or NaN)
             
         Returns:
-            Cleaned string value
+            Float for currency/numbers, string otherwise
         """
         import pandas as pd
         
         if pd.isna(val):
             return ''
         
-        # Handle year floats (2024.0 → 2024)
-        if isinstance(val, float):
-            if val == int(val) and 2000 <= val <= 2099:
-                return str(int(val))
-            # Other floats that are whole numbers
-            if val == int(val):
-                return str(int(val))
+        # Already a number - keep as-is but handle year floats
+        if isinstance(val, (int, float)):
+            if isinstance(val, float):
+                # Year floats (2024.0 → 2024)
+                if val == int(val) and 2000 <= val <= 2099:
+                    return int(val)
+                # Other whole numbers
+                if val == int(val):
+                    return int(val)
+            return val
         
         val_str = str(val).strip()
         
-        # Clean year floats in strings
+        # Try to parse as currency/number
+        parsed = ExcelUtils.parse_currency_to_float(val_str)
+        if parsed is not None:
+            return parsed
+        
+        # Clean year floats in strings (e.g., "2024.0" → "2024")
         val_str = ExcelUtils.clean_year_string(val_str)
         
         return val_str
@@ -391,19 +534,3 @@ class ExcelUtils:
         elif '8k' in source_lower or '8-k' in source_lower:
             return '8-K'
         return 'Unknown'
-
-
-# Convenience functions for backward compatibility
-def get_column_letter(idx: int) -> str:
-    """Convert column index to Excel column letter."""
-    return ExcelUtils.get_column_letter(idx)
-
-
-def sanitize_sheet_name(name: str) -> str:
-    """Sanitize string for Excel sheet name."""
-    return ExcelUtils.sanitize_sheet_name(name)
-
-
-def normalize_title_for_grouping(title: str) -> str:
-    """Normalize title for grouping."""
-    return ExcelUtils.normalize_title_for_grouping(title)

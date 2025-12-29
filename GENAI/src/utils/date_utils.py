@@ -27,12 +27,11 @@ class DateUtils:
         'december': 12, 'dec': 12
     }
     
-    # Month to fiscal quarter mapping (standard calendar)
+    # Quarter mapping derived from MONTHS (converts month name to quarter number 1-4)
+    # Uses same logic as MetadataBuilder.MONTH_TO_QUARTER but returns int instead of 'Q1'
     MONTH_TO_QUARTER = {
-        'january': 1, 'jan': 1, 'february': 1, 'feb': 1, 'march': 1, 'mar': 1,
-        'april': 2, 'apr': 2, 'may': 2, 'june': 2, 'jun': 2,
-        'july': 3, 'jul': 3, 'august': 3, 'aug': 3, 'september': 3, 'sep': 3,
-        'october': 4, 'oct': 4, 'november': 4, 'nov': 4, 'december': 4, 'dec': 4
+        month: (num - 1) // 3 + 1 
+        for month, num in MONTHS.items()
     }
     
     # Prefixes to remove from date headers
@@ -92,33 +91,17 @@ class DateUtils:
         """
         Convert date-based column header to Qn, YYYY format.
         
+        Uses MetadataBuilder.convert_to_qn_format with separator.
+        
         Examples:
             'March 31, 2025' → 'Q1, 2025'
             'December 31, 2024' → 'Q4, 2024'
-            'June 30, 2024' → 'Q2, 2024'
-            'September 30, 2024' → 'Q3, 2024'
+            'Three Months Ended June 30, 2024' → '3QTD, 2024'
         
         Returns original header if conversion not possible.
         """
-        header_lower = header.lower()
-        
-        # Extract year
-        year_match = re.search(r'(20\d{2})', header)
-        if not year_match:
-            return header
-        year = year_match.group(1)
-        
-        # Find quarter based on month
-        quarter = None
-        for month_name, q in cls.MONTH_TO_QUARTER.items():
-            if month_name in header_lower:
-                quarter = q
-                break
-        
-        if quarter:
-            return f"Q{quarter}, {year}"
-        
-        return header
+        from src.utils.metadata_builder import MetadataBuilder
+        return MetadataBuilder.convert_to_qn_format(header, use_separator=True)
     
     @classmethod
     def get_sort_key(cls, header: str) -> Tuple[int, int, int]:
@@ -196,14 +179,3 @@ class DateUtils:
         elif 'Q4' in quarter_upper or '10K' in quarter_upper or '10-K' in quarter_upper:
             return 4
         return 5
-
-
-# Convenience functions for backward compatibility
-def parse_date_from_header(header: str) -> Tuple[int, int, int]:
-    """Parse date from column header for sorting."""
-    return DateUtils.parse_date_from_header(header)
-
-
-def convert_to_quarter_format(header: str) -> str:
-    """Convert date header to Q1, 2025 format."""
-    return DateUtils.convert_to_quarter_format(header)

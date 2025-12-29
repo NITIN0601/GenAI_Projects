@@ -20,6 +20,11 @@ from src.infrastructure.extraction.backends import (
 )
 from src.utils import get_logger
 from src.utils.metrics import get_metrics_collector
+from src.utils.constants import (
+    EXTRACTION_MIN_QUALITY,
+    EXTRACTION_CACHE_TTL_HOURS,
+    EXTRACTION_MAX_SIZE_MB,
+)
 from config.settings import settings
 
 
@@ -49,9 +54,9 @@ class UnifiedExtractor:
     def __init__(
         self,
         backends: Optional[List[str]] = None,
-        min_quality: float = 60.0,
+        min_quality: float = EXTRACTION_MIN_QUALITY,
         enable_caching: bool = True,
-        cache_ttl_hours: int = 168
+        cache_ttl_hours: int = EXTRACTION_CACHE_TTL_HOURS
     ):
         """
         Initialize unified extractor.
@@ -137,7 +142,7 @@ class UnifiedExtractor:
             raise ValueError(error_msg)
         
         # Check file size (prevent DoS with huge files)
-        max_size_mb = kwargs.get('max_size_mb', 500)  # Default 500MB limit
+        max_size_mb = kwargs.get('max_size_mb', EXTRACTION_MAX_SIZE_MB)
         file_size_mb = pdf_file.stat().st_size / (1024 * 1024)
         if file_size_mb > max_size_mb:
             error_msg = f"PDF too large: {file_size_mb:.1f}MB > {max_size_mb}MB"

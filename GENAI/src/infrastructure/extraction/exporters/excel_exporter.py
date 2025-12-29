@@ -37,12 +37,15 @@ import re
 from src.utils import get_logger
 from src.core import get_paths
 from src.infrastructure.extraction.formatters.header_detector import HeaderDetector
+from src.infrastructure.extraction.exporters.base_exporter import BaseExcelExporter
 from src.utils.excel_utils import ExcelUtils
+from src.utils.metadata_builder import MetadataLabels
+from src.utils.financial_domain import extract_quarter_from_header, extract_year_from_header, convert_year_to_q4_header
 
 logger = get_logger(__name__)
 
 
-class ExcelTableExporter:
+class ExcelTableExporter(BaseExcelExporter):
     """
     Export extracted tables to multi-sheet Excel with Index.
     
@@ -53,11 +56,13 @@ class ExcelTableExporter:
     - Same-title tables stacked with blank separator
     - Bidirectional hyperlinks (Index <-> Sheets)
     
+    Inherits shared Excel utilities from BaseExcelExporter.
     Follows singleton pattern consistent with other managers.
     """
     
     def __init__(self):
         """Initialize exporter with paths from PathManager."""
+        super().__init__()
         self.paths = get_paths()
         self.processed_dir = self.paths.data_dir / "processed"
         self.extracted_dir = self.paths.data_dir / "extracted"
@@ -194,10 +199,13 @@ class ExcelTableExporter:
             
             # Create grouping key: Section + Title
             # This ensures same-titled tables in different sections stay separate
-            if section and section.strip():
-                grouping_key = f"{section.strip()}::{normalized_title}"
+            # Fix OCR broken words and normalize whitespace
+            section_fixed = ExcelUtils.fix_ocr_broken_words(section) if section else ''
+            section_normalized = re.sub(r'\s+', ' ', section_fixed).strip().lower() if section_fixed else ''
+            if section_normalized:
+                grouping_key = f"{section_normalized}::{normalized_title}"
             else:
-                grouping_key = f"Default::{normalized_title}"
+                grouping_key = f"default::{normalized_title}"
             
             # Assign Table_ID based on unique Section + Title combination
             if grouping_key not in logical_table_ids:
@@ -292,10 +300,13 @@ class ExcelTableExporter:
             normalized_title = self._normalize_title_for_grouping(cleaned_title)
             
             # Create grouping key: Section + Title (consistent with _group_tables_by_title)
-            if section and section.strip():
-                grouping_key = f"{section.strip()}::{normalized_title}"
+            # Fix OCR broken words and normalize whitespace
+            section_fixed = ExcelUtils.fix_ocr_broken_words(section) if section else ''
+            section_normalized = re.sub(r'\s+', ' ', section_fixed).strip().lower() if section_fixed else ''
+            if section_normalized:
+                grouping_key = f"{section_normalized}::{normalized_title}"
             else:
-                grouping_key = f"Default::{normalized_title}"
+                grouping_key = f"default::{normalized_title}"
             
             # Assign Table_ID based on unique Section + Title combination
             if grouping_key not in logical_table_ids:
@@ -317,12 +328,15 @@ class ExcelTableExporter:
                 location_id = ''
             
             # Required columns per spec (now includes Section)
+            # Fix OCR broken words and normalize whitespace
+            section_clean = ExcelUtils.fix_ocr_broken_words(section) if section else ''
+            section_clean = re.sub(r'\s+', ' ', section_clean).strip() if section_clean else ''
             index_data.append({
                 'Source': metadata.get('source_doc', 'Unknown'),
                 'PageNo': page_no,
                 'Table_ID': table_id,
                 'Location_ID': location_id,
-                'Section': section,  # NEW: Section column
+                'Section': section_clean,  # Normalized Section column
                 'Table Title': title,
                 'Link': table_id  # Use Table_ID as link target (sheet name)
             })
@@ -533,7 +547,7 @@ class ExcelTableExporter:
         rows.append([f"Line Items: {row_sub_headers_str}"])
         
         # Use shared utility for unit detection
-        from src.utils.financial_patterns import is_unit_indicator
+        from src.utils.financial_domain import is_unit_indicator
         
         unique_entities = []
         seen_entities = set()
@@ -548,11 +562,22 @@ class ExcelTableExporter:
         # === COLUMN HEADERS ===
         detected_years = set()
         headers_info = self._detect_column_header_levels(table.get('content', ''))
+        source_doc = metadata.get('source_doc', '')
         
         # Get all header levels
         level_0 = self._dedupe_preserve_order(headers_info.get('level_0', []))
         level_1 = self._dedupe_preserve_order(headers_info.get('level_1', []))
-        level_2 = self._dedupe_preserve_order(headers_info.get('level_2', []))
+        level_2_raw = self._dedupe_preserve_order(headers_info.get('level_2', []))
+        
+        # For 10-K reports with year-only headers (no period type), convert to Q4 format
+        # Only convert if level_1 is empty (no "Three Months Ended" etc.)
+        level_2 = []
+        for h in level_2_raw:
+            if not level_1:  # No period type headers, just year-only
+                converted = convert_year_to_q4_header(str(h), source_doc)
+                level_2.append(converted)
+            else:
+                level_2.append(h)
         
         # Extract years from all header levels
         for header in level_0 + level_1 + level_2:
@@ -560,54 +585,63 @@ class ExcelTableExporter:
             if year_match:
                 detected_years.add(year_match.group(1))
         
-        # Main Header - only show if present (top spanning header, formerly Level 0)
+        # Main Header - only show if present (top spanning header, Level 0)
         if level_0:
             level_0_str = ', '.join(level_0)
-            rows.append([f"Main Header: {level_0_str}"])
+            rows.append([f"{MetadataLabels.MAIN_HEADER} {level_0_str}"])
         
-        # Period Type - date periods or main headers (formerly Level 1)
+        # Period Type - date periods or main headers (Level 1)
         level_1_str = ', '.join(level_1) if level_1 else ''
-        rows.append([f"Period Type: {level_1_str}"])
+        rows.append([f"{MetadataLabels.PERIOD_TYPE} {level_1_str}"])
         
-        # Year(s) - years or sub-headers (formerly Level 2)
+        # Year(s) - years or sub-headers (Level 2)
         level_2_str = ', '.join(level_2) if level_2 else ''
-        rows.append([f"Year(s): {level_2_str}"])
+        rows.append([f"{MetadataLabels.YEARS} {level_2_str}"])
         
-        # Year/Quarter - format as Qn,YYYY (e.g., Q2,2024)
-        quarter = metadata.get('quarter', '')  # e.g., "Q2" 
-        year_from_meta = metadata.get('year', '')  # e.g., "2024"
+        # Year/Quarter - format as PERIOD_TYPE,YEAR (e.g., QTD3,2024)
+        detected_periods = []
+        seen_periods = set()
         
-        # Build formatted period strings
-        formatted_periods = []
-        if quarter and year_from_meta:
-            # If we have both quarter and year from metadata, use that
-            formatted_periods.append(f"{quarter},{year_from_meta}")
+        for header in level_1 + level_0:
+            quarter_type = extract_quarter_from_header(str(header))
+            year = extract_year_from_header(str(header))
+            
+            if quarter_type and year:
+                period_key = f"{quarter_type},{year}"
+                if period_key not in seen_periods:
+                    detected_periods.append(period_key)
+                    seen_periods.add(period_key)
+            elif quarter_type:
+                for y in sorted(detected_years, reverse=True):
+                    period_key = f"{quarter_type},{y}"
+                    if period_key not in seen_periods:
+                        detected_periods.append(period_key)
+                        seen_periods.add(period_key)
         
-        # Also include any years detected from headers
-        for year in sorted(detected_years, reverse=True):
-            if quarter:
-                period = f"{quarter},{year}"
-                if period not in formatted_periods:
-                    formatted_periods.append(period)
-            else:
-                # No quarter info, just show year
-                if year not in formatted_periods:
-                    formatted_periods.append(year)
+        # Fallback: use metadata quarter/year if no headers detected
+        if not detected_periods:
+            quarter = metadata.get('quarter', '')
+            year_from_meta = metadata.get('year', '')
+            if quarter and year_from_meta:
+                detected_periods.append(f"{quarter},{year_from_meta}")
+            elif detected_years:
+                for y in sorted(detected_years, reverse=True):
+                    detected_periods.append(y)
         
-        if formatted_periods:
-            periods_str = ', '.join(formatted_periods)
-            rows.append([f"Year/Quarter: {periods_str}"])
-        else:
-            rows.append([f"Year/Quarter:"])
+        periods_str = ', '.join(detected_periods) if detected_periods else ''
+        rows.append([f"{MetadataLabels.YEAR_QUARTER} {periods_str}"])
         
         # Blank row
         rows.append([])
         
         # Table Title
-        rows.append([f"Table Title: {display_title}"])
+        rows.append([f"{MetadataLabels.TABLE_TITLE} {display_title}"])
         
-        # Source
-        source_info = f"Source: {metadata.get('source_doc', 'Unknown')}, Page {metadata.get('page_no', 'N/A')}"
+        # Source with page number in format: source_pg#
+        source_doc = metadata.get('source_doc', 'Unknown')
+        page_no = metadata.get('page_no', 'N/A')
+        # Format: 10q0625_pg5
+        source_info = f"{MetadataLabels.SOURCE} {source_doc}_pg{page_no}"
         if metadata.get('year'):
             source_info += f", {metadata.get('year')}"
         if metadata.get('quarter'):

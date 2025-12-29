@@ -10,7 +10,7 @@ Handles detection of:
 import re
 from typing import List, Dict, Any
 
-from src.utils.financial_patterns import UNIT_PATTERNS, is_unit_indicator
+from src.utils.financial_domain import UNIT_PATTERNS, is_unit_indicator
 
 
 class HeaderDetector:

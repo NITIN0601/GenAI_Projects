@@ -10,6 +10,7 @@ from typing import List, Optional
 from src.utils import get_logger
 from src.infrastructure.extraction.base import ExtractionBackend, ExtractionResult, ExtractionError
 from src.infrastructure.extraction.quality import QualityAssessor
+from src.utils.constants import EXTRACTION_MIN_QUALITY, EXTRACTION_PARALLEL_TIMEOUT
 
 logger = get_logger(__name__)
 
@@ -44,7 +45,7 @@ class ExtractionStrategy:
     def extract_with_fallback(
         self,
         pdf_path: str,
-        min_quality: float = 60.0,
+        min_quality: float = EXTRACTION_MIN_QUALITY,
         max_attempts: int = 3
     ) -> ExtractionResult:
         """
@@ -132,7 +133,7 @@ class ExtractionStrategy:
     def extract_parallel(
         self,
         pdf_path: str,
-        min_quality: float = 60.0
+        min_quality: float = EXTRACTION_MIN_QUALITY
     ) -> ExtractionResult:
         """
         Extract with all backends in parallel and return best result.
@@ -172,7 +173,7 @@ class ExtractionStrategy:
             }
             
             # Collect results as they complete
-            for future in as_completed(future_to_backend, timeout=300):  # 5 min timeout
+            for future in as_completed(future_to_backend, timeout=EXTRACTION_PARALLEL_TIMEOUT):
                 backend = future_to_backend[future]
                 
                 try:
