@@ -632,22 +632,22 @@ class TableMerger:
             cell_str = str(cell_val).strip()
             
             # Update Column Header L2 (Period Type)
-            if cell_str.startswith(MetadataLabels.COLUMN_HEADER_L2) or cell_str.startswith('Period Type:'):
+            if MetadataLabels.is_column_header_l2(cell_str):
                 if formatted['period_type']:
                     cell.value = f"{MetadataLabels.COLUMN_HEADER_L2} {formatted['period_type']}"
             
             # Update Column Header L3 (Year(s))
-            elif cell_str.startswith(MetadataLabels.COLUMN_HEADER_L3) or cell_str.startswith('Year(s):') or cell_str.startswith('Years:'):
+            elif MetadataLabels.is_column_header_l3(cell_str):
                 if formatted['years']:
                     cell.value = f"{MetadataLabels.COLUMN_HEADER_L3} {formatted['years']}"
             
             # Update Sources
-            elif cell_str.startswith(MetadataLabels.SOURCES) or cell_str.startswith('Source:') or cell_str.startswith('Sources:'):
+            elif MetadataLabels.is_sources(cell_str):
                 if formatted['sources']:
                     cell.value = f"{MetadataLabels.SOURCES} {formatted['sources']}"
             
             # Update Column Header L1 (Main Header)
-            elif cell_str.startswith(MetadataLabels.COLUMN_HEADER_L1) or cell_str.startswith('Main Header:'):
+            elif MetadataLabels.is_column_header_l1(cell_str):
                 if formatted['main_header']:
                     cell.value = f"{MetadataLabels.COLUMN_HEADER_L1} {formatted['main_header']}"
     
@@ -675,7 +675,7 @@ class TableMerger:
             
             cell_str = str(cell_value).strip()
             
-            if cell_str.startswith(MetadataLabels.SOURCES) or cell_str.startswith('Source:'):
+            if MetadataLabels.is_sources(cell_str):
                 source_rows.append(row_num)
             # Detect metadata boundary markers using centralized patterns
             elif any(cell_str.lower().startswith(marker) for marker in METADATA_BOUNDARY_MARKERS):

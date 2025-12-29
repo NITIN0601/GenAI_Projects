@@ -30,6 +30,7 @@ from src.utils.financial_domain import (
     extract_year_from_header,
     is_year_value,
 )
+from src.infrastructure.extraction.consolidation.consolidated_exporter_transpose import *
 from src.infrastructure.extraction.exporters.base_exporter import BaseExcelExporter
 from src.utils.constants import (
     CONSOLIDATION_YEAR_MIN,
@@ -360,7 +361,7 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 data_start_row = 0
                 for idx, row in table_df.iterrows():
                     first_cell = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ''
-                    if first_cell.startswith(MetadataLabels.SOURCES) or first_cell.startswith('Source:'):
+                    if first_cell.startswith(MetadataLabels.SOURCES):
                         data_start_row = idx
                         break
                 
@@ -402,7 +403,7 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                         r_lower = r_clean.lower()
                         if r_lower == 'row label': 
                             continue
-                        if r_lower.startswith('source:'): 
+                        if r_lower.startswith(MetadataLabels.SOURCES.lower()): 
                             continue
                         if r_lower.startswith('page '): 
                             continue
@@ -418,6 +419,12 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                         if r_lower.startswith('table title'):
                             continue
                         if r_lower.startswith('year(s)'):
+                            continue
+                        if r_lower.startswith('year/quarter'):
+                            continue
+                        if r_lower.startswith('category'):
+                            continue
+                        if r_lower.startswith('line items'):
                             continue
                         if r_lower.startswith('← back'):
                             continue
@@ -448,6 +455,11 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                         fixed_section = ExcelUtils.fix_ocr_broken_words(section.strip())
                         normalized_section = re.sub(r'\s+', ' ', fixed_section).lower()
                     
+                    # TODO: Future enhancement - Header pattern for merge grouping
+                    # Tables would only merge if they have the same L1/L2/L3 structure
+                    # header_pattern = self._get_header_structure_pattern(subtable_df)
+                    
+                    # Original grouping key: Section + Title + Row Signature
                     if normalized_section:
                         normalized_key = f"{normalized_section}::{normalized_title}{subtable_suffix}::{row_sig_full}"
                     else:
@@ -746,6 +758,82 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         
         return subtables if subtables else [(df, data_start_idx)]
     
+    def _get_header_structure_pattern(self, df: pd.DataFrame) -> str:
+        """
+        Detect the header structure pattern of a table for merge grouping.
+        
+        Tables only merge if they have the same header structure pattern.
+        
+        Returns pattern like:
+            - "L3_ONLY" - Point-in-time dates (e.g., "At December 2024")
+            - "L2_L3" - Period spanning years (e.g., "Three Months Ended" | "2024")
+            - "L1_L2_L3" - Main header + period + years
+        
+        Example that should NOT merge:
+            Table A: | At Dec 2024 | At Mar 2020 |  -> L3_ONLY
+            Table B: | Three Months Ended Mar 31, | -> L2_L3
+                     |    2024    |    2020       |
+        """
+        if df.empty or len(df) < 2:
+            return "UNKNOWN"
+        
+        has_l1 = False  # Main header (e.g., "Average Monthly Balance")
+        has_l2 = False  # Period type (e.g., "Three Months Ended")
+        has_l3 = False  # Years/dates (always present)
+        
+        # Check first few rows for header patterns
+        for i in range(min(5, len(df))):
+            row = df.iloc[i]
+            first_cell = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+            first_cell_lower = first_cell.lower()
+            
+            # Skip obvious metadata rows
+            if first_cell.startswith(('Source', 'source', '←', 'Row Label', 'Category', 'Line Items')):
+                continue
+            
+            # Collect non-empty values from data columns
+            other_cells = [str(v).strip() for v in row.iloc[1:] if pd.notna(v) and str(v).strip()]
+            
+            if not other_cells:
+                continue
+            
+            # Check if row has spanning header patterns (L1 or L2)
+            sample_val = other_cells[0].lower() if other_cells else ''
+            
+            # L2 patterns: Period types that span columns
+            l2_patterns = ['three months', 'six months', 'nine months', 'year ended', 
+                           'months ended', 'quarter ended']
+            if any(p in sample_val for p in l2_patterns):
+                has_l2 = True
+                continue
+            
+            # L1 patterns: Main headers that describe content type
+            l1_patterns = ['average monthly', 'balance', 'total assets', 'other assets']
+            if any(p in sample_val for p in l1_patterns):
+                has_l1 = True
+                continue
+            
+            # L3 patterns: Point-in-time dates or years
+            # "At December 31, 2024" or just "2024"
+            l3_patterns = ['at march', 'at june', 'at september', 'at december', 
+                           'as of', 'december 31', 'march 31', 'june 30', 'september 30']
+            if any(p in sample_val for p in l3_patterns):
+                has_l3 = True
+                continue
+            
+            # Pure year values (e.g., "2024", "2023")
+            if sample_val.isdigit() and len(sample_val) == 4:
+                has_l3 = True
+                continue
+        
+        # Build pattern string
+        if has_l1 and has_l2:
+            return "L1_L2_L3"
+        elif has_l2:
+            return "L2_L3"
+        else:
+            return "L3_ONLY"
+    
     def _find_header_rows(self, df: pd.DataFrame) -> Tuple[int, int, int]:
         """
         Dynamically find L1 header, L2 header, and data start row indices.
@@ -791,10 +879,20 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 continue
             
             # Check if this is a date period header pattern
-            if any(p in first_cell.lower() for p in ['months ended', 'at march', 'at june', 'at december']):
-                if l1_row is None:
-                    l1_row = i
-                continue
+            # IMPORTANT: Only treat as header if:
+            #   1. First cell is short (< 30 chars) - long text is likely a row label
+            #   2. First cell STARTS with the date pattern (not contains in middle)
+            # This prevents "Average liquidity resources for three months ended" from being treated as a header
+            if len(first_cell) < 30:
+                # Check if first cell STARTS with date patterns (not contains)
+                date_start_patterns = ['three months', 'six months', 'nine months', 'twelve months',
+                                       'at march', 'at june', 'at september', 'at december',
+                                       'at january', 'at february', 'at april', 'at may',
+                                       'at july', 'at august', 'at october', 'at november']
+                if any(first_cell.lower().startswith(p) for p in date_start_patterns):
+                    if l1_row is None:
+                        l1_row = i
+                    continue
             
             # This looks like actual data
             if data_start is None and first_cell and first_cell not in ['Row Label', 'nan']:
@@ -990,15 +1088,64 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             if df.empty or len(df.columns) < 2:
                 continue
             
+            # First, find the "Row Label" header row to know where data starts
+            # This ensures we only collect actual data row labels, not headers
+            row_label_row_idx = None
+            for idx, val in enumerate(df.iloc[:, 0].tolist()):
+                if pd.notna(val) and str(val).strip() == 'Row Label':
+                    row_label_row_idx = idx
+                    break
+            
+            # If "Row Label" not found, find data start dynamically
+            if row_label_row_idx is None:
+                # Look for Source(s) row, then skip to first data row
+                source_row_idx = None
+                unit_row_idx = None
+                first_data_row_idx = None
+                
+                for idx, val in enumerate(df.iloc[:, 0].tolist()):
+                    val_str = str(val).strip() if pd.notna(val) else ''
+                    val_lower = val_str.lower()
+                    
+                    # Find Source(s) row
+                    if val_str.startswith(MetadataLabels.SOURCES):
+                        source_row_idx = idx
+                    # Find unit header row ($ in millions, etc.)
+                    elif val_lower.startswith('$ in'):
+                        unit_row_idx = idx
+                    # First non-metadata row after Source(s) is the data start
+                    elif source_row_idx is not None and val_str:
+                        # Skip blank rows and metadata patterns
+                        if not val_str.startswith(('←', 'Category', 'Line Items', 'Product', 'Column Header', 'Year', 'Table Title')):
+                            if not val_lower.startswith('$ in'):
+                                first_data_row_idx = idx
+                                break
+                
+                # Determine data_start_for_labels
+                if first_data_row_idx is not None:
+                    # We found the first data row - use its index directly
+                    data_start_for_labels = first_data_row_idx
+                elif unit_row_idx is not None:
+                    # Data starts after unit row
+                    data_start_for_labels = unit_row_idx + 1
+                else:
+                    # Fallback to _find_header_rows
+                    _, _, data_start_fallback = self._find_header_rows(df)
+                    data_start_for_labels = data_start_fallback
+            else:
+                # Data rows start AFTER the "Row Label" row
+                data_start_for_labels = row_label_row_idx + 1
+            
             # First pass: identify section headers (rows with label but no data)
             current_section = ''
             
-            # First column is row labels - track sections and filter appropriately
-            for row_idx, val in enumerate(df.iloc[:, 0].tolist()):
+            # Collect row labels starting from data_start_for_labels
+            for row_idx in range(data_start_for_labels, len(df)):
+                val = df.iloc[row_idx, 0]
                 if pd.notna(val):
                     val_str = str(val).strip()
-                    # Skip metadata patterns
-                    if val_str.startswith(('Source:', 'Sources:', 'Page ')):
+                    # Skip metadata patterns that might appear in data
+                    if val_str.startswith((MetadataLabels.SOURCES, 'Page ')):
                         continue
                     if val_str.startswith('$ in') or val_str.startswith('$,'):
                         continue
@@ -1039,8 +1186,10 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                             label_to_section[section_key] = current_section
             
             # Extract column data with ORIGINAL headers from source
-            # Use dynamic header row detection instead of hardcoded indices
-            l1_row, l2_row, data_start = self._find_header_rows(df)
+            # Use the same data_start we found for row labels to ensure consistency
+            l1_row, l2_row, _ = self._find_header_rows(df)
+            # Use data_start_for_labels to sync with row label collection
+            data_start = data_start_for_labels
             
             # Get Level 0 header (Main Header) from table metadata
             # This comes from the source file's "Main Header:" row
@@ -1104,13 +1253,16 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 sort_key = DateUtils.parse_date_from_header(header)
                 norm_header = header.lower().strip()
                 
-                source_row_labels = df.iloc[:, 0].tolist()
-                col_values = df.iloc[:, col_idx].tolist()
+                # Get row labels and values starting from data_start (not from row 0!)
+                # This prevents header row values from being extracted as data
+                source_row_labels = df.iloc[data_start:, 0].tolist()
+                col_values = df.iloc[data_start:, col_idx].tolist()
                 
                 row_data_map = {}
                 current_section_for_data = ''  # Track current section during data extraction
                 
-                for row_idx, (row_label, value) in enumerate(zip(source_row_labels, col_values)):
+                for rel_idx, (row_label, value) in enumerate(zip(source_row_labels, col_values)):
+                    row_idx = data_start + rel_idx  # Actual row index in DataFrame
                     if pd.notna(row_label):
                         row_label_str = str(row_label).strip()
                         

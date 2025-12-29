@@ -39,7 +39,7 @@ from src.core import get_paths
 from src.infrastructure.extraction.formatters.header_detector import HeaderDetector
 from src.infrastructure.extraction.exporters.base_exporter import BaseExcelExporter
 from src.utils.excel_utils import ExcelUtils
-from src.utils.metadata_builder import MetadataLabels
+from src.utils.metadata_builder import MetadataLabels, MetadataBuilder
 from src.utils.financial_domain import extract_quarter_from_header, extract_year_from_header, convert_year_to_q4_header
 
 logger = get_logger(__name__)
@@ -566,8 +566,33 @@ class ExcelTableExporter(BaseExcelExporter):
         
         # Get all header levels
         level_0 = self._dedupe_preserve_order(headers_info.get('level_0', []))
-        level_1 = self._dedupe_preserve_order(headers_info.get('level_1', []))
+        level_1_raw = self._dedupe_preserve_order(headers_info.get('level_1', []))
         level_2_raw = self._dedupe_preserve_order(headers_info.get('level_2', []))
+        
+        # Split compound headers in level_1 (e.g., "Average Monthly Balance Three Months Ended March 31,")
+        # into L1 (main header) and L2 (period type) components
+        level_1 = []
+        extracted_l0_from_split = []
+        for header in level_1_raw:
+            split_result = MetadataBuilder.split_compound_header(str(header))
+            if split_result['l1']:
+                # Found compound header - L1 is main header, add to level_0
+                if split_result['l1'] not in extracted_l0_from_split:
+                    extracted_l0_from_split.append(split_result['l1'])
+                # L2 is period type, keep in level_1
+                if split_result['l2'] and split_result['l2'] not in level_1:
+                    level_1.append(split_result['l2'])
+            else:
+                # No split needed - keep original
+                if header not in level_1:
+                    level_1.append(header)
+        
+        # Merge extracted L0 headers with existing level_0
+        # (extracted from splits come after existing level_0)
+        if extracted_l0_from_split:
+            for h in extracted_l0_from_split:
+                if h not in level_0:
+                    level_0.append(h)
         
         # For 10-K reports with year-only headers (no period type), convert to Q4 format
         # Only convert if level_1 is empty (no "Three Months Ended" etc.)
@@ -586,9 +611,8 @@ class ExcelTableExporter(BaseExcelExporter):
                 detected_years.add(year_match.group(1))
         
         # Column Header L1 - Main Header (top spanning header, Level 0)
-        if level_0:
-            level_0_str = ', '.join(level_0)
-            rows.append([f"{MetadataLabels.COLUMN_HEADER_L1} {level_0_str}"])
+        level_0_str = ', '.join(level_0) if level_0 else ''
+        rows.append([f"{MetadataLabels.COLUMN_HEADER_L1} {level_0_str}"])
         
         # Column Header L2 - Period Type date periods or main headers (Level 1)
         level_1_str = ', '.join(level_1) if level_1 else ''
@@ -602,6 +626,7 @@ class ExcelTableExporter(BaseExcelExporter):
         detected_periods = []
         seen_periods = set()
         
+        # First, try to get period type from L1 + L0 headers
         for header in level_1 + level_0:
             quarter_type = extract_quarter_from_header(str(header))
             year = extract_year_from_header(str(header))
@@ -618,6 +643,18 @@ class ExcelTableExporter(BaseExcelExporter):
                         detected_periods.append(period_key)
                         seen_periods.add(period_key)
         
+        # If no periods detected from L1/L0, try L2 headers for period type
+        # This handles cases like "Average Monthly Balance Three Months Ended March 31"
+        # where the L2 header contains the period type but years are in L3
+        if not detected_periods and level_1_str:
+            l2_quarter_type = extract_quarter_from_header(level_1_str)
+            if l2_quarter_type:
+                for y in sorted(detected_years, reverse=True):
+                    period_key = f"{l2_quarter_type},{y}"
+                    if period_key not in seen_periods:
+                        detected_periods.append(period_key)
+                        seen_periods.add(period_key)
+        
         # Fallback: use metadata quarter/year if no headers detected
         if not detected_periods:
             quarter = metadata.get('quarter', '')
@@ -625,8 +662,9 @@ class ExcelTableExporter(BaseExcelExporter):
             if quarter and year_from_meta:
                 detected_periods.append(f"{quarter},{year_from_meta}")
             elif detected_years:
+                # Last resort: use YTD prefix for standalone years from 10-K
                 for y in sorted(detected_years, reverse=True):
-                    detected_periods.append(y)
+                    detected_periods.append(f"YTD,{y}")
         
         periods_str = ', '.join(detected_periods) if detected_periods else ''
         rows.append([f"{MetadataLabels.YEAR_QUARTER} {periods_str}"])
@@ -806,7 +844,7 @@ class ExcelTableExporter(BaseExcelExporter):
                 # (Multiple tables with same title can be stacked on one sheet)
                 for row_num in range(1, ws.max_row + 1):
                     cell_value = ws.cell(row=row_num, column=1).value
-                    if cell_value and str(cell_value).startswith(MetadataLabels.SOURCES):
+                    if cell_value and MetadataLabels.is_sources(str(cell_value)):
                         # Skip the blank row after Source: - headers start 2 rows after
                         # Sheet structure: Source (row N) -> blank (N+1) -> headers (N+2, N+3, N+4...)
                         # Tables can have up to 3 levels of column headers that need merging

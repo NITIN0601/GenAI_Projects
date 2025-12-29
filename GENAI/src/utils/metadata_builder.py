@@ -40,6 +40,46 @@ class MetadataLabels:
     TABLE_TITLE = 'Table Title:'
     SOURCES = 'Source(s):'  # Works for one or many
     
+    # --- Row Index Constants (1-indexed for Excel) ---
+    # NOTE: L1 (Main Header) is OPTIONAL - some tables have it, some don't
+    # Structure varies, so code should detect by LABEL TEXT, not row index
+    #
+    # With L1 (13 metadata rows):
+    #   R01: ← Back to Index
+    #   R02: Category (Parent):
+    #   R03: Line Items:
+    #   R04: Product/Entity:
+    #   R05: Column Header L1: (Main Header - OPTIONAL)
+    #   R06: Column Header L2: (Period Type)
+    #   R07: Column Header L3: (Years/Dates)
+    #   R08: Year/Quarter:
+    #   R09: [blank]
+    #   R10: Table Title:
+    #   R11: Source(s):
+    #   R12: [blank]
+    #   R13+: Data
+    #
+    # Without L1 (12 metadata rows):
+    #   R01: ← Back to Index
+    #   R02: Category (Parent):
+    #   R03: Line Items:
+    #   R04: Product/Entity:
+    #   R05: Column Header L2: (Period Type)
+    #   R06: Column Header L3: (Years/Dates)
+    #   R07: Year/Quarter:
+    #   R08: [blank]
+    #   R09: Table Title:
+    #   R10: Source(s):
+    #   R11: [blank]
+    #   R12+: Data
+    
+    # Minimum expected metadata rows (without L1)
+    MIN_METADATA_ROWS = 11  
+    # Maximum metadata rows (with L1)
+    MAX_METADATA_ROWS = 12
+    
+    # For dynamic detection, use is_metadata_row() instead of row indices
+    
     # --- Helper methods for pattern matching ---
     
     @staticmethod
@@ -154,6 +194,61 @@ class MetadataBuilder:
         'july': 'Q3', 'august': 'Q3', 'september': 'Q3',
         'october': 'Q4', 'november': 'Q4', 'december': 'Q4',
     }
+    
+    # Patterns that indicate start of period type in compound headers
+    PERIOD_START_PATTERNS = [
+        'three months ended', 'six months ended', 'nine months ended',
+        'year ended', 'fiscal year ended',
+        'at march', 'at june', 'at september', 'at december',
+        'at january', 'at february', 'at april', 'at may',
+        'at july', 'at august', 'at october', 'at november',
+        'as of march', 'as of june', 'as of september', 'as of december',
+    ]
+    
+    @classmethod
+    def split_compound_header(cls, header: str) -> dict:
+        """
+        Split compound column headers into L1 (main header) and L2 (period type).
+        
+        Example:
+            Input: "Average Monthly Balance Three Months Ended March 31,"
+            Output: {
+                'l1': 'Average Monthly Balance',
+                'l2': 'Three Months Ended March 31,',
+                'original': 'Average Monthly Balance Three Months Ended March 31,'
+            }
+            
+        If no split is possible, returns:
+            {'l1': '', 'l2': header, 'original': header}
+        
+        Args:
+            header: Column header string to split
+            
+        Returns:
+            Dict with 'l1' (main header), 'l2' (period type), 'original' keys
+        """
+        if not header:
+            return {'l1': '', 'l2': '', 'original': ''}
+        
+        header_lower = header.lower()
+        
+        # Try to find where period type starts
+        for pattern in cls.PERIOD_START_PATTERNS:
+            idx = header_lower.find(pattern)
+            if idx > 0:  # Pattern found and not at start
+                l1 = header[:idx].strip()
+                l2 = header[idx:].strip()
+                # Capitalize first letter of L2
+                if l2:
+                    l2 = l2[0].upper() + l2[1:] if len(l2) > 1 else l2.upper()
+                return {
+                    'l1': l1,
+                    'l2': l2,
+                    'original': header
+                }
+        
+        # No split possible - treat as L2 only
+        return {'l1': '', 'l2': header, 'original': header}
     
     @classmethod
     def build_year_quarter_value(
