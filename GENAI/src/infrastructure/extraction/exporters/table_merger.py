@@ -387,7 +387,7 @@ class TableMerger:
         l3_row = None
         for row_num in range(1, 12):
             cell_val = ws.cell(row=row_num, column=1).value
-            if cell_val and 'Column Header L3' in str(cell_val):
+            if cell_val and MetadataLabels.COLUMN_HEADER_L3 in str(cell_val):
                 l3_row = row_num
                 break
         
@@ -412,7 +412,7 @@ class TableMerger:
         if headers:
             # Update the L3 row with extracted headers
             header_text = ', '.join(headers[:10])  # Limit to 10 headers
-            ws.cell(row=l3_row, column=1).value = f"Column Header L3: {header_text}"
+            ws.cell(row=l3_row, column=1).value = f"{MetadataLabels.COLUMN_HEADER_L3} {header_text}"
     
     def _clear_block_rows(self, ws: Worksheet, block: Dict) -> None:
         """
@@ -460,8 +460,8 @@ class TableMerger:
             title = ''
             for row_num in range(1, 15):
                 cell_val = new_ws.cell(row=row_num, column=1).value
-                if cell_val and 'Table Title:' in str(cell_val):
-                    title = str(cell_val).replace('Table Title:', '').strip()
+                if cell_val and MetadataLabels.TABLE_TITLE in str(cell_val):
+                    title = str(cell_val).replace(MetadataLabels.TABLE_TITLE, '').strip()
                     break
             
             if not title:
@@ -631,25 +631,25 @@ class TableMerger:
                 continue
             cell_str = str(cell_val).strip()
             
-            # Update Period Type
-            if cell_str.startswith(MetadataLabels.PERIOD_TYPE):
+            # Update Column Header L2 (Period Type)
+            if cell_str.startswith(MetadataLabels.COLUMN_HEADER_L2) or cell_str.startswith('Period Type:'):
                 if formatted['period_type']:
-                    cell.value = f"{MetadataLabels.PERIOD_TYPE} {formatted['period_type']}"
+                    cell.value = f"{MetadataLabels.COLUMN_HEADER_L2} {formatted['period_type']}"
             
-            # Update Year(s)
-            elif cell_str.startswith(MetadataLabels.YEARS) or cell_str.startswith('Years:'):
+            # Update Column Header L3 (Year(s))
+            elif cell_str.startswith(MetadataLabels.COLUMN_HEADER_L3) or cell_str.startswith('Year(s):') or cell_str.startswith('Years:'):
                 if formatted['years']:
-                    cell.value = f"{MetadataLabels.YEARS} {formatted['years']}"
+                    cell.value = f"{MetadataLabels.COLUMN_HEADER_L3} {formatted['years']}"
             
             # Update Sources
-            elif cell_str.startswith(MetadataLabels.SOURCE) or cell_str.startswith(MetadataLabels.SOURCES):
+            elif cell_str.startswith(MetadataLabels.SOURCES) or cell_str.startswith('Source:') or cell_str.startswith('Sources:'):
                 if formatted['sources']:
                     cell.value = f"{MetadataLabels.SOURCES} {formatted['sources']}"
             
-            # Update Main Header
-            elif cell_str.startswith(MetadataLabels.MAIN_HEADER):
+            # Update Column Header L1 (Main Header)
+            elif cell_str.startswith(MetadataLabels.COLUMN_HEADER_L1) or cell_str.startswith('Main Header:'):
                 if formatted['main_header']:
-                    cell.value = f"{MetadataLabels.MAIN_HEADER} {formatted['main_header']}"
+                    cell.value = f"{MetadataLabels.COLUMN_HEADER_L1} {formatted['main_header']}"
     
     def _find_table_blocks(self, ws) -> List[Dict[str, Any]]:
         """
@@ -675,7 +675,7 @@ class TableMerger:
             
             cell_str = str(cell_value).strip()
             
-            if cell_str.startswith('Source:'):
+            if cell_str.startswith(MetadataLabels.SOURCES) or cell_str.startswith('Source:'):
                 source_rows.append(row_num)
             # Detect metadata boundary markers using centralized patterns
             elif any(cell_str.lower().startswith(marker) for marker in METADATA_BOUNDARY_MARKERS):

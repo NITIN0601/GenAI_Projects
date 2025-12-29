@@ -341,7 +341,7 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 for idx in range(min(10, len(table_df))):  # Metadata is in first 10 rows
                     first_cell = str(table_df.iloc[idx, 0]) if pd.notna(table_df.iloc[idx, 0]) else ''
                     # Check for both old and new label names using MetadataLabels
-                    if first_cell.startswith(MetadataLabels.MAIN_HEADER) or first_cell.startswith('Column Header (Level 0):'):
+                    if first_cell.startswith(MetadataLabels.COLUMN_HEADER_L1) or first_cell.startswith('Main Header:') or first_cell.startswith('Column Header (Level 0):'):
                         # Extract value after the colon
                         main_header = first_cell.split(':', 1)[1].strip() if ':' in first_cell else ''
                         break
@@ -360,7 +360,7 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 data_start_row = 0
                 for idx, row in table_df.iterrows():
                     first_cell = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ''
-                    if first_cell.startswith('Source:'):
+                    if first_cell.startswith(MetadataLabels.SOURCES) or first_cell.startswith('Source:'):
                         data_start_row = idx
                         break
                 
@@ -371,8 +371,8 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                         first_cell = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ''
                         # Skip metadata patterns
                         if any(first_cell.startswith(p) for p in 
-                               ['← Back', 'Row Header', 'Column Header', 'Product', 
-                                'Table Title', 'Year(s)', 'Source:']):
+                               [MetadataLabels.BACK_LINK, 'Row Header', 'Column Header', 'Product', 
+                                MetadataLabels.TABLE_TITLE, MetadataLabels.COLUMN_HEADER_L3, MetadataLabels.SOURCES]):
                             continue
                         if first_cell.strip() == '':
                             continue
@@ -763,9 +763,11 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             
             # Skip metadata rows - include ALL metadata prefixes
             metadata_prefixes = (
-                'Source:', '←', 'Category', 'Line Items', 'Product/Entity', 
-                'Period Type', 'Year(s)', 'Year/Quarter', 'Table Title:', 
-                'Column Header', 'None', 'Row Label', 'Sources:'
+                MetadataLabels.SOURCES, '←', 
+                MetadataLabels.CATEGORY_PARENT.rstrip(':'), MetadataLabels.LINE_ITEMS.rstrip(':'), 
+                MetadataLabels.PRODUCT_ENTITY.rstrip(':'), MetadataLabels.COLUMN_HEADER_L2.rstrip(':'), 
+                MetadataLabels.COLUMN_HEADER_L3.rstrip(':'), MetadataLabels.YEAR_QUARTER.rstrip(':'), 
+                MetadataLabels.TABLE_TITLE.rstrip(':'), 'Column Header', 'None', 'Row Label'
             )
             if first_cell.startswith(metadata_prefixes) or first_cell == '':
                 # Check if this is a header row (empty first cell but other cells have content)

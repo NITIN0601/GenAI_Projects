@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 # =============================================================================
 
 class MetadataLabels:
-    """Centralized labels for metadata rows."""
+    """Centralized labels for metadata rows - NO backward compatibility."""
     
     # Navigation
     BACK_LINK = '← Back to Index'
@@ -28,23 +28,62 @@ class MetadataLabels:
     LINE_ITEMS = 'Line Items:'
     PRODUCT_ENTITY = 'Product/Entity:'
     
-    # Column headers (per-column in merged output)
-    COLUMN_HEADER_L1 = 'Column Header L1'  # Level 0 - Main Header
-    COLUMN_HEADER_L2 = 'Column Header L2'  # Level 1 - Period Type
-    COLUMN_HEADER_L3 = 'Column Header L3'  # Level 2 - Years/Dates
+    # Column headers (3 levels)
+    COLUMN_HEADER_L1 = 'Column Header L1:'  # Main Header
+    COLUMN_HEADER_L2 = 'Column Header L2:'  # Period Type
+    COLUMN_HEADER_L3 = 'Column Header L3:'  # Years/Dates
     
-    # Combined period + year
+    # Period info
     YEAR_QUARTER = 'Year/Quarter:'
     
     # Table info
     TABLE_TITLE = 'Table Title:'
-    SOURCES = 'Sources:'
-    SOURCE = 'Source:'  # Legacy single source
+    SOURCES = 'Source(s):'  # Works for one or many
     
-    # Legacy labels (for backward compatibility during extraction)
-    PERIOD_TYPE = 'Period Type:'
-    YEARS = 'Year(s):'
-    MAIN_HEADER = 'Main Header:'
+    # --- Helper methods for pattern matching ---
+    
+    @staticmethod
+    def is_sources(text: str) -> bool:
+        """Check if text starts with any source label pattern."""
+        if not text:
+            return False
+        return text.startswith(MetadataLabels.SOURCES) or text.startswith('Source:') or text.startswith('Sources:')
+    
+    @staticmethod
+    def is_column_header_l1(text: str) -> bool:
+        """Check if text starts with Column Header L1/Main Header pattern."""
+        if not text:
+            return False
+        return text.startswith(MetadataLabels.COLUMN_HEADER_L1) or text.startswith('Main Header:')
+    
+    @staticmethod
+    def is_column_header_l2(text: str) -> bool:
+        """Check if text starts with Column Header L2/Period Type pattern."""
+        if not text:
+            return False
+        return text.startswith(MetadataLabels.COLUMN_HEADER_L2) or text.startswith('Period Type:')
+    
+    @staticmethod
+    def is_column_header_l3(text: str) -> bool:
+        """Check if text starts with Column Header L3/Year(s) pattern."""
+        if not text:
+            return False
+        return text.startswith(MetadataLabels.COLUMN_HEADER_L3) or text.startswith('Year(s):') or text.startswith('Years:')
+    
+    @staticmethod
+    def is_metadata_row(text: str) -> bool:
+        """Check if text starts with any metadata label."""
+        if not text:
+            return False
+        prefixes = (
+            MetadataLabels.SOURCES, MetadataLabels.BACK_LINK,
+            MetadataLabels.CATEGORY_PARENT, MetadataLabels.LINE_ITEMS,
+            MetadataLabels.PRODUCT_ENTITY, MetadataLabels.COLUMN_HEADER_L1,
+            MetadataLabels.COLUMN_HEADER_L2, MetadataLabels.COLUMN_HEADER_L3,
+            MetadataLabels.YEAR_QUARTER, MetadataLabels.TABLE_TITLE,
+            'Source:', 'Sources:', 'Main Header:', 'Period Type:', 'Year(s):', 'Years:'
+        )
+        return any(text.startswith(p) for p in prefixes)
 
 
 @dataclass
@@ -314,17 +353,17 @@ class MetadataBuilder:
         # Row 5: Column Header L1 (summary of unique values)
         l1_unique = sorted(set(h for h in metadata.column_header_l1 if h))
         l1_str = ', '.join(l1_unique) if l1_unique else ''
-        rows.append({first_col: f"Column Header L1: {l1_str}"})
+        rows.append({first_col: f"{MetadataLabels.COLUMN_HEADER_L1} {l1_str}"})
         
         # Row 6: Column Header L2 (summary of unique values)
         l2_unique = sorted(set(h for h in metadata.column_header_l2 if h))
         l2_str = ', '.join(l2_unique) if l2_unique else ''
-        rows.append({first_col: f"Column Header L2: {l2_str}"})
+        rows.append({first_col: f"{MetadataLabels.COLUMN_HEADER_L2} {l2_str}"})
         
         # Row 7: Column Header L3 (summary of unique values)
         l3_unique = sorted(set(h for h in metadata.column_header_l3 if h))
         l3_str = ', '.join(l3_unique) if l3_unique else ''
-        rows.append({first_col: f"Column Header L3: {l3_str}"})
+        rows.append({first_col: f"{MetadataLabels.COLUMN_HEADER_L3} {l3_str}"})
         
         # Row 8: Year/Quarter (derived from L2 + L3)
         year_quarter_values = []
@@ -455,7 +494,7 @@ class MetadataBuilder:
         
         for idx in range(len(columns)):
             if idx == 0:
-                values.append('Year/Quarter:')
+                values.append(MetadataLabels.YEAR_QUARTER)
             elif idx < len(l1_headers) and idx < len(l2_headers):
                 yq = cls.build_year_quarter_value(l1_headers[idx], l2_headers[idx], source)
                 values.append(yq)
@@ -529,16 +568,16 @@ class MetadataBuilder:
         
         cell_str = str(cell_value).strip()
         
-        # Period Type
-        if cell_str.startswith(MetadataLabels.PERIOD_TYPE):
+        # Column Header L2 (Period Type)
+        if cell_str.startswith(MetadataLabels.COLUMN_HEADER_L2) or cell_str.startswith('Period Type:'):
             values = cell_str.split(':', 1)[1].strip()
             for v in values.split(','):
                 v = v.strip()
                 if v:
                     metadata['period_type'].add(v)
         
-        # Year(s)
-        elif cell_str.startswith(MetadataLabels.YEARS) or cell_str.startswith('Years:'):
+        # Column Header L3 (Year(s))
+        elif cell_str.startswith(MetadataLabels.COLUMN_HEADER_L3) or cell_str.startswith('Year(s):') or cell_str.startswith('Years:'):
             values = cell_str.split(':', 1)[1].strip()
             for v in values.split(','):
                 v = v.strip()
@@ -546,15 +585,15 @@ class MetadataBuilder:
                     metadata['years'].add(v)
         
         # Sources
-        elif cell_str.startswith(MetadataLabels.SOURCES) or cell_str.startswith(MetadataLabels.SOURCE):
+        elif cell_str.startswith(MetadataLabels.SOURCES) or cell_str.startswith('Source:') or cell_str.startswith('Sources:'):
             values = cell_str.split(':', 1)[1].strip()
             for v in values.split(','):
                 v = v.strip()
                 if v:
                     metadata['sources'].add(v)
         
-        # Main Header
-        elif cell_str.startswith(MetadataLabels.MAIN_HEADER):
+        # Column Header L1 (Main Header)
+        elif cell_str.startswith(MetadataLabels.COLUMN_HEADER_L1) or cell_str.startswith('Main Header:'):
             values = cell_str.split(':', 1)[1].strip()
             for v in values.split(','):
                 v = v.strip()

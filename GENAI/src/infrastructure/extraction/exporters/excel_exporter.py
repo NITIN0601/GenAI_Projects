@@ -540,11 +540,11 @@ class ExcelTableExporter(BaseExcelExporter):
         
         # Category (Parent) - section headers (formerly Row Header Level 1)
         row_headers_str = ', '.join(display_row_headers) if display_row_headers else ''
-        rows.append([f"Category (Parent): {row_headers_str}"])
+        rows.append([f"{MetadataLabels.CATEGORY_PARENT} {row_headers_str}"])
         
         # Line Items - data row labels (formerly Row Header Level 2)
         row_sub_headers_str = ', '.join(display_l2_row_headers) if display_l2_row_headers else ''
-        rows.append([f"Line Items: {row_sub_headers_str}"])
+        rows.append([f"{MetadataLabels.LINE_ITEMS} {row_sub_headers_str}"])
         
         # Use shared utility for unit detection
         from src.utils.financial_domain import is_unit_indicator
@@ -557,7 +557,7 @@ class ExcelTableExporter(BaseExcelExporter):
                 seen_entities.add(h)
         
         entities_str = ', '.join(unique_entities) if unique_entities else ''
-        rows.append([f"Product/Entity: {entities_str}"])
+        rows.append([f"{MetadataLabels.PRODUCT_ENTITY} {entities_str}"])
         
         # === COLUMN HEADERS ===
         detected_years = set()
@@ -585,18 +585,18 @@ class ExcelTableExporter(BaseExcelExporter):
             if year_match:
                 detected_years.add(year_match.group(1))
         
-        # Main Header - only show if present (top spanning header, Level 0)
+        # Column Header L1 - Main Header (top spanning header, Level 0)
         if level_0:
             level_0_str = ', '.join(level_0)
-            rows.append([f"{MetadataLabels.MAIN_HEADER} {level_0_str}"])
+            rows.append([f"{MetadataLabels.COLUMN_HEADER_L1} {level_0_str}"])
         
-        # Period Type - date periods or main headers (Level 1)
+        # Column Header L2 - Period Type date periods or main headers (Level 1)
         level_1_str = ', '.join(level_1) if level_1 else ''
-        rows.append([f"{MetadataLabels.PERIOD_TYPE} {level_1_str}"])
+        rows.append([f"{MetadataLabels.COLUMN_HEADER_L2} {level_1_str}"])
         
-        # Year(s) - years or sub-headers (Level 2)
+        # Column Header L3 - years or sub-headers (Level 2)
         level_2_str = ', '.join(level_2) if level_2 else ''
-        rows.append([f"{MetadataLabels.YEARS} {level_2_str}"])
+        rows.append([f"{MetadataLabels.COLUMN_HEADER_L3} {level_2_str}"])
         
         # Year/Quarter - format as PERIOD_TYPE,YEAR (e.g., QTD3,2024)
         detected_periods = []
@@ -637,11 +637,11 @@ class ExcelTableExporter(BaseExcelExporter):
         # Table Title
         rows.append([f"{MetadataLabels.TABLE_TITLE} {display_title}"])
         
-        # Source with page number in format: source_pg#
+        # Source(s) with page number in format: source_pg#
         source_doc = metadata.get('source_doc', 'Unknown')
         page_no = metadata.get('page_no', 'N/A')
         # Format: 10q0625_pg5
-        source_info = f"{MetadataLabels.SOURCE} {source_doc}_pg{page_no}"
+        source_info = f"{MetadataLabels.SOURCES} {source_doc}_pg{page_no}"
         if metadata.get('year'):
             source_info += f", {metadata.get('year')}"
         if metadata.get('quarter'):
@@ -806,7 +806,7 @@ class ExcelTableExporter(BaseExcelExporter):
                 # (Multiple tables with same title can be stacked on one sheet)
                 for row_num in range(1, ws.max_row + 1):
                     cell_value = ws.cell(row=row_num, column=1).value
-                    if cell_value and str(cell_value).startswith('Source:'):
+                    if cell_value and str(cell_value).startswith(MetadataLabels.SOURCES):
                         # Skip the blank row after Source: - headers start 2 rows after
                         # Sheet structure: Source (row N) -> blank (N+1) -> headers (N+2, N+3, N+4...)
                         # Tables can have up to 3 levels of column headers that need merging
