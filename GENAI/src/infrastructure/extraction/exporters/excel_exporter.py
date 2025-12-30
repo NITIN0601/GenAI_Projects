@@ -564,10 +564,29 @@ class ExcelTableExporter(BaseExcelExporter):
         headers_info = self._detect_column_header_levels(table.get('content', ''))
         source_doc = metadata.get('source_doc', '')
         
-        # Get all header levels
-        level_0 = self._dedupe_preserve_order(headers_info.get('level_0', []))
-        level_1_raw = self._dedupe_preserve_order(headers_info.get('level_1', []))
-        level_2_raw = self._dedupe_preserve_order(headers_info.get('level_2', []))
+        # Helper to filter out data values that aren't valid headers
+        def is_valid_header(val: str) -> bool:
+            """Check if value is a valid header (not a data value)."""
+            if not val or not val.strip():
+                return False
+            val_clean = val.strip().replace(',', '').replace('.', '')
+            # Year patterns are valid (2000-2039)
+            if re.match(r'^20[0-3]\d$', val_clean):
+                return True
+            # Purely numeric (including negative) = data, not header
+            if val_clean.lstrip('-').isdigit():
+                # But allow 4-digit years
+                if len(val_clean.lstrip('-')) != 4:
+                    return False
+            # Currency values = data
+            if val.strip().startswith('$') or val.strip().startswith('('):
+                return False
+            return True
+        
+        # Get all header levels and filter out data values
+        level_0 = self._dedupe_preserve_order([h for h in headers_info.get('level_0', []) if is_valid_header(h)])
+        level_1_raw = self._dedupe_preserve_order([h for h in headers_info.get('level_1', []) if is_valid_header(h)])
+        level_2_raw = self._dedupe_preserve_order([h for h in headers_info.get('level_2', []) if is_valid_header(h)])
         
         # Split compound headers in level_1 (e.g., "Average Monthly Balance Three Months Ended March 31,")
         # into L1 (main header) and L2 (period type) components

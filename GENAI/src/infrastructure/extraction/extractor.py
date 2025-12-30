@@ -268,12 +268,39 @@ class UnifiedExtractor:
             try:
                 from src.infrastructure.extraction.exporters.excel_exporter import get_excel_exporter
                 excel_exporter = get_excel_exporter()
-                excel_path = excel_exporter.export_pdf_tables(
-                    tables=result.tables,
-                    source_pdf=result.pdf_path
-                )
-                if excel_path:
-                    logger.info(f"Saved Excel with Index sheet to {excel_path}")
+                
+                # FILTER: Remove tables with empty content before export
+                # This prevents creating empty sheets in the Excel file
+                valid_tables = []
+                skipped_count = 0
+                for table in result.tables:
+                    content = table.get('content', '')
+                    # Check if content has actual table data (not just empty or whitespace)
+                    if content and content.strip():
+                        # Also check for minimum viable content (at least 2 lines)
+                        lines = [l for l in content.split('\n') if l.strip()]
+                        if len(lines) >= 2:
+                            valid_tables.append(table)
+                        else:
+                            skipped_count += 1
+                            logger.debug(f"Skipped table with insufficient content: {table.get('metadata', {}).get('table_title', 'Unknown')}")
+                    else:
+                        skipped_count += 1
+                        logger.debug(f"Skipped empty table: {table.get('metadata', {}).get('table_title', 'Unknown')}")
+                
+                if skipped_count > 0:
+                    logger.info(f"Filtered out {skipped_count} empty/insufficient tables from {len(result.tables)} total")
+                
+                if valid_tables:
+                    excel_path = excel_exporter.export_pdf_tables(
+                        tables=valid_tables,
+                        source_pdf=result.pdf_path
+                    )
+                    if excel_path:
+                        logger.info(f"Saved Excel with Index sheet to {excel_path}")
+                else:
+                    logger.warning(f"No valid tables to export for {result.pdf_path}")
+                    
             except Exception as e:
                 logger.warning(f"Failed to export Excel with Index sheet: {e}")
             

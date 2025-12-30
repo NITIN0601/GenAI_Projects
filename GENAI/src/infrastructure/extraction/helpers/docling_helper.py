@@ -494,6 +494,188 @@ class DoclingHelper:
         return toc_sections
     
     @staticmethod
+    def extract_toc_hierarchy(doc) -> dict:
+        """
+        Extract Table of Contents with hierarchical section levels.
+        
+        Parses the TOC and PDF body to build a mapping of page numbers to
+        hierarchical section paths (level1 → level2 → level3).
+        
+        Args:
+            doc: Docling document
+            
+        Returns:
+            Dict mapping page numbers to section hierarchy:
+            {page: {'level1': 'Main Section', 'level2': 'Subsection', 'level3': 'Detail'}}
+        """
+        hierarchy = {}
+        
+        # Pattern to detect section numbering levels
+        # "1." = level 1, "1.1" = level 2, "1.1.1" = level 3
+        level1_pattern = re.compile(r'^(\d+)\.\s+(.+)$')  # "1. Section Name"
+        level2_pattern = re.compile(r'^(\d+)\.(\d+)\s+(.+)$')  # "1.1 Subsection"
+        level3_pattern = re.compile(r'^(\d+)\.(\d+)\.(\d+)\s+(.+)$')  # "1.1.1 Detail"
+        
+        # Track current hierarchy state
+        current_level1 = ""
+        current_level2 = ""
+        current_level3 = ""
+        
+        # Storage for all section headers found
+        section_entries = []  # [(page, level, name)]
+        
+        try:
+            items_list = list(doc.iterate_items())
+            
+            # First pass: Extract from TOC entries (pattern: "Name ...page")
+            for item_data in items_list:
+                item = item_data[0] if isinstance(item_data, tuple) else item_data
+                
+                if not hasattr(item, 'text') or not item.text:
+                    continue
+                
+                text = str(item.text).strip()
+                
+                # Skip very short or very long text
+                if len(text) < 5 or len(text) > 100:
+                    continue
+                
+                # Pattern: "Section Name PageNumber" at end
+                toc_match = re.match(r'^(.+?)\s+(\d{1,3})\s*$', text)
+                if toc_match:
+                    section_text = toc_match.group(1).strip()
+                    try:
+                        page_num = int(toc_match.group(2))
+                    except ValueError:
+                        continue
+                    
+                    if not (1 <= page_num <= 500):
+                        continue
+                    
+                    # Determine level from numbering pattern
+                    level = 1  # Default
+                    name = section_text
+                    
+                    l3_match = level3_pattern.match(section_text)
+                    l2_match = level2_pattern.match(section_text)
+                    l1_match = level1_pattern.match(section_text)
+                    
+                    if l3_match:
+                        level = 3
+                        name = section_text
+                    elif l2_match:
+                        level = 2
+                        name = section_text
+                    elif l1_match:
+                        level = 1
+                        name = section_text
+                    
+                    section_entries.append((page_num, level, name))
+            
+            # Second pass: Look for SECTION_HEADER labeled items in PDF body
+            for item_data in items_list:
+                item = item_data[0] if isinstance(item_data, tuple) else item_data
+                
+                if not hasattr(item, 'label') or not item.label:
+                    continue
+                
+                label_str = str(item.label).upper()
+                if 'SECTION' not in label_str and 'TITLE' not in label_str:
+                    continue
+                
+                if not hasattr(item, 'text') or not item.text:
+                    continue
+                
+                text = str(item.text).strip()
+                if len(text) < 5 or len(text) > 80:
+                    continue
+                
+                page = DoclingHelper.get_item_page(item)
+                if not page:
+                    continue
+                
+                # Check if this is a numbered subsection
+                l3_match = level3_pattern.match(text)
+                l2_match = level2_pattern.match(text)
+                l1_match = level1_pattern.match(text)
+                
+                if l3_match:
+                    section_entries.append((page, 3, text))
+                elif l2_match:
+                    section_entries.append((page, 2, text))
+                elif l1_match:
+                    section_entries.append((page, 1, text))
+                elif text[0].isupper() and len(text) > 10:
+                    # Non-numbered section header - treat as subsection
+                    section_entries.append((page, 2, text))
+            
+            # Sort by page number
+            section_entries.sort(key=lambda x: x[0])
+            
+            # Build hierarchy mapping
+            for page, level, name in section_entries:
+                if level == 1:
+                    current_level1 = name
+                    current_level2 = ""
+                    current_level3 = ""
+                elif level == 2:
+                    current_level2 = name
+                    current_level3 = ""
+                elif level == 3:
+                    current_level3 = name
+                
+                hierarchy[page] = {
+                    'level1': current_level1,
+                    'level2': current_level2,
+                    'level3': current_level3
+                }
+            
+            # Fill gaps - propagate hierarchy to all pages
+            if hierarchy:
+                max_page = max(hierarchy.keys())
+                current = {'level1': '', 'level2': '', 'level3': ''}
+                
+                for pg in range(1, max_page + 1):
+                    if pg in hierarchy:
+                        current = hierarchy[pg].copy()
+                    else:
+                        hierarchy[pg] = current.copy()
+                        
+        except Exception as e:
+            logger.debug(f"Error extracting TOC hierarchy: {e}")
+        
+        return hierarchy
+    
+    @staticmethod
+    def get_hierarchy_for_page(hierarchy: dict, page_no: int) -> dict:
+        """
+        Get section hierarchy for a given page number.
+        
+        Args:
+            hierarchy: Dict from extract_toc_hierarchy()
+            page_no: Page number to look up
+            
+        Returns:
+            Dict with level1, level2, level3 or empty dict if not found
+        """
+        if not hierarchy:
+            return {'level1': '', 'level2': '', 'level3': ''}
+        
+        if page_no in hierarchy:
+            return hierarchy[page_no]
+        
+        # Find closest lower page
+        best_page = 0
+        for pg in hierarchy.keys():
+            if pg <= page_no and pg > best_page:
+                best_page = pg
+        
+        if best_page:
+            return hierarchy[best_page]
+        
+        return {'level1': '', 'level2': '', 'level3': ''}
+    
+    @staticmethod
     def get_section_for_page(toc_sections: dict, page_no: int) -> str:
         """
         Get section name for a given page number using TOC mapping.
@@ -813,6 +995,57 @@ class DoclingHelper:
             
             return text.strip()[:100]
 
+        def is_footnote(text: str) -> bool:
+            """Check if text looks like a footnote."""
+            text_lower = text.lower().strip()
+            
+            # Footnote patterns to filter out
+            footnote_patterns = [
+                'see note', 'refer to note', 'as described in note',
+                'see page', 'refer to page', 'continued on',
+                'continued from', 'see accompanying', 'refer to accompanying',
+                'see the accompanying', 'as discussed', 'as described',
+                '(1)', '(2)', '(3)', '(a)', '(b)', '(c)',  # Numbered refs
+                'note:', 'notes:', 'source:', 'sources:',
+            ]
+            
+            for pattern in footnote_patterns:
+                if pattern in text_lower:
+                    return True
+            
+            # Check if starts with superscript-like patterns (1, 2, *, etc.)
+            if text and text[0] in '0123456789*†‡§#':
+                return True
+            
+            # Very short text starting with parens is likely footnote
+            if len(text) < 30 and text.startswith('('):
+                return True
+            
+            return False
+
+        def is_section_header(text: str) -> bool:
+            """Check if text looks like a section header (not a table title)."""
+            text_lower = text.lower().strip()
+            
+            # Section header patterns (broad categories, not specific table titles)
+            section_patterns = [
+                'institutional securities', 'wealth management', 
+                'investment management', 'corporate', 'other',
+                'risk management', 'credit risk', 'market risk',
+                'liquidity', 'capital', 'regulatory', 'supervision',
+                'part i', 'part ii', 'part iii', 'item 1', 'item 2',
+            ]
+            
+            for pattern in section_patterns:
+                if text_lower == pattern or text_lower.startswith(f"{pattern} "):
+                    return True
+            
+            # Single word all caps is likely section header
+            if text.isupper() and len(text.split()) <= 2 and len(text) < 30:
+                return True
+            
+            return False
+
         def is_valid_title(text: str) -> bool:
             text_lower = text.lower().strip()
             
@@ -825,11 +1058,17 @@ class DoclingHelper:
             if text[0].islower():
                 return False
             
+            # Filter out footnotes
+            if is_footnote(text):
+                return False
+            
             invalid_patterns = [
                 'three months ended', 'six months ended', 'nine months ended',
                 'year ended', 'quarter ended', 'at march', 'at december',
                 '$ in millions', '$ in billions', 'in millions', 'in billions',
                 'unaudited', 'address of principal', 'the following', 'as follows',
+                'morgan stanley', 'consolidated statements', 'condensed consolidated',
+                'selected financial', 'supplemental financial',
             ]
             
             for pattern in invalid_patterns:
@@ -850,6 +1089,7 @@ class DoclingHelper:
         try:
             items_list = list(doc.iterate_items())
             preceding_texts = []
+            section_headers = []  # Track section headers separately
             
             for item_data in items_list:
                 item = item_data[0] if isinstance(item_data, tuple) else item_data
@@ -863,6 +1103,7 @@ class DoclingHelper:
                         if hasattr(p, 'page_no'):
                             item_page = p.page_no
                 
+                # Look at current page and previous page (for continued tables)
                 if item_page >= page_no - 1:
                     label = str(item.label) if hasattr(item, 'label') else ''
                     
@@ -870,10 +1111,20 @@ class DoclingHelper:
                         if hasattr(item, 'text') and item.text:
                             text = str(item.text).strip()
                             if 5 < len(text) < 150 and not text.startswith('|'):
-                                preceding_texts.append(text)
+                                # Categorize as section header or potential title
+                                if is_section_header(text):
+                                    section_headers.append((text, item_page))
+                                else:
+                                    preceding_texts.append((text, item_page))
             
+            # First, try to find valid title from preceding texts (prefer same page)
             if preceding_texts:
-                for text in reversed(preceding_texts):
+                # Sort by page (current page first), then by position (last first)
+                same_page = [(t, p) for t, p in preceding_texts if p == page_no]
+                prev_page = [(t, p) for t, p in preceding_texts if p == page_no - 1]
+                
+                # Try same page first
+                for text, _ in reversed(same_page):
                     if is_valid_title(text):
                         title = text
                         for prefix in ['Note ', 'NOTE ', 'Table ']:
@@ -886,6 +1137,31 @@ class DoclingHelper:
                         
                         if title and len(title) > 3:
                             return clean_title(title)
+                
+                # Try previous page (for continued tables)
+                for text, _ in reversed(prev_page):
+                    if is_valid_title(text):
+                        title = text
+                        for prefix in ['Note ', 'NOTE ', 'Table ']:
+                            if title.startswith(prefix):
+                                title = title[len(prefix):].strip()
+                                if title and title[0].isdigit():
+                                    parts = title.split(' ', 1)
+                                    if len(parts) > 1:
+                                        title = parts[1].strip()
+                        
+                        if title and len(title) > 3:
+                            # Mark as continued if from previous page
+                            return clean_title(title)
+            
+            # Fallback: use section header only if no better title found
+            # (This handles the case where section header is the best we have)
+            if section_headers:
+                # Prefer current page section header
+                for text, p in reversed(section_headers):
+                    if p == page_no and is_valid_title(text):
+                        return clean_title(text)
+                        
         except Exception as e:
             logger.debug(f"Error extracting table title: {e}")
         

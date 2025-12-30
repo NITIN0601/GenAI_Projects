@@ -223,6 +223,9 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                             else:
                                 logger.debug(f"Sheet {sheet_name} was not created (no data after processing)")
                     
+                    # Create TOC_Sheet with hierarchical section columns
+                    self._create_toc_sheet(writer, created_tables, title_to_sheet_name)
+                    
                     # Create Index with ONLY successfully created sheets
                     self._create_consolidated_index(writer, created_tables, title_to_sheet_name)
                 
@@ -455,15 +458,72 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                         fixed_section = ExcelUtils.fix_ocr_broken_words(section.strip())
                         normalized_section = re.sub(r'\s+', ' ', fixed_section).lower()
                     
-                    # TODO: Future enhancement - Header pattern for merge grouping
-                    # Tables would only merge if they have the same L1/L2/L3 structure
-                    # header_pattern = self._get_header_structure_pattern(subtable_df)
+                    # Extract BOTH Category AND Line Items for structure-based merging
+                    # Tables with same structure should merge (even from different sources)
+                    # Tables with different structure should NOT merge (even from same source/title)
                     
-                    # Original grouping key: Section + Title + Row Signature
-                    if normalized_section:
-                        normalized_key = f"{normalized_section}::{normalized_title}{subtable_suffix}::{row_sig_full}"
+                    # 1. Extract Category (e.g., "Consolidated Results" vs "Ratios")
+                    category_fingerprint = ""
+                    for idx in range(min(10, len(subtable_df))):
+                        first_cell = str(subtable_df.iloc[idx, 0]) if pd.notna(subtable_df.iloc[idx, 0]) else ''
+                        if first_cell.startswith(MetadataLabels.CATEGORY_PARENT) or first_cell.startswith('Category'):
+                            cat_value = first_cell.split(':', 1)[1].strip() if ':' in first_cell else ''
+                            if cat_value:
+                                cat_parts = [p.strip() for p in cat_value.split(',') if p.strip()]
+                                if cat_parts:
+                                    category_fingerprint = re.sub(r'[^a-z0-9]', '', cat_parts[0].lower())[:20]
+                            break
+                    
+                    # 2. Extract Line Items fingerprint (e.g., "Net revenues, Earnings..." vs "Average liquidity, Loans...")
+                    line_items_fingerprint = ""
+                    for idx in range(min(10, len(subtable_df))):
+                        first_cell = str(subtable_df.iloc[idx, 0]) if pd.notna(subtable_df.iloc[idx, 0]) else ''
+                        if first_cell.startswith(MetadataLabels.LINE_ITEMS) or first_cell.startswith('Line Items:'):
+                            li_value = first_cell.split(':', 1)[1].strip() if ':' in first_cell else ''
+                            if li_value:
+                                li_parts = [p.strip().lower() for p in li_value.split(',') if p.strip()]
+                                # Skip common non-distinguishing items
+                                li_parts = [p for p in li_parts if p not in ['$ in millions', 'in millions', 'except per share data']]
+                                if li_parts:
+                                    fingerprint_items = li_parts[:3]
+                                    line_items_fingerprint = '|'.join(re.sub(r'[^a-z0-9]', '', item)[:15] for item in fingerprint_items)
+                            break
+                    
+                    # Combined structure fingerprint: Category + Line Items
+                    structure_fingerprint = f"{category_fingerprint}_{line_items_fingerprint}"
+                    
+                    # Extract header structure pattern for merge grouping
+                    # Tables only merge if they have the same L1/L2/L3 structure
+                    # This prevents merging L3_ONLY (point-in-time) with L2_L3 (period-based)
+                    header_pattern = self._get_header_structure_pattern(subtable_df)
+                    logger.debug(f"Table '{normalized_title}' has header pattern: {header_pattern}, structure: {structure_fingerprint}")
+                    
+                    # UPDATED: Grouping key uses 80% fuzzy matching on Section+Title
+                    # Structure fingerprint and header_pattern must match exactly
+                    # Section+Title can fuzzy match at 80% threshold
+                    section_title_combo = f"{normalized_section}|{normalized_title}" if normalized_section else normalized_title
+                    
+                    # Exact key for structure+pattern (these must match exactly)
+                    structure_key = f"{structure_fingerprint}::{header_pattern}"
+                    
+                    # Find best matching group using fuzzy Section+Title matching
+                    best_match_key = self._find_fuzzy_matching_group(
+                        all_tables_by_full_title,
+                        section_title_combo,
+                        structure_key,
+                        threshold=0.80
+                    )
+                    
+                    if best_match_key:
+                        normalized_key = best_match_key
                     else:
-                        normalized_key = f"default::{normalized_title}{subtable_suffix}::{row_sig_full}"
+                        # No fuzzy match found, create new key
+                        normalized_key = f"{section_title_combo}::{structure_key}"
+                    
+                    # DEBUG: Log Reconciliations keys
+                    if 'reconciliation' in normalized_title.lower():
+                        logger.info(f"RECON KEY: sheet={sheet_name}, combo={section_title_combo[:40]}, struct={structure_key[:30]}, KEY={normalized_key[:80]}")
+
                     
                     all_tables_by_full_title[normalized_key].append({
                         'data': subtable_df,
@@ -561,6 +621,55 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         Delegates to ExcelUtils.clean_currency_value for centralized logic.
         """
         return ExcelUtils.clean_currency_value(val)
+    
+    def _normalize_header_for_deduplication(self, header: str) -> str:
+        """
+        Normalize header for deduplication comparison.
+        
+        Handles minor variations in header text to prevent duplicate columns:
+        - Case normalization (title case)
+        - Month abbreviation expansion (Dec → December)
+        - Trailing punctuation removal
+        - Decimal number cleanup (2024.0 → 2024)
+        
+        Examples:
+            "three months ended june 30," → "Three Months Ended June 30"
+            "At Dec 31, 2024" → "At December 31 2024"
+            "2024.0" → "2024"
+        
+        Args:
+            header: Original header string
+            
+        Returns:
+            Normalized header string for comparison
+        """
+        if not header:
+            return ""
+        
+        header = str(header).strip()
+        
+        # Remove trailing punctuation
+        header = header.rstrip('.,;:')
+        
+        # Expand month abbreviations
+        month_abbr = {
+            'jan': 'january', 'feb': 'february', 'mar': 'march',
+            'apr': 'april', 'may': 'may', 'jun': 'june', 
+            'jul': 'july', 'aug': 'august', 'sep': 'september',
+            'oct': 'october', 'nov': 'november', 'dec': 'december'
+        }
+        header_lower = header.lower()
+        for abbr, full in month_abbr.items():
+            # Use word boundaries to avoid partial matches
+            header_lower = re.sub(f'\\b{abbr}\\b', full, header_lower)
+        
+        # Remove .0 from year values (e.g., 2024.0 → 2024)
+        header_lower = re.sub(r'(\d{4})\.0\b', r'\1', header_lower)
+        
+        # Title case for consistency
+        header = header_lower.title()
+        
+        return header
     
     def _evaluate_table_has_data(self, tables: List[Dict[str, Any]], transpose: bool = False) -> bool:
         """
@@ -725,6 +834,51 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         
         return False
     
+    def _find_fuzzy_matching_group(
+        self,
+        all_tables_by_full_title: Dict[str, List],
+        section_title_combo: str,
+        structure_key: str,
+        threshold: float = 0.80
+    ) -> Optional[str]:
+        """
+        Find an existing group key that fuzzy-matches the given Section+Title combo.
+        
+        Args:
+            all_tables_by_full_title: Existing groups dictionary
+            section_title_combo: The Section|Title combination to match
+            structure_key: The exact structure (fingerprint::header_pattern) that must match
+            threshold: Minimum similarity ratio (default 0.80 = 80%)
+        
+        Returns:
+            The matching key if found (similarity >= threshold), None otherwise
+        """
+        from difflib import SequenceMatcher
+        
+        best_match_key = None
+        best_ratio = 0.0
+        
+        for existing_key in all_tables_by_full_title.keys():
+            # Split the existing key to extract Section+Title and structure parts
+            # Key format: "section_title_combo::structure_fingerprint::header_pattern"
+            parts = existing_key.split('::')
+            if len(parts) >= 2:
+                existing_section_title = parts[0]
+                existing_structure = '::'.join(parts[1:])
+                
+                # Structure key must match exactly
+                if existing_structure != structure_key:
+                    continue
+                
+                # Compare Section+Title with fuzzy matching
+                ratio = SequenceMatcher(None, section_title_combo.lower(), existing_section_title.lower()).ratio()
+                
+                if ratio >= threshold and ratio > best_ratio:
+                    best_match_key = existing_key
+                    best_ratio = ratio
+        
+        return best_match_key
+    
     def _split_into_subtables(self, df: pd.DataFrame, data_start_idx: int = 0) -> List[Tuple[pd.DataFrame, int]]:
         """
         Split a DataFrame at embedded header rows into separate sub-tables.
@@ -762,24 +916,34 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         """
         Detect the header structure pattern of a table for merge grouping.
         
-        Tables only merge if they have the same header structure pattern.
+        Tables only merge if they have the same header structure pattern AND
+        compatible period type families.
         
         Returns pattern like:
-            - "L3_ONLY" - Point-in-time dates (e.g., "At December 2024")
-            - "L2_L3" - Period spanning years (e.g., "Three Months Ended" | "2024")
-            - "L1_L2_L3" - Main header + period + years
+            - "L3_ONLY::POINT_IN_TIME" - Point-in-time dates (e.g., "At December 2024")
+            - "L2_L3::CUMULATIVE" - Period spanning (e.g., "Three Months Ended")
+            - "L2_L3::ANNUAL" - Annual data (e.g., "Year Ended December 31")
+            - "L1_L2_L3::CUMULATIVE" - Main header + period + years
         
-        Example that should NOT merge:
-            Table A: | At Dec 2024 | At Mar 2020 |  -> L3_ONLY
-            Table B: | Three Months Ended Mar 31, | -> L2_L3
-                     |    2024    |    2020       |
+        Period Type Families (merge within family, not across):
+            CUMULATIVE: "Three Months Ended", "Six Months Ended", "Nine Months Ended"
+            POINT_IN_TIME: "At March 31", "At June 30", "At September 30", "At December 31"
+            ANNUAL: "Year Ended December 31"
+            
+        Example merges:
+            QTD3 + QTD6 = YES (both CUMULATIVE)
+            Q1 + Q2 = YES (both POINT_IN_TIME)
+            Q1 + QTD3 = NO (different families)
         """
         if df.empty or len(df) < 2:
-            return "UNKNOWN"
+            return "UNKNOWN::UNKNOWN"
         
         has_l1 = False  # Main header (e.g., "Average Monthly Balance")
         has_l2 = False  # Period type (e.g., "Three Months Ended")
         has_l3 = False  # Years/dates (always present)
+        
+        # Track detected period type family
+        period_family = "UNKNOWN"
         
         # Check first few rows for header patterns
         for i in range(min(5, len(df))):
@@ -800,11 +964,19 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             # Check if row has spanning header patterns (L1 or L2)
             sample_val = other_cells[0].lower() if other_cells else ''
             
-            # L2 patterns: Period types that span columns
-            l2_patterns = ['three months', 'six months', 'nine months', 'year ended', 
-                           'months ended', 'quarter ended']
-            if any(p in sample_val for p in l2_patterns):
+            # CUMULATIVE family: Period types that accumulate
+            cumulative_patterns = ['three months', 'six months', 'nine months', 
+                                   'months ended', 'quarter ended']
+            if any(p in sample_val for p in cumulative_patterns):
                 has_l2 = True
+                period_family = "CUMULATIVE"
+                continue
+            
+            # ANNUAL family: Full year data
+            annual_patterns = ['year ended', 'fiscal year', 'years ended']
+            if any(p in sample_val for p in annual_patterns):
+                has_l2 = True
+                period_family = "ANNUAL"
                 continue
             
             # L1 patterns: Main headers that describe content type
@@ -813,12 +985,13 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 has_l1 = True
                 continue
             
-            # L3 patterns: Point-in-time dates or years
-            # "At December 31, 2024" or just "2024"
-            l3_patterns = ['at march', 'at june', 'at september', 'at december', 
-                           'as of', 'december 31', 'march 31', 'june 30', 'september 30']
-            if any(p in sample_val for p in l3_patterns):
+            # POINT_IN_TIME family: Point-in-time dates
+            point_in_time_patterns = ['at march', 'at june', 'at september', 'at december', 
+                                      'as of', 'december 31', 'march 31', 'june 30', 'september 30']
+            if any(p in sample_val for p in point_in_time_patterns):
                 has_l3 = True
+                if period_family == "UNKNOWN":
+                    period_family = "POINT_IN_TIME"
                 continue
             
             # Pure year values (e.g., "2024", "2023")
@@ -826,13 +999,18 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 has_l3 = True
                 continue
         
-        # Build pattern string
+        # Build pattern string with period family
         if has_l1 and has_l2:
-            return "L1_L2_L3"
+            base_pattern = "L1_L2_L3"
         elif has_l2:
-            return "L2_L3"
+            base_pattern = "L2_L3"
         else:
-            return "L3_ONLY"
+            base_pattern = "L3_ONLY"
+            # If no L2, default to POINT_IN_TIME for L3_ONLY patterns
+            if period_family == "UNKNOWN":
+                period_family = "POINT_IN_TIME"
+        
+        return f"{base_pattern}::{period_family}"
     
     def _find_header_rows(self, df: pd.DataFrame) -> Tuple[int, int, int]:
         """
@@ -1059,6 +1237,152 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             
             worksheet.column_dimensions[col_letter].width = max_len
     
+    def _create_toc_sheet(
+        self,
+        writer: pd.ExcelWriter,
+        tables_by_full_title: Dict[str, List[Dict[str, Any]]],
+        title_to_sheet_name: Dict[str, dict]
+    ) -> None:
+        """
+        Create TOC_Sheet with hierarchical section columns.
+        
+        Columns: Main Section | Section1 | Section2 | Section3 | Table Title | Sheet | Sources
+        
+        Section hierarchy is determined by:
+        1. Section numbering patterns: "1." = Level1, "1.1" = Level2, "1.1.1" = Level3
+        2. Non-numbered sections are treated as Main Section
+        """
+        # Patterns to detect section levels from section names
+        level3_pattern = re.compile(r'^(\d+)\.(\d+)\.(\d+)\s+(.+)$')  # "1.1.1 Detail"
+        level2_pattern = re.compile(r'^(\d+)\.(\d+)\s+(.+)$')  # "1.1 Subsection"
+        level1_pattern = re.compile(r'^(\d+)\.\s+(.+)$')  # "1. Section Name"
+        note_pattern = re.compile(r'^Note\s+(\d+)', re.IGNORECASE)  # "Note 5. Fair Value"
+        
+        toc_data = []
+        
+        for normalized_key, tables in tables_by_full_title.items():
+            mapping = title_to_sheet_name.get(normalized_key, {})
+            display_title = mapping.get('display_title', normalized_key)
+            original_title = mapping.get('original_title', display_title)
+            sheet_name = mapping.get('unique_sheet_name', str(len(toc_data) + 1))
+            section_str = mapping.get('section', '')
+            
+            # Extract section from tables if not in mapping
+            if not section_str:
+                for t in tables:
+                    section = t.get('section', '') or t.get('metadata', {}).get('section', '')
+                    if section and str(section).strip() and str(section).lower() != 'nan':
+                        section_str = str(section).strip()
+                        break
+            
+            # Parse section into hierarchy levels
+            main_section = ""
+            section1 = ""
+            section2 = ""
+            section3 = ""
+            
+            if section_str:
+                section_clean = section_str.strip()
+                
+                # Check for numbered patterns
+                l3_match = level3_pattern.match(section_clean)
+                l2_match = level2_pattern.match(section_clean)
+                l1_match = level1_pattern.match(section_clean)
+                note_match = note_pattern.match(section_clean)
+                
+                if l3_match:
+                    # Full 3-level hierarchy: "1.2.3 Detail"
+                    main_num = l3_match.group(1)
+                    sub_num = l3_match.group(2)
+                    detail_num = l3_match.group(3)
+                    detail_name = l3_match.group(4)
+                    main_section = f"{main_num}. (Main)"
+                    section1 = f"{main_num}.{sub_num}"
+                    section2 = f"{main_num}.{sub_num}.{detail_num}"
+                    section3 = detail_name
+                elif l2_match:
+                    # 2-level hierarchy: "1.2 Subsection"
+                    main_num = l2_match.group(1)
+                    sub_num = l2_match.group(2)
+                    sub_name = l2_match.group(3)
+                    main_section = f"{main_num}. (Main)"
+                    section1 = f"{main_num}.{sub_num} {sub_name}"
+                elif l1_match:
+                    # 1-level numbered: "1. Section"
+                    main_section = section_clean
+                elif note_match:
+                    # Note pattern: "Note 5. Fair Value" -> Notes section
+                    main_section = "Notes to Consolidated Financial Statements"
+                    section1 = section_clean
+                else:
+                    # Non-numbered section: treat as main section
+                    main_section = section_clean
+            
+            # Get clean title
+            title_text = original_title if original_title else display_title
+            title_clean = ExcelUtils.fix_ocr_broken_words(str(title_text)) if title_text else ''
+            title_clean = re.sub(r'\\s+', ' ', title_clean).strip()
+            # Remove "Table Title: " prefix if present
+            title_clean = re.sub(r'^Table Title:\s*', '', title_clean, flags=re.IGNORECASE)
+            
+            # Get sources
+            source_refs = []
+            for t in tables:
+                meta = t.get('metadata', {})
+                year_val = str(int(meta['year'])) if isinstance(meta.get('year'), float) else str(meta.get('year', ''))
+                quarter_val = str(meta.get('quarter', ''))
+                page_val = str(meta.get('page', ''))
+                
+                if quarter_val and year_val:
+                    ref = f"{quarter_val},{year_val}"
+                elif year_val:
+                    ref = f"Q4,{year_val}"
+                else:
+                    ref = str(meta.get('source', ''))[:10]
+                
+                if page_val and page_val != 'nan':
+                    ref += f"_p{page_val}"
+                
+                if ref and ref not in source_refs:
+                    source_refs.append(ref)
+            
+            sources_str = ', '.join(source_refs[:3])
+            if len(source_refs) > 3:
+                sources_str += f'...'
+            
+            toc_data.append({
+                'Main Section': main_section if main_section else '-',
+                'Section1': section1 if section1 else '-',
+                'Section2': section2 if section2 else '-',
+                'Section3': section3 if section3 else '-',
+                'Table Title': title_clean,
+                'Sheet': sheet_name,
+                'Sources': sources_str
+            })
+        
+        # Create DataFrame and write to sheet
+        df = pd.DataFrame(toc_data)
+        
+        # Sort by hierarchy: Main Section -> Section1 -> Section2 -> Section3 -> Title
+        df = df.sort_values(
+            by=['Main Section', 'Section1', 'Section2', 'Section3', 'Table Title'],
+            key=lambda x: x.str.lower().fillna('')
+        )
+        
+        df.to_excel(writer, sheet_name='TOC', index=False)
+        
+        # Auto-adjust column widths
+        worksheet = writer.sheets['TOC']
+        for idx, col in enumerate(df.columns):
+            col_letter = self._get_column_letter(idx)
+            max_content_len = df[col].astype(str).map(len).max() if len(df) > 0 else 0
+            header_len = len(col)
+            calculated_len = max(max_content_len, header_len) + 2
+            max_len = min(calculated_len, 50)  # Cap at 50 characters
+            worksheet.column_dimensions[col_letter].width = max_len
+        
+        logger.info(f"Created TOC sheet with {len(df)} entries")
+    
     def _create_merged_table_sheet(
         self,
         writer: pd.ExcelWriter,
@@ -1240,18 +1564,22 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 if header_parts:
                     header = ' '.join(header_parts)
                 else:
-                    # Fallback: Use DataFrame column name if not generic
+                    # Fallback 1: Use DataFrame column name if not generic
                     col_name = str(df.columns[col_idx])
                     if col_name and not col_name.startswith('Unnamed') and col_name != str(col_idx):
                         header = col_name
                     else:
-                        header = f"Col_{col_idx}"
+                        # Fallback 2: Use column index as header (will be deduplicated later)
+                        header = f"Column {col_idx}"
                 
                 # Final cleanup
                 header = ExcelUtils.clean_year_string(header)
                 
                 sort_key = DateUtils.parse_date_from_header(header)
-                norm_header = header.lower().strip()
+                
+                # Normalize header for deduplication comparison
+                # This handles case, month abbreviations, punctuation, and decimal years
+                norm_header = self._normalize_header_for_deduplication(header)
                 
                 # Get row labels and values starting from data_start (not from row 0!)
                 # This prevents header row values from being extracted as data
@@ -1312,16 +1640,12 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                     existing_data_str = str(sorted([(k, str(v).strip()) for k, v in existing_val.get('row_data_map', {}).items()]))
                     existing_header = existing_val.get('header', '').lower().strip()
                     
-                    # Duplicate if: same header OR same data
-                    # This catches:
-                    # 1. Same period from different sources with same data
-                    # 2. Same data with slightly different header text
-                    if col_data_str == existing_data_str:
-                        is_duplicate = True
-                        break
-                    # Also check if header matches (same period, different data would still be kept)
+                    # FIXED: Only mark as duplicate if BOTH header AND data match
+                    # This prevents dropping valid columns that happen to have same data but different periods
+                    # Changed from OR to AND
                     if existing_header == norm_header and col_data_str == existing_data_str:
                         is_duplicate = True
+                        logger.debug(f"Removing exact duplicate column: '{header}' (same as '{existing_val.get('header')}')")
                         break
                 
                 if not is_duplicate:
