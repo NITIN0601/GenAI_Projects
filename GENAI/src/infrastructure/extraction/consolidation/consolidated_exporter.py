@@ -23,7 +23,8 @@ from src.utils import get_logger
 from src.core import get_paths
 from src.utils.date_utils import DateUtils
 from src.utils.excel_utils import ExcelUtils
-from src.utils.metadata_builder import MetadataBuilder, TableMetadata, MetadataLabels
+from src.utils.metadata_labels import MetadataLabels, TableMetadata
+from src.utils.metadata_builder import MetadataBuilder
 from src.utils.financial_domain import (
     DATE_HEADER_PATTERNS,
     extract_quarter_from_header,
@@ -32,6 +33,10 @@ from src.utils.financial_domain import (
 )
 from src.infrastructure.extraction.consolidation.consolidated_exporter_transpose import *
 from src.infrastructure.extraction.exporters.base_exporter import BaseExcelExporter
+# Import from new focused modules
+from src.infrastructure.extraction.consolidation.table_detection import TableDetector
+from src.infrastructure.extraction.consolidation.table_grouping import TableGrouper
+from src.infrastructure.extraction.consolidation.excel_formatting import ExcelFormatter
 from src.utils.constants import (
     CONSOLIDATION_YEAR_MIN,
     CONSOLIDATION_YEAR_MAX,
@@ -62,14 +67,14 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         """Initialize exporter with paths from PathManager."""
         super().__init__()
         paths = get_paths()
-        # Read from processed_advanced (after table merging) for correct pipeline flow:
-        # extract -> process_advanced -> consolidate
+        # Step 4: reads from processed_advanced, outputs to consolidate/
         self.processed_dir = Path(paths.data_dir) / "processed_advanced" if hasattr(paths, 'data_dir') else Path("data/processed_advanced")
-        self.extracted_dir = Path(paths.EXTRACTED_DIR) if hasattr(paths, 'EXTRACTED_DIR') else Path("data/extracted")
+        self.consolidate_dir = Path(paths.data_dir) / "consolidate" if hasattr(paths, 'data_dir') else Path("data/consolidate")
         
         # Ensure directories exist
         self.processed_dir.mkdir(parents=True, exist_ok=True)
-        self.extracted_dir.mkdir(parents=True, exist_ok=True)
+        self.consolidate_dir.mkdir(parents=True, exist_ok=True)
+
     
     def _parse_year_quarter_from_source(self, source: str) -> Tuple[str, str]:
         """
@@ -204,7 +209,8 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 sheet_number += 1
             
             # Create output file
-            output_path = self.extracted_dir / current_output_filename
+            output_path = self.consolidate_dir / current_output_filename
+
             
             try:
                 with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
@@ -626,50 +632,9 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         """
         Normalize header for deduplication comparison.
         
-        Handles minor variations in header text to prevent duplicate columns:
-        - Case normalization (title case)
-        - Month abbreviation expansion (Dec → December)
-        - Trailing punctuation removal
-        - Decimal number cleanup (2024.0 → 2024)
-        
-        Examples:
-            "three months ended june 30," → "Three Months Ended June 30"
-            "At Dec 31, 2024" → "At December 31 2024"
-            "2024.0" → "2024"
-        
-        Args:
-            header: Original header string
-            
-        Returns:
-            Normalized header string for comparison
+        Delegates to TableGrouper for centralized logic.
         """
-        if not header:
-            return ""
-        
-        header = str(header).strip()
-        
-        # Remove trailing punctuation
-        header = header.rstrip('.,;:')
-        
-        # Expand month abbreviations
-        month_abbr = {
-            'jan': 'january', 'feb': 'february', 'mar': 'march',
-            'apr': 'april', 'may': 'may', 'jun': 'june', 
-            'jul': 'july', 'aug': 'august', 'sep': 'september',
-            'oct': 'october', 'nov': 'november', 'dec': 'december'
-        }
-        header_lower = header.lower()
-        for abbr, full in month_abbr.items():
-            # Use word boundaries to avoid partial matches
-            header_lower = re.sub(f'\\b{abbr}\\b', full, header_lower)
-        
-        # Remove .0 from year values (e.g., 2024.0 → 2024)
-        header_lower = re.sub(r'(\d{4})\.0\b', r'\1', header_lower)
-        
-        # Title case for consistency
-        header = header_lower.title()
-        
-        return header
+        return TableGrouper.normalize_header_for_deduplication(header)
     
     def _evaluate_table_has_data(self, tables: List[Dict[str, Any]], transpose: bool = False) -> bool:
         """
@@ -791,48 +756,9 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         """
         Detect if a row is an embedded sub-table header rather than a data row.
         
-        Embedded headers look like:
-        - "Three Months Ended June" | "Three Months Ended June 30," | "Six Months Ended..."
-        - "2024" | "2023" | "2024" | "2023" (year row)
-        - "At March 31, 2025" | "At December 31, 2024"
-        
-        Returns True if this row should be treated as a header, not data.
+        Delegates to TableDetector for centralized logic.
         """
-        label_lower = str(row_label).strip().lower() if row_label else ''
-        
-        # Pattern 0: Metadata row patterns (these should ALWAYS be filtered)
-        metadata_patterns = [
-            'column header', 'row header', 'year/quarter', 'year(s):', 
-            'table title:', 'source:', 'product/entity:'
-        ]
-        for pattern in metadata_patterns:
-            if pattern in label_lower:
-                return True
-        
-        # Pattern 1: Row label contains date period patterns
-        for pattern in DATE_HEADER_PATTERNS:
-            if pattern in label_lower:
-                return True
-        
-        # Pattern 2: Row label is just a year (within valid range)
-        if is_year_value(label_lower):
-            return True
-        
-        # Pattern 3: All values in the row look like headers (dates, years, or empty)
-        # This catches year rows like ["2024", "2023", "2024", "2023"]
-        if row_values:
-            non_empty_vals = [str(v).strip() for v in row_values if pd.notna(v) and str(v).strip()]
-            if non_empty_vals:
-                all_look_like_headers = all(
-                    is_year_value(v) or  # Years
-                    any(p in v.lower() for p in DATE_HEADER_PATTERNS) or  # Date text
-                    v.lower() in ['nan', '']
-                    for v in non_empty_vals
-                )
-                if all_look_like_headers:
-                    return True
-        
-        return False
+        return TableDetector.is_embedded_header_row(row_label, row_values)
     
     def _find_fuzzy_matching_group(
         self,
@@ -844,278 +770,35 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         """
         Find an existing group key that fuzzy-matches the given Section+Title combo.
         
-        Args:
-            all_tables_by_full_title: Existing groups dictionary
-            section_title_combo: The Section|Title combination to match
-            structure_key: The exact structure (fingerprint::header_pattern) that must match
-            threshold: Minimum similarity ratio (default 0.80 = 80%)
-        
-        Returns:
-            The matching key if found (similarity >= threshold), None otherwise
+        Delegates to TableGrouper for centralized logic.
         """
-        from difflib import SequenceMatcher
-        
-        best_match_key = None
-        best_ratio = 0.0
-        
-        for existing_key in all_tables_by_full_title.keys():
-            # Split the existing key to extract Section+Title and structure parts
-            # Key format: "section_title_combo::structure_fingerprint::header_pattern"
-            parts = existing_key.split('::')
-            if len(parts) >= 2:
-                existing_section_title = parts[0]
-                existing_structure = '::'.join(parts[1:])
-                
-                # Structure key must match exactly
-                if existing_structure != structure_key:
-                    continue
-                
-                # Compare Section+Title with fuzzy matching
-                ratio = SequenceMatcher(None, section_title_combo.lower(), existing_section_title.lower()).ratio()
-                
-                if ratio >= threshold and ratio > best_ratio:
-                    best_match_key = existing_key
-                    best_ratio = ratio
-        
-        return best_match_key
+        return TableGrouper.find_fuzzy_matching_group(
+            all_tables_by_full_title, section_title_combo, structure_key, threshold
+        )
     
     def _split_into_subtables(self, df: pd.DataFrame, data_start_idx: int = 0) -> List[Tuple[pd.DataFrame, int]]:
         """
         Split a DataFrame at embedded header rows into separate sub-tables.
         
-        Returns list of (sub_df, header_row_offset) tuples.
-        Each sub-table starts at an embedded header row.
+        Delegates to TableDetector for centralized logic.
         """
-        if df.empty or len(df) < 2:
-            return [(df, data_start_idx)]
-        
-        subtables = []
-        current_start = data_start_idx
-        
-        # Skip initial metadata/header rows (first 4 rows after data_start)
-        # Look for embedded headers starting from row 4 onwards
-        for i in range(data_start_idx + 4, len(df)):
-            row = df.iloc[i]
-            first_cell = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
-            row_values = row.tolist()
-            
-            # Check if this row is an embedded header (new sub-table start)
-            if self._is_embedded_header_row(first_cell, row_values):
-                # Save previous sub-table if it has data
-                if i > current_start:
-                    subtables.append((df.iloc[current_start:i].reset_index(drop=True), current_start))
-                current_start = i
-        
-        # Add final sub-table
-        if current_start < len(df):
-            subtables.append((df.iloc[current_start:].reset_index(drop=True), current_start))
-        
-        return subtables if subtables else [(df, data_start_idx)]
+        return TableDetector.split_into_subtables(df, data_start_idx)
     
     def _get_header_structure_pattern(self, df: pd.DataFrame) -> str:
         """
         Detect the header structure pattern of a table for merge grouping.
         
-        Tables only merge if they have the same header structure pattern AND
-        compatible period type families.
-        
-        Returns pattern like:
-            - "L3_ONLY::POINT_IN_TIME" - Point-in-time dates (e.g., "At December 2024")
-            - "L2_L3::CUMULATIVE" - Period spanning (e.g., "Three Months Ended")
-            - "L2_L3::ANNUAL" - Annual data (e.g., "Year Ended December 31")
-            - "L1_L2_L3::CUMULATIVE" - Main header + period + years
-        
-        Period Type Families (merge within family, not across):
-            CUMULATIVE: "Three Months Ended", "Six Months Ended", "Nine Months Ended"
-            POINT_IN_TIME: "At March 31", "At June 30", "At September 30", "At December 31"
-            ANNUAL: "Year Ended December 31"
-            
-        Example merges:
-            QTD3 + QTD6 = YES (both CUMULATIVE)
-            Q1 + Q2 = YES (both POINT_IN_TIME)
-            Q1 + QTD3 = NO (different families)
+        Delegates to TableDetector for centralized logic.
         """
-        if df.empty or len(df) < 2:
-            return "UNKNOWN::UNKNOWN"
-        
-        has_l1 = False  # Main header (e.g., "Average Monthly Balance")
-        has_l2 = False  # Period type (e.g., "Three Months Ended")
-        has_l3 = False  # Years/dates (always present)
-        
-        # Track detected period type family
-        period_family = "UNKNOWN"
-        
-        # Check first few rows for header patterns
-        for i in range(min(5, len(df))):
-            row = df.iloc[i]
-            first_cell = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
-            first_cell_lower = first_cell.lower()
-            
-            # Skip obvious metadata rows
-            if first_cell.startswith(('Source', 'source', '←', 'Row Label', 'Category', 'Line Items')):
-                continue
-            
-            # Collect non-empty values from data columns
-            other_cells = [str(v).strip() for v in row.iloc[1:] if pd.notna(v) and str(v).strip()]
-            
-            if not other_cells:
-                continue
-            
-            # Check if row has spanning header patterns (L1 or L2)
-            sample_val = other_cells[0].lower() if other_cells else ''
-            
-            # CUMULATIVE family: Period types that accumulate
-            cumulative_patterns = ['three months', 'six months', 'nine months', 
-                                   'months ended', 'quarter ended']
-            if any(p in sample_val for p in cumulative_patterns):
-                has_l2 = True
-                period_family = "CUMULATIVE"
-                continue
-            
-            # ANNUAL family: Full year data
-            annual_patterns = ['year ended', 'fiscal year', 'years ended']
-            if any(p in sample_val for p in annual_patterns):
-                has_l2 = True
-                period_family = "ANNUAL"
-                continue
-            
-            # L1 patterns: Main headers that describe content type
-            l1_patterns = ['average monthly', 'balance', 'total assets', 'other assets']
-            if any(p in sample_val for p in l1_patterns):
-                has_l1 = True
-                continue
-            
-            # POINT_IN_TIME family: Point-in-time dates
-            point_in_time_patterns = ['at march', 'at june', 'at september', 'at december', 
-                                      'as of', 'december 31', 'march 31', 'june 30', 'september 30']
-            if any(p in sample_val for p in point_in_time_patterns):
-                has_l3 = True
-                if period_family == "UNKNOWN":
-                    period_family = "POINT_IN_TIME"
-                continue
-            
-            # Pure year values (e.g., "2024", "2023")
-            if sample_val.isdigit() and len(sample_val) == 4:
-                has_l3 = True
-                continue
-        
-        # Build pattern string with period family
-        if has_l1 and has_l2:
-            base_pattern = "L1_L2_L3"
-        elif has_l2:
-            base_pattern = "L2_L3"
-        else:
-            base_pattern = "L3_ONLY"
-            # If no L2, default to POINT_IN_TIME for L3_ONLY patterns
-            if period_family == "UNKNOWN":
-                period_family = "POINT_IN_TIME"
-        
-        return f"{base_pattern}::{period_family}"
+        return TableDetector.get_header_structure_pattern(df)
     
     def _find_header_rows(self, df: pd.DataFrame) -> Tuple[int, int, int]:
         """
         Dynamically find L1 header, L2 header, and data start row indices.
         
-        Returns:
-            (l1_row, l2_row, data_start_row) - Row indices in the DataFrame
+        Delegates to TableDetector for centralized logic.
         """
-        l1_row = None
-        l2_row = None
-        data_start = None
-        
-        for i in range(len(df)):
-            row = df.iloc[i]
-            first_cell = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
-            
-            # Skip metadata rows - include ALL metadata prefixes
-            metadata_prefixes = (
-                MetadataLabels.SOURCES, '←', 
-                MetadataLabels.CATEGORY_PARENT.rstrip(':'), MetadataLabels.LINE_ITEMS.rstrip(':'), 
-                MetadataLabels.PRODUCT_ENTITY.rstrip(':'), MetadataLabels.COLUMN_HEADER_L2.rstrip(':'), 
-                MetadataLabels.COLUMN_HEADER_L3.rstrip(':'), MetadataLabels.YEAR_QUARTER.rstrip(':'), 
-                MetadataLabels.TABLE_TITLE.rstrip(':'), 'Column Header', 'None', 'Row Label'
-            )
-            if first_cell.startswith(metadata_prefixes) or first_cell == '':
-                # Check if this is a header row (empty first cell but other cells have content)
-                other_cells = [str(v).strip() for v in row.iloc[1:].tolist() if pd.notna(v) and str(v).strip()]
-                if other_cells and first_cell == '':
-                    # This looks like a spanning header row (L1)
-                    if l1_row is None:
-                        l1_row = i
-                continue
-            
-            # Check if row is a unit/header indicator ($ in millions, $ in billions)
-            if first_cell.lower().startswith('$ in'):
-                if l2_row is None:
-                    l2_row = i
-                continue
-            
-            # Check if first cell is a year (L2 header)
-            if first_cell.isdigit() and len(first_cell) == 4 and VALID_YEAR_RANGE[0] <= int(first_cell) <= VALID_YEAR_RANGE[1]:
-                if l2_row is None:
-                    l2_row = i
-                continue
-            
-            # Check if this is a date period header pattern
-            # IMPORTANT: Only treat as header if:
-            #   1. First cell is short (< 30 chars) - long text is likely a row label
-            #   2. First cell STARTS with the date pattern (not contains in middle)
-            # This prevents "Average liquidity resources for three months ended" from being treated as a header
-            if len(first_cell) < 30:
-                # Check if first cell STARTS with date patterns (not contains)
-                date_start_patterns = ['three months', 'six months', 'nine months', 'twelve months',
-                                       'at march', 'at june', 'at september', 'at december',
-                                       'at january', 'at february', 'at april', 'at may',
-                                       'at july', 'at august', 'at october', 'at november']
-                if any(first_cell.lower().startswith(p) for p in date_start_patterns):
-                    if l1_row is None:
-                        l1_row = i
-                    continue
-            
-            # This looks like actual data
-            if data_start is None and first_cell and first_cell not in ['Row Label', 'nan']:
-                data_start = i
-                break
-        
-        # Default fallbacks - be conservative about L2
-        if l1_row is None:
-            l1_row = 2  # Default: row after Source and blank
-        
-        # Only set l2_row if we actually found one - don't assume l1_row + 1 is L2
-        # If l2_row is None, check if the row after L1 looks like a header row
-        if l2_row is None and l1_row is not None and l1_row + 1 < len(df):
-            next_row = df.iloc[l1_row + 1]
-            first_cell = str(next_row.iloc[0]).strip() if pd.notna(next_row.iloc[0]) else ''
-            
-            # Check if this row looks like a L2 header (unit row or year row)
-            is_l2_header = False
-            if first_cell.lower().startswith('$ in'):
-                is_l2_header = True
-            elif first_cell.isdigit() and len(first_cell) == 4:
-                is_l2_header = True
-            elif first_cell == '':
-                # Empty first cell with years in other cells
-                other_cells = [str(v).strip() for v in next_row.iloc[1:].tolist() if pd.notna(v) and str(v).strip()]
-                if other_cells and all(
-                    (c.isdigit() and len(c) == 4 and VALID_YEAR_RANGE[0] <= int(c) <= VALID_YEAR_RANGE[1]) or
-                    c.lower() in ['nan', '']
-                    for c in other_cells
-                ):
-                    is_l2_header = True
-            
-            if is_l2_header:
-                l2_row = l1_row + 1
-        
-        # Data starts after the last header row we found
-        if data_start is None:
-            if l2_row is not None:
-                data_start = l2_row + 1
-            elif l1_row is not None:
-                data_start = l1_row + 1
-            else:
-                data_start = 3
-        
-        return (l1_row, l2_row, data_start)
+        return TableDetector.find_header_rows(df, VALID_YEAR_RANGE)
     
     def _create_consolidated_index(
         self,
@@ -1244,22 +927,39 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         title_to_sheet_name: Dict[str, dict]
     ) -> None:
         """
-        Create TOC_Sheet with hierarchical section columns.
+        Create TOC sheet with hierarchical section columns.
         
-        Columns: Main Section | Section1 | Section2 | Section3 | Table Title | Sheet | Sources
+        Columns: Table of Contents | Main Section | Section1 | Section2 | Section3 | Section4 | Table Title | Sheet | Sources
         
-        Section hierarchy is determined by:
-        1. Section numbering patterns: "1." = Level1, "1.1" = Level2, "1.1.1" = Level3
-        2. Non-numbered sections are treated as Main Section
+        Uses SectionHierarchyTracker for pattern-based classification.
         """
-        # Patterns to detect section levels from section names
-        level3_pattern = re.compile(r'^(\d+)\.(\d+)\.(\d+)\s+(.+)$')  # "1.1.1 Detail"
-        level2_pattern = re.compile(r'^(\d+)\.(\d+)\s+(.+)$')  # "1.1 Subsection"
-        level1_pattern = re.compile(r'^(\d+)\.\s+(.+)$')  # "1. Section Name"
-        note_pattern = re.compile(r'^Note\s+(\d+)', re.IGNORECASE)  # "Note 5. Fair Value"
+        from src.infrastructure.extraction.helpers.docling_helper import SectionHierarchyTracker
+        
+        # Initialize tracker with config-based patterns
+        tracker = SectionHierarchyTracker()
         
         toc_data = []
         
+        # First pass: collect all section names for pre-scan
+        all_sections = []
+        for normalized_key, tables in tables_by_full_title.items():
+            mapping = title_to_sheet_name.get(normalized_key, {})
+            section_str = mapping.get('section', '')
+            
+            if not section_str:
+                for t in tables:
+                    section = t.get('section', '') or t.get('metadata', {}).get('section', '')
+                    if section and str(section).strip() and str(section).lower() != 'nan':
+                        section_str = str(section).strip()
+                        break
+            
+            if section_str:
+                all_sections.append((1, section_str))  # Page 1 as placeholder
+        
+        # Pre-scan to identify repeating headers
+        tracker.pre_scan_headers(all_sections)
+        
+        # Second pass: process each table group
         for normalized_key, tables in tables_by_full_title.items():
             mapping = title_to_sheet_name.get(normalized_key, {})
             display_title = mapping.get('display_title', normalized_key)
@@ -1275,54 +975,16 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                         section_str = str(section).strip()
                         break
             
-            # Parse section into hierarchy levels
-            main_section = ""
-            section1 = ""
-            section2 = ""
-            section3 = ""
-            
+            # Use tracker to classify section
             if section_str:
-                section_clean = section_str.strip()
-                
-                # Check for numbered patterns
-                l3_match = level3_pattern.match(section_clean)
-                l2_match = level2_pattern.match(section_clean)
-                l1_match = level1_pattern.match(section_clean)
-                note_match = note_pattern.match(section_clean)
-                
-                if l3_match:
-                    # Full 3-level hierarchy: "1.2.3 Detail"
-                    main_num = l3_match.group(1)
-                    sub_num = l3_match.group(2)
-                    detail_num = l3_match.group(3)
-                    detail_name = l3_match.group(4)
-                    main_section = f"{main_num}. (Main)"
-                    section1 = f"{main_num}.{sub_num}"
-                    section2 = f"{main_num}.{sub_num}.{detail_num}"
-                    section3 = detail_name
-                elif l2_match:
-                    # 2-level hierarchy: "1.2 Subsection"
-                    main_num = l2_match.group(1)
-                    sub_num = l2_match.group(2)
-                    sub_name = l2_match.group(3)
-                    main_section = f"{main_num}. (Main)"
-                    section1 = f"{main_num}.{sub_num} {sub_name}"
-                elif l1_match:
-                    # 1-level numbered: "1. Section"
-                    main_section = section_clean
-                elif note_match:
-                    # Note pattern: "Note 5. Fair Value" -> Notes section
-                    main_section = "Notes to Consolidated Financial Statements"
-                    section1 = section_clean
-                else:
-                    # Non-numbered section: treat as main section
-                    main_section = section_clean
+                hierarchy = tracker.process_header(section_str.strip(), 1)
+            else:
+                hierarchy = tracker.get_current_hierarchy()
             
             # Get clean title
             title_text = original_title if original_title else display_title
             title_clean = ExcelUtils.fix_ocr_broken_words(str(title_text)) if title_text else ''
-            title_clean = re.sub(r'\\s+', ' ', title_clean).strip()
-            # Remove "Table Title: " prefix if present
+            title_clean = re.sub(r'\s+', ' ', title_clean).strip()
             title_clean = re.sub(r'^Table Title:\s*', '', title_clean, flags=re.IGNORECASE)
             
             # Get sources
@@ -1348,13 +1010,15 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             
             sources_str = ', '.join(source_refs[:3])
             if len(source_refs) > 3:
-                sources_str += f'...'
+                sources_str += '...'
             
             toc_data.append({
-                'Main Section': main_section if main_section else '-',
-                'Section1': section1 if section1 else '-',
-                'Section2': section2 if section2 else '-',
-                'Section3': section3 if section3 else '-',
+                'Table of Contents': hierarchy.get('toc', '') or '-',
+                'Main Section': hierarchy.get('main', '') or '-',
+                'Section1': hierarchy.get('section1', '') or '-',
+                'Section2': hierarchy.get('section2', '') or '-',
+                'Section3': hierarchy.get('section3', '') or '-',
+                'Section4': hierarchy.get('section4', '') or '-',
                 'Table Title': title_clean,
                 'Sheet': sheet_name,
                 'Sources': sources_str
@@ -1363,10 +1027,10 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         # Create DataFrame and write to sheet
         df = pd.DataFrame(toc_data)
         
-        # Sort by hierarchy: Main Section -> Section1 -> Section2 -> Section3 -> Title
+        # Sort by hierarchy
         df = df.sort_values(
-            by=['Main Section', 'Section1', 'Section2', 'Section3', 'Table Title'],
-            key=lambda x: x.str.lower().fillna('')
+            by=['Table of Contents', 'Main Section', 'Section1', 'Section2', 'Section3', 'Section4', 'Table Title'],
+            key=lambda x: x.astype(str).str.lower().fillna('')
         )
         
         df.to_excel(writer, sheet_name='TOC', index=False)
@@ -1378,7 +1042,7 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             max_content_len = df[col].astype(str).map(len).max() if len(df) > 0 else 0
             header_len = len(col)
             calculated_len = max(max_content_len, header_len) + 2
-            max_len = min(calculated_len, 50)  # Cap at 50 characters
+            max_len = min(calculated_len, 50)
             worksheet.column_dimensions[col_letter].width = max_len
         
         logger.info(f"Created TOC sheet with {len(df)} entries")
@@ -2010,7 +1674,35 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         # === CONCATENATE ALL FRAMES ===
         # Structure: metadata (12 rows) + table headers (L0/L1/L2) + data
         frames_to_concat = [metadata_df] + header_frames + [result_df]
-        final_df = pd.concat(frames_to_concat, ignore_index=True)
+        
+        # Ensure all frames have compatible column structures before concat
+        # This fixes "cannot join with no overlapping index names" errors
+        normalized_frames = []
+        for i, frame in enumerate(frames_to_concat):
+            # Reset index to avoid index join issues
+            frame = frame.reset_index(drop=True)
+            # Flatten MultiIndex columns if present
+            if isinstance(frame.columns, pd.MultiIndex):
+                frame.columns = [' '.join(str(c) for c in col).strip() if isinstance(col, tuple) else str(col) for col in frame.columns]
+            # Ensure columns are simple strings
+            frame.columns = [str(c) for c in frame.columns]
+            normalized_frames.append(frame)
+        
+        # Now concatenate with matching column names
+        try:
+            final_df = pd.concat(normalized_frames, ignore_index=True)
+        except ValueError as e:
+            # Fallback: align columns by position if names don't match
+            logger.warning(f"Column name mismatch, using positional alignment: {e}")
+            # Get max columns and use positional indexing
+            max_cols = max(len(f.columns) for f in normalized_frames)
+            aligned_frames = []
+            for frame in normalized_frames:
+                frame.columns = list(range(len(frame.columns)))
+                aligned_frames.append(frame)
+            final_df = pd.concat(aligned_frames, ignore_index=True)
+            # Restore original column names from result_df
+            final_df.columns = list(range(len(final_df.columns)))
         
         # Track header row count for cell merging later
         header_row_count = 12 + len(header_frames)
@@ -2033,63 +1725,12 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         all_tables_by_full_title: Dict[str, List],
         title_to_sheet_name: Dict[str, dict]
     ) -> None:
-        """Add hyperlinks to consolidated workbook."""
-        try:
-            from openpyxl import load_workbook
-            from openpyxl.styles import Font
-            
-            wb = load_workbook(output_path)
-            
-            # Add hyperlinks in Index sheet
-            index_sheet = wb['Index']
-            
-            # Find Link column dynamically (same as individual xlsx logic)
-            header_row = [index_sheet.cell(row=1, column=c).value for c in range(1, index_sheet.max_column + 1)]
-            link_col = None
-            for i, h in enumerate(header_row, start=1):
-                if isinstance(h, str) and h.strip().lower() == 'link':
-                    link_col = i
-                    break
-            
-            if link_col is None:
-                logger.warning("Link column not found in consolidated Index sheet")
-            else:
-                for row in range(2, index_sheet.max_row + 1):  # Skip header
-                    cell = index_sheet.cell(row=row, column=link_col)
-                    raw_value = cell.value
-                    
-                    # Extract sheet name (handle → prefix if present)
-                    sheet_name = None
-                    if raw_value is not None:
-                        raw_str = str(raw_value).strip()
-                        if raw_str.startswith('→'):
-                            sheet_name = raw_str.lstrip('→').strip()
-                        else:
-                            sheet_name = raw_str
-                    
-                    if sheet_name and sheet_name in wb.sheetnames:
-                        cell.hyperlink = f"#'{sheet_name}'!A1"
-                        cell.value = f"→ {sheet_name}"
-                        cell.font = Font(color="0000FF", underline="single")
-                    elif sheet_name:
-                        logger.debug(f"Sheet '{sheet_name}' not found in consolidated workbook")
-            
-            # Add back-links in each data sheet
-            for sheet_name in wb.sheetnames:
-                if sheet_name == 'Index':
-                    continue
-                ws = wb[sheet_name]
-                cell = ws.cell(row=1, column=1)
-                # Set back-link regardless of current value
-                cell.value = "← Back to Index"
-                cell.hyperlink = "#'Index'!A1"
-                cell.font = Font(color="0000FF", underline="single")
-            
-            wb.save(output_path)
-            logger.info(f"Added hyperlinks to consolidated workbook: {len(wb.sheetnames) - 1} sheets")
-            
-        except Exception as e:
-            logger.warning(f"Could not add hyperlinks: {e}")
+        """
+        Add hyperlinks to consolidated workbook.
+        
+        Delegates to ExcelFormatter for centralized logic.
+        """
+        ExcelFormatter.add_hyperlinks(output_path, all_tables_by_full_title, title_to_sheet_name)
     
     def _apply_currency_format(
         self,
@@ -2097,175 +1738,12 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         all_tables_by_full_title: Dict[str, List],
         title_to_sheet_name: Dict[str, dict]
     ) -> None:
-        """Apply US currency number format to numeric data cells."""
-        try:
-            from openpyxl import load_workbook
-            from openpyxl.styles.numbers import FORMAT_CURRENCY_USD_SIMPLE
-            
-            wb = load_workbook(output_path)
-            
-            # US currency accounting format: $#,##0.00 for positive, ($#,##0.00) for negative
-            # This shows dollar sign, decimals, and parentheses for negatives
-            CURRENCY_FORMAT = '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'
-            
-            for sheet_name in wb.sheetnames:
-                if sheet_name == 'Index':
-                    continue
-                
-                ws = wb[sheet_name]
-                
-                # Dynamically find header and data rows by looking for "Row Label" marker
-                row_label_row = None
-                for r in range(1, min(20, ws.max_row + 1)):
-                    cell_val = ws.cell(row=r, column=1).value
-                    if cell_val and str(cell_val).strip() == 'Row Label':
-                        row_label_row = r
-                        break
-                
-                if row_label_row is None:
-                    row_label_row = 13  # Fallback to expected position
-                
-                # Dynamically detect header rows by scanning backwards from Row Label row
-                # Look for rows that contain header-like content (period types, years, spanning headers)
-                header_rows = []  # List of header row numbers
-                for r in range(row_label_row - 1, max(0, row_label_row - 4), -1):  # Check up to 3 rows before
-                    if r < 1:
-                        continue
-                    cell_val = ws.cell(row=r, column=2).value  # Check column B (first data column)
-                    if cell_val and str(cell_val).strip():
-                        # This row has content in header position
-                        header_rows.insert(0, r)  # Insert at beginning to maintain order
-                    else:
-                        # Check other columns - might be a spanning header with empty first cells
-                        has_content = False
-                        for c in range(2, min(10, ws.max_column + 1)):
-                            if ws.cell(row=r, column=c).value:
-                                has_content = True
-                                break
-                        if has_content:
-                            header_rows.insert(0, r)
-                
-                data_start_row = row_label_row + 1
-                
-                # Fix header rows - convert year floats to int (not float like 2024.0)
-                for header_row in header_rows:
-                    if header_row > 0:
-                        for col in range(1, ws.max_column + 1):
-                            cell = ws.cell(row=header_row, column=col)
-                            if cell.value is not None:
-                                # Handle float years directly (e.g., 2024.0 -> 2024 int)
-                                if isinstance(cell.value, float) and cell.value == int(cell.value):
-                                    # Convert to int for years, keep as int for other whole numbers
-                                    cell.value = int(cell.value)
-                                elif isinstance(cell.value, str):
-                                    # Clean string years (e.g., '2024.0' -> 2024 int)
-                                    cleaned = ExcelUtils.clean_year_string(cell.value)
-                                    if cleaned.isdigit() and len(cleaned) == 4:
-                                        year = int(cleaned)
-                                        if 2000 <= year <= 2099:
-                                            cell.value = year
-                
-                # Merge cells for spanning headers in ALL header rows
-                # This handles Level 0, Level 1, and Level 2 headers
-                from openpyxl.styles import Alignment
-                for header_row in header_rows:
-                    if header_row < 1:
-                        continue
-                    col = 2  # Start from column B (column A is Row Label)
-                    while col <= ws.max_column:
-                        cell_value = ws.cell(row=header_row, column=col).value
-                        if cell_value and str(cell_value).strip():
-                            # Find how many consecutive columns have same/empty value
-                            span_end = col
-                            for next_col in range(col + 1, ws.max_column + 1):
-                                next_value = ws.cell(row=header_row, column=next_col).value
-                                # Span if next cell is empty or has same value
-                                if not next_value or str(next_value).strip() == '' or str(next_value).strip() == str(cell_value).strip():
-                                    span_end = next_col
-                                    # Clear the spanned cell (will be merged)
-                                    if next_value and str(next_value).strip() == str(cell_value).strip():
-                                        ws.cell(row=header_row, column=next_col).value = ''
-                                else:
-                                    break
-                            
-                            # Merge if span is more than 1 column
-                            if span_end > col:
-                                ws.merge_cells(start_row=header_row, start_column=col, end_row=header_row, end_column=span_end)
-                                # Center the merged cell
-                                ws.cell(row=header_row, column=col).alignment = Alignment(horizontal='center')
-                            
-                            col = span_end + 1
-                        else:
-                            col += 1
-                
-                # Percentage format: 0.00%
-                PERCENTAGE_FORMAT = '0.00%'
-                
-                # Currency indicators in row labels - these should NEVER be percentages
-                # even if values are in 0-1 range (handles $0.12 EPS edge case)
-                CURRENCY_INDICATORS = [
-                    'per share', 'eps', 'dividend', 'price', 'book value',
-                    'tangible book', 'revenue', 'income', 'expense', 'cost',
-                    'asset', 'liability', 'equity', 'cash', 'debt', 'loan',
-                    'deposit', 'fee', 'commission', 'compensation', 'salary',
-                    '$ in', 'in millions', 'in billions', 'in thousands'
-                ]
-                
-                # Percentage indicators - these are definitely percentages
-                PERCENTAGE_INDICATORS = [
-                    'ratio', 'roe', 'rotce', 'roa', 'margin', 'rate', 'yield',
-                    'efficiency', 'leverage', 'tier 1', 'tier 2', 'cet1', 
-                    'percentage', 'percent', '%', 'return on'
-                ]
-                
-                # Apply currency/percentage format using HYBRID detection
-                for row in range(data_start_row, ws.max_row + 1):
-                    row_label = str(ws.cell(row=row, column=1).value or '').lower()
-                    
-                    # First pass: Collect all numeric values in this row
-                    row_values = []
-                    for col in range(2, ws.max_column + 1):
-                        cell = ws.cell(row=row, column=col)
-                        if isinstance(cell.value, (int, float)) and cell.value is not None:
-                            row_values.append(cell.value)
-                    
-                    # HYBRID DETECTION:
-                    # Priority: Percentage first (ratio/margin/rate/roe), then currency (per share)
-                    # This handles "expense efficiency ratio" correctly (contains both "expense" and "ratio")
-                    
-                    is_pct_label = any(ind in row_label for ind in PERCENTAGE_INDICATORS)
-                    is_currency_label = any(ind in row_label for ind in CURRENCY_INDICATORS)
-                    
-                    if is_pct_label:
-                        # Force percentage - handles margin/ratio/rate rows (takes priority)
-                        is_percentage_row = True
-                    elif is_currency_label:
-                        # Force currency - handles $0.12 per share values
-                        is_percentage_row = False
-                    else:
-                        # Value-based detection for unlabeled rows
-                        is_percentage_row = False
-                        if row_values:
-                            non_zero_values = [v for v in row_values if v != 0]
-                            if non_zero_values:
-                                all_in_pct_range = all(-1 <= v <= 1 for v in non_zero_values)
-                                has_decimal = any(0 < abs(v) < 1 for v in non_zero_values)
-                                is_percentage_row = all_in_pct_range and has_decimal
-                    
-                    # Second pass: Apply appropriate format to each cell
-                    for col in range(2, ws.max_column + 1):
-                        cell = ws.cell(row=row, column=col)
-                        if isinstance(cell.value, (int, float)) and cell.value is not None:
-                            if is_percentage_row:
-                                cell.number_format = PERCENTAGE_FORMAT
-                            else:
-                                cell.number_format = CURRENCY_FORMAT
-            
-            wb.save(output_path)
-            logger.info(f"Applied currency/percentage formatting to consolidated workbook")
-            
-        except Exception as e:
-            logger.warning(f"Could not apply currency formatting: {e}")
+        """
+        Apply US currency number format to numeric data cells.
+        
+        Delegates to ExcelFormatter for centralized logic.
+        """
+        ExcelFormatter.apply_currency_format(output_path, all_tables_by_full_title, title_to_sheet_name)
 
 
 # =============================================================================

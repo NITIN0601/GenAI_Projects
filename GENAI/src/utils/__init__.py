@@ -37,11 +37,10 @@ from src.utils.cleanup import (
 from src.utils.table_utils import parse_markdown_table
 from src.utils.date_utils import DateUtils
 from src.utils.excel_utils import ExcelUtils
-from src.utils.metadata_builder import (
-    MetadataBuilder,
-    TableMetadata,
-    MetadataLabels,
-)
+# Import from focused modules
+from src.utils.metadata_labels import MetadataLabels, TableMetadata
+from src.utils.quarter_mapper import QuarterDateMapper
+from src.utils.metadata_builder import MetadataBuilder
 
 # Re-export tracing from infrastructure for convenience
 from src.infrastructure.observability import (
@@ -81,6 +80,7 @@ __all__ = [
     'MetadataBuilder',
     'TableMetadata',
     'MetadataLabels',
+    'QuarterDateMapper',
     # Tracing (re-exported from infrastructure.observability)
     'setup_tracing',
     'is_tracing_enabled',

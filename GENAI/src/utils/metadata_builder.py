@@ -12,144 +12,17 @@ import pandas as pd
 from typing import List, Dict, Any, Optional, Tuple, Set
 from dataclasses import dataclass, field
 
+# Import from focused modules (no duplication)
+from src.utils.metadata_labels import MetadataLabels, TableMetadata
+from src.utils.quarter_mapper import QuarterDateMapper
+from src.utils.header_parser import MultiLevelHeaderParser
+from src.utils.header_normalizer import ColumnHeaderNormalizer
 
-# =============================================================================
-# METADATA ROW LABELS (Constants for consistency)
-# =============================================================================
-
-class MetadataLabels:
-    """Centralized labels for metadata rows - NO backward compatibility."""
-    
-    # Navigation
-    BACK_LINK = '← Back to Index'
-    
-    # Row headers
-    CATEGORY_PARENT = 'Category (Parent):'
-    LINE_ITEMS = 'Line Items:'
-    PRODUCT_ENTITY = 'Product/Entity:'
-    
-    # Column headers (3 levels)
-    COLUMN_HEADER_L1 = 'Column Header L1:'  # Main Header
-    COLUMN_HEADER_L2 = 'Column Header L2:'  # Period Type
-    COLUMN_HEADER_L3 = 'Column Header L3:'  # Years/Dates
-    
-    # Period info
-    YEAR_QUARTER = 'Year/Quarter:'
-    
-    # Table info
-    TABLE_TITLE = 'Table Title:'
-    SOURCES = 'Source(s):'  # Works for one or many
-    
-    # --- Row Index Constants (1-indexed for Excel) ---
-    # NOTE: L1 (Main Header) is OPTIONAL - some tables have it, some don't
-    # Structure varies, so code should detect by LABEL TEXT, not row index
-    #
-    # With L1 (13 metadata rows):
-    #   R01: ← Back to Index
-    #   R02: Category (Parent):
-    #   R03: Line Items:
-    #   R04: Product/Entity:
-    #   R05: Column Header L1: (Main Header - OPTIONAL)
-    #   R06: Column Header L2: (Period Type)
-    #   R07: Column Header L3: (Years/Dates)
-    #   R08: Year/Quarter:
-    #   R09: [blank]
-    #   R10: Table Title:
-    #   R11: Source(s):
-    #   R12: [blank]
-    #   R13+: Data
-    #
-    # Without L1 (12 metadata rows):
-    #   R01: ← Back to Index
-    #   R02: Category (Parent):
-    #   R03: Line Items:
-    #   R04: Product/Entity:
-    #   R05: Column Header L2: (Period Type)
-    #   R06: Column Header L3: (Years/Dates)
-    #   R07: Year/Quarter:
-    #   R08: [blank]
-    #   R09: Table Title:
-    #   R10: Source(s):
-    #   R11: [blank]
-    #   R12+: Data
-    
-    # Minimum expected metadata rows (without L1)
-    MIN_METADATA_ROWS = 11  
-    # Maximum metadata rows (with L1)
-    MAX_METADATA_ROWS = 12
-    
-    # For dynamic detection, use is_metadata_row() instead of row indices
-    
-    # --- Helper methods for pattern matching ---
-    
-    @staticmethod
-    def is_sources(text: str) -> bool:
-        """Check if text starts with any source label pattern."""
-        if not text:
-            return False
-        return text.startswith(MetadataLabels.SOURCES) or text.startswith('Source:') or text.startswith('Sources:')
-    
-    @staticmethod
-    def is_column_header_l1(text: str) -> bool:
-        """Check if text starts with Column Header L1/Main Header pattern."""
-        if not text:
-            return False
-        return text.startswith(MetadataLabels.COLUMN_HEADER_L1) or text.startswith('Main Header:')
-    
-    @staticmethod
-    def is_column_header_l2(text: str) -> bool:
-        """Check if text starts with Column Header L2/Period Type pattern."""
-        if not text:
-            return False
-        return text.startswith(MetadataLabels.COLUMN_HEADER_L2) or text.startswith('Period Type:')
-    
-    @staticmethod
-    def is_column_header_l3(text: str) -> bool:
-        """Check if text starts with Column Header L3/Year(s) pattern."""
-        if not text:
-            return False
-        return text.startswith(MetadataLabels.COLUMN_HEADER_L3) or text.startswith('Year(s):') or text.startswith('Years:')
-    
-    @staticmethod
-    def is_metadata_row(text: str) -> bool:
-        """Check if text starts with any metadata label."""
-        if not text:
-            return False
-        prefixes = (
-            MetadataLabels.SOURCES, MetadataLabels.BACK_LINK,
-            MetadataLabels.CATEGORY_PARENT, MetadataLabels.LINE_ITEMS,
-            MetadataLabels.PRODUCT_ENTITY, MetadataLabels.COLUMN_HEADER_L1,
-            MetadataLabels.COLUMN_HEADER_L2, MetadataLabels.COLUMN_HEADER_L3,
-            MetadataLabels.YEAR_QUARTER, MetadataLabels.TABLE_TITLE,
-            'Source:', 'Sources:', 'Main Header:', 'Period Type:', 'Year(s):', 'Years:'
-        )
-        return any(text.startswith(p) for p in prefixes)
-
-
-@dataclass
-class TableMetadata:
-    """Container for table metadata."""
-    
-    # Row headers
-    category_parent: List[str] = field(default_factory=list)  # Section headers
-    line_items: List[str] = field(default_factory=list)       # Data row labels
-    product_entity: List[str] = field(default_factory=list)   # Unique entities
-    
-    # Column headers (per-column values)
-    column_header_l1: List[str] = field(default_factory=list)  # Level 0 - Main Header
-    column_header_l2: List[str] = field(default_factory=list)  # Level 1 - Period Type
-    column_header_l3: List[str] = field(default_factory=list)  # Level 2 - Years/Dates
-    
-    # Year/Quarter (per-column, derived from L2+L3)
-    year_quarter: List[str] = field(default_factory=list)
-    
-    # Table info
-    table_title: str = ""
-    sources: List[str] = field(default_factory=list)
-    section: str = ""
 
 
 class MetadataBuilder:
+
+
     """
     Builds standardized metadata for Excel exports.
     
@@ -260,45 +133,30 @@ class MetadataBuilder:
         """
         Build Year/Quarter value from period type and year headers.
         
+        Uses QuarterDateMapper for standardized format.
+        
         Args:
             period_type_header: Column Header L2 value (e.g., "Three Months Ended June 30,")
             year_header: Column Header L3 value (e.g., "2024", "December 31, 2024")
             source: Source filename for 10-K detection
             
         Returns:
-            Formatted string like "QTD3,2024", "QTD6,2023", "YTD,2024", "Q2,2024"
+            Standardized format: "Q2-QTD-2024", "Q2-YTD-2024", "Q2-2024", "YTD-2024"
         """
-        l1_str = str(period_type_header).lower() if period_type_header else ''
-        l2_str = str(year_header) if year_header else ''
+        l2_str = str(period_type_header).strip() if period_type_header else ''
+        l3_str = str(year_header).strip() if year_header else ''
         
-        # Extract year from L2
-        year_match = re.search(r'(20\d{2})', l2_str)
-        year = year_match.group(1) if year_match else ''
+        # Combine L2 (period type) and L3 (date/year) for parsing
+        # e.g., "Three Months Ended June 30," + "2024" = "Three Months Ended June 30, 2024"
+        combined = f"{l2_str} {l3_str}".strip()
         
-        if not year:
+        if not combined:
             return ''
         
-        # Determine period format from L1 (Period Type)
-        for period_code, patterns in cls.PERIOD_PATTERNS.items():
-            if any(p in l1_str for p in patterns):
-                return f"{period_code},{year}"
+        # Use QuarterDateMapper for standardized conversion
+        code = QuarterDateMapper.display_to_code(combined, source)
         
-        # Check if L2 already has YTD prefix
-        if l2_str.startswith('YTD'):
-            return l2_str if ',' in l2_str else f"YTD,{year}"
-        
-        # Try to extract quarter from date in L2 (e.g., "March 31, 2024" -> Q1)
-        l2_lower = l2_str.lower()
-        for month, quarter in cls.MONTH_TO_QUARTER.items():
-            if month in l2_lower:
-                return f"{quarter},{year}"
-        
-        # Check if source is 10-K (annual = YTD)
-        if source and '10k' in source.lower():
-            return f"YTD,{year}"
-        
-        # Default to Q4 for year-only values
-        return f"Q4,{year}"
+        return code
     
     @classmethod
     def get_period_type(cls, header: str) -> str:
@@ -331,67 +189,34 @@ class MetadataBuilder:
     @classmethod
     def convert_to_qn_format(cls, header: str, period_type: str = None, use_separator: bool = False) -> str:
         """
-        Convert column header to QnYYYY format for timeseries transpose.
+        Convert column header to standardized quarter code format.
+        
+        Uses QuarterDateMapper for consistent conversion.
         
         Args:
             header: Column header string
             period_type: Optional period type (auto-detected if not provided)
-            use_separator: If True, output 'Q1, 2025'; if False, output 'Q12025'
+            use_separator: If True, output 'Q1-QTD-2025'; if False, same format
         
-        Format Rules:
-            - At/As of dates → Q1, Q2, Q3, Q4 based on month
-            - Three Months Ended → 3QTD
-            - Six Months Ended → 6QTD
-            - Nine Months Ended → 9QTD
-            - Year Ended → YTD
+        Format Rules (NEW):
+            - At/As of dates → Q1-2025, Q2-2025, Q3-2025, Q4-2025
+            - Three Months Ended → Q1-QTD-2025, Q2-QTD-2025
+            - Six Months Ended → Q2-YTD-2025
+            - Nine Months Ended → Q3-YTD-2025
+            - Year Ended → YTD-2025
         
-        Examples (use_separator=False):
-            'At March 31, 2025' → 'Q12025'
-            'Three Months Ended March 31, 2025' → '3QTD2025'
-        
-        Examples (use_separator=True):
-            'At March 31, 2025' → 'Q1, 2025'
-            'Three Months Ended March 31, 2025' → '3QTD, 2025'
+        Examples:
+            'At March 31, 2025' → 'Q1-2025'
+            'Three Months Ended March 31, 2025' → 'Q1-QTD-2025'
+            'Six Months Ended June 30, 2024' → 'Q2-YTD-2024'
         """
         if not header:
             return header
         
-        # Extract year
-        year_match = re.search(r'(20\d{2})', str(header))
-        year = year_match.group(1) if year_match else ''
+        # Use QuarterDateMapper for standardized conversion
+        code = QuarterDateMapper.display_to_code(str(header))
         
-        if not year:
-            return header  # Can't format without year
-        
-        # Auto-detect period type if not provided
-        if not period_type:
-            period_type = cls.get_period_type(header)
-        
-        header_lower = str(header).lower()
-        sep = ', ' if use_separator else ''
-        
-        # Map period type to QnYYYY format
-        if period_type == 'QTD3':
-            return f"3QTD{sep}{year}"
-        
-        elif period_type == 'QTD6':
-            return f"6QTD{sep}{year}"
-        
-        elif period_type == 'QTD9':
-            return f"9QTD{sep}{year}"
-        
-        elif period_type == 'YTD':
-            return f"YTD{sep}{year}"
-        
-        elif period_type == 'QUARTERLY':
-            # Point-in-time dates (At/As of) → Q1, Q2, Q3, Q4 based on month
-            for month, qtr in cls.MONTH_TO_QUARTER.items():
-                if month in header_lower:
-                    return f"{qtr}{sep}{year}"
-            return f"Q4{sep}{year}"  # Default to Q4
-        
-        # Unknown - return original with year
-        return header
+        return code if code else header
     
     @classmethod
     def build_metadata_dataframe(
@@ -489,10 +314,14 @@ class MetadataBuilder:
         
         # Create DataFrame and align columns
         df = pd.DataFrame(rows)
-        for col in columns:
-            if col not in df.columns:
-                df[col] = ''
+        
+        # Add all missing columns at once to avoid fragmentation
+        missing_cols = [col for col in columns if col not in df.columns]
+        if missing_cols:
+            missing_df = pd.DataFrame('', index=df.index, columns=missing_cols)
+            df = pd.concat([df, missing_df], axis=1)
         df = df[columns]
+
         
         return df
     
@@ -534,10 +363,14 @@ class MetadataBuilder:
         
         # Create DataFrame and align columns
         df = pd.DataFrame(rows)
-        for col in columns:
-            if col not in df.columns:
-                df[col] = ''
+        
+        # Add all missing columns at once to avoid fragmentation
+        missing_cols = [col for col in columns if col not in df.columns]
+        if missing_cols:
+            missing_df = pd.DataFrame('', index=df.index, columns=missing_cols)
+            df = pd.concat([df, missing_df], axis=1)
         df = df[columns]
+
         
         return df
     
@@ -814,40 +647,35 @@ class MetadataBuilder:
         """
         Extract quarter designation from column header.
         
-        Format:
+        Uses QuarterDateMapper for standardized format.
+        
+        Format (NEW):
             - At/As of dates -> Q1, Q2, Q3, Q4
-            - Three Months Ended -> 3QTD
-            - Six Months Ended -> 6QTD
-            - Nine Months Ended -> 9QTD
+            - Three Months Ended -> Q1-QTD, Q2-QTD, etc. (returns just period part)
+            - Six Months Ended -> Q2-YTD (returns just period part)
+            - Nine Months Ended -> Q3-YTD (returns just period part)
             - Year Ended / standalone year -> YTD
         
         Examples:
             'At March 31, 2025' -> 'Q1'
-            'Three Months Ended June 30, 2024' -> '3QTD'
-            'Six Months Ended June 30, 2024' -> '6QTD'
+            'Three Months Ended June 30, 2024' -> 'Q2-QTD'
+            'Six Months Ended June 30, 2024' -> 'Q2-YTD'
             'Year Ended December 31, 2024' -> 'YTD'
-            '2024' -> 'YTD'
         """
         if not header:
             return ''
         
-        period = cls.get_period_type(header)
+        # Use QuarterDateMapper for conversion
+        code = QuarterDateMapper.display_to_code(str(header))
         
-        if period == 'QUARTERLY':
-            # Point-in-time (At/As of) - return Q1/Q2/Q3/Q4 based on month
-            header_lower = str(header).lower()
-            for month, qtr in cls.MONTH_TO_QUARTER.items():
-                if month in header_lower:
-                    return qtr
-            return 'Q4'  # Default
-        elif period == 'QTD3':
-            return '3QTD'
-        elif period == 'QTD6':
-            return '6QTD'
-        elif period == 'QTD9':
-            return '9QTD'
-        elif period == 'YTD':
-            return 'YTD'
+        if not code:
+            return ''
         
-        return ''
+        # Remove year from code to get just the period part
+        # e.g., 'Q2-QTD-2024' -> 'Q2-QTD', 'Q1-2024' -> 'Q1', 'YTD-2024' -> 'YTD'
+        parts = code.split('-')
+        if len(parts) >= 2 and parts[-1].isdigit():
+            return '-'.join(parts[:-1])
+        
+        return code
 

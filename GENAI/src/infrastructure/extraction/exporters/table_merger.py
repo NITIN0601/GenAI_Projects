@@ -19,16 +19,19 @@ from functools import lru_cache
 
 from src.utils import get_logger
 from src.core import get_paths
-from src.utils.metadata_builder import (
-    MetadataBuilder,
-    MetadataLabels,
-)
+from src.utils.metadata_labels import MetadataLabels
+from src.utils.quarter_mapper import QuarterDateMapper
+from src.utils.header_parser import MultiLevelHeaderParser
+from src.utils.metadata_builder import MetadataBuilder
 from src.utils.financial_domain import (
     TABLE_HEADER_PATTERNS, 
     DATA_LABEL_PATTERNS,
     METADATA_BOUNDARY_MARKERS,
     is_new_table_header_row,
 )
+# Import from new focused modules
+from src.infrastructure.extraction.exporters.block_detection import BlockDetector
+from src.infrastructure.extraction.exporters.index_manager import IndexManager
 from src.utils.constants import (
     TABLE_FILE_PATTERN,
     TABLE_MERGER_MAX_HEADER_SCAN_ROWS as MAX_HEADER_SCAN_ROWS,
@@ -375,44 +378,103 @@ class TableMerger:
         """
         Extract column headers from the first rows of split table and update metadata.
         
-        Looks at the first 2-3 rows of the table data area for column headers
-        (rows with empty first column but values in other columns).
-        Updates the 'Column Header L3' metadata row.
+        Uses MultiLevelHeaderParser to dynamically detect L1/L2/L3/L4 levels from
+        multi-row headers. Updates all column header metadata rows.
         
         Args:
             ws: The new worksheet with split table
             data_start_row: Row where table data starts
         """
-        # Find metadata row to update (look for "Column Header L3:" in first 12 rows)
+        # Find metadata rows to update
+        l1_row = None
+        l2_row = None
         l3_row = None
-        for row_num in range(1, 12):
+        year_quarter_row = None
+        
+        for row_num in range(1, 15):
             cell_val = ws.cell(row=row_num, column=1).value
-            if cell_val and MetadataLabels.COLUMN_HEADER_L3 in str(cell_val):
+            if not cell_val:
+                continue
+            cell_str = str(cell_val)
+            
+            if MetadataLabels.COLUMN_HEADER_L1 in cell_str:
+                l1_row = row_num
+            elif MetadataLabels.COLUMN_HEADER_L2 in cell_str:
+                l2_row = row_num
+            elif MetadataLabels.COLUMN_HEADER_L3 in cell_str:
                 l3_row = row_num
-                break
+            elif MetadataLabels.YEAR_QUARTER in cell_str:
+                year_quarter_row = row_num
         
         if not l3_row:
-            return
+            return  # No metadata rows to update
         
-        # Extract column headers from first 2 rows of table data
-        headers = []
-        for scan_row in range(data_start_row, min(data_start_row + 3, ws.max_row + 1)):
+        # Extract multi-row headers from table data area
+        header_rows = []
+        for scan_row in range(data_start_row, min(data_start_row + 4, ws.max_row + 1)):
             first_col = ws.cell(row=scan_row, column=1).value
             first_val = str(first_col).strip() if first_col else ''
             
-            # If first column is empty, this is likely a header row
-            if not first_val or first_val.lower() in ['', 'nan', 'none']:
-                for col in range(2, min(ws.max_column + 1, 15)):
+            # If first column is empty or "$", this is likely a header row
+            if not first_val or first_val.lower() in ['', 'nan', 'none'] or first_val.startswith('$'):
+                row_values = []
+                for col in range(1, min(ws.max_column + 1, 20)):
                     val = ws.cell(row=scan_row, column=col).value
-                    if val and str(val).strip() and str(val).strip() != 'nan':
-                        headers.append(str(val).strip())
-                if headers:
-                    break  # Found headers, stop
+                    row_values.append(str(val).strip() if val else '')
+                header_rows.append(row_values)
+            else:
+                break  # Hit data row, stop
         
-        if headers:
-            # Update the L3 row with extracted headers
-            header_text = ', '.join(headers[:10])  # Limit to 10 headers
-            ws.cell(row=l3_row, column=1).value = f"{MetadataLabels.COLUMN_HEADER_L3} {header_text}"
+        if not header_rows:
+            return
+        
+        # Get source filename for 10-K detection
+        source_filename = ''
+        for row_num in range(1, 15):
+            cell_val = ws.cell(row=row_num, column=1).value
+            if cell_val and MetadataLabels.SOURCES in str(cell_val):
+                source_filename = str(cell_val)
+                break
+        
+        # Parse headers using MultiLevelHeaderParser
+        parsed = MultiLevelHeaderParser.parse_multi_row_headers(header_rows, source_filename)
+        
+        # Collect unique L1, L2, L3 values and codes
+        l1_values = set()
+        l2_values = set()
+        l3_values = set()
+        codes = set()
+        
+        for col_info in parsed.get('columns', []):
+            if col_info.get('l1'):
+                l1_values.add(col_info['l1'])
+            if col_info.get('l2'):
+                l2_values.add(col_info['l2'])
+            if col_info.get('l3'):
+                l3_values.add(col_info['l3'])
+            if col_info.get('code') and col_info['code'] != 'STATIC':
+                codes.add(col_info['code'])
+        
+        # Update metadata rows
+        if l1_row and l1_values:
+            l1_text = ', '.join(sorted(l1_values)[:5])
+            ws.cell(row=l1_row, column=1).value = f"{MetadataLabels.COLUMN_HEADER_L1} {l1_text}"
+        
+        if l2_row and l2_values:
+            l2_text = ', '.join(sorted(l2_values)[:5])
+            ws.cell(row=l2_row, column=1).value = f"{MetadataLabels.COLUMN_HEADER_L2} {l2_text}"
+        
+        if l3_row:
+            if l3_values:
+                l3_text = ', '.join(sorted(l3_values)[:5])
+                ws.cell(row=l3_row, column=1).value = f"{MetadataLabels.COLUMN_HEADER_L3} {l3_text}"
+            elif parsed.get('spanning_l3'):
+                ws.cell(row=l3_row, column=1).value = f"{MetadataLabels.COLUMN_HEADER_L3} {parsed['spanning_l3']}"
+        
+        # Update Year/Quarter with standardized codes
+        if year_quarter_row and codes:
+            codes_text = ', '.join(sorted(codes)[:5])
+            ws.cell(row=year_quarter_row, column=1).value = f"{MetadataLabels.YEAR_QUARTER} {codes_text}"
     
     def _clear_block_rows(self, ws: Worksheet, block: Dict) -> None:
         """
@@ -438,137 +500,17 @@ class TableMerger:
         """
         Add entries to Index for newly split sheets.
         
-        Args:
-            wb: openpyxl Workbook
-            new_sheets: List of new sheet names
+        Delegates to IndexManager for centralized logic.
         """
-        if 'Index' not in wb.sheetnames or not new_sheets:
-            return
-        
-        index_ws = wb['Index']
-        
-        # Find the last row with data in Index
-        next_row = 1
-        for row_num in range(1, index_ws.max_row + 1):
-            if index_ws.cell(row=row_num, column=1).value is not None:
-                next_row = row_num + 1
-        
-        for new_sheet_name in new_sheets:
-            new_ws = wb[new_sheet_name]
-            
-            # Extract table title from the new sheet
-            title = ''
-            for row_num in range(1, 15):
-                cell_val = new_ws.cell(row=row_num, column=1).value
-                if cell_val and MetadataLabels.TABLE_TITLE in str(cell_val):
-                    title = str(cell_val).replace(MetadataLabels.TABLE_TITLE, '').strip()
-                    break
-            
-            if not title:
-                title = f"Split Table ({new_sheet_name})"
-            
-            # Add to Index (column A = sheet name/number, column B = title)
-            index_ws.cell(row=next_row, column=1).value = new_sheet_name
-            index_ws.cell(row=next_row, column=2).value = title
-            
-            logger.debug(f"Added '{new_sheet_name}' to Index: {title}")
-            next_row += 1
+        IndexManager.update_index_for_split_sheets(wb, new_sheets)
     
     def _update_index_for_splits(self, wb, original_sheet_name: str, split_sheets: List[str]) -> None:
         """
         Update Index when a sheet is split: update original row and insert new rows.
         
-        Index structure: Source(A), PageNo(B), Table_ID(C), Location_ID(D), Section(E), Table Title(F), Link(G)
-        
-        When sheet "9" splits into ["9_1", "9_2"]:
-        - Update the original row for "9" -> "9_1" with (Part 1)
-        - Insert a new row after it for "9_2" with (Part 2)
-        
-        Args:
-            wb: openpyxl Workbook
-            original_sheet_name: Original sheet name (e.g., '9')
-            split_sheets: List of split sheet names (e.g., ['9_1', '9_2'])
+        Delegates to IndexManager for centralized logic.
         """
-        if 'Index' not in wb.sheetnames or not split_sheets:
-            return
-        
-        index_ws = wb['Index']
-        
-        # Find the first row that matches the original sheet name in Table_ID column (C)
-        original_row = None
-        for row_num in range(2, index_ws.max_row + 1):  # Skip header row 1
-            table_id = index_ws.cell(row=row_num, column=3).value  # Column C = Table_ID
-            if table_id is not None and str(table_id).strip() == original_sheet_name:
-                original_row = row_num
-                break
-        
-        if not original_row:
-            logger.debug(f"No Index entry found for sheet '{original_sheet_name}'")
-            return
-        
-        # Get original row data for copying to new rows
-        original_data = {
-            'source': index_ws.cell(row=original_row, column=1).value,  # Source
-            'page_no': index_ws.cell(row=original_row, column=2).value,  # PageNo
-            'location_id': index_ws.cell(row=original_row, column=4).value,  # Location_ID
-            'section': index_ws.cell(row=original_row, column=5).value,  # Section
-            'title': index_ws.cell(row=original_row, column=6).value,  # Table Title
-        }
-        
-        # Step 1: Update the original row with first split sheet (9_1)
-        first_split = split_sheets[0]
-        title_base = original_data['title'] or 'Split Table'
-        
-        index_ws.cell(row=original_row, column=3).value = first_split  # Table_ID
-        index_ws.cell(row=original_row, column=6).value = f"{title_base} (Part 1)"  # Title
-        link_cell = index_ws.cell(row=original_row, column=7)
-        link_cell.value = f"→ {first_split}"
-        # Create hyperlink to the split sheet
-        from openpyxl.worksheet.hyperlink import Hyperlink
-        link_cell.hyperlink = Hyperlink(ref=link_cell.coordinate, target=f"#'{first_split}'!A1")
-        logger.debug(f"Updated Index row {original_row}: {first_split} (Part 1)")
-        
-        # Step 2: Insert new rows for additional split sheets (9_2, 9_3, etc.)
-        if len(split_sheets) > 1:
-            insert_position = original_row + 1
-            
-            for part_num, split_sheet in enumerate(split_sheets[1:], start=2):
-                # Insert a new row at the position
-                index_ws.insert_rows(insert_position)
-                
-                # Copy data from original row
-                index_ws.cell(row=insert_position, column=1).value = original_data['source']
-                index_ws.cell(row=insert_position, column=2).value = original_data['page_no']
-                index_ws.cell(row=insert_position, column=3).value = split_sheet  # Table_ID
-                index_ws.cell(row=insert_position, column=4).value = f"{original_sheet_name}_{part_num}"  # Location_ID
-                index_ws.cell(row=insert_position, column=5).value = original_data['section']
-                index_ws.cell(row=insert_position, column=6).value = f"{title_base} (Part {part_num})"
-                link_cell = index_ws.cell(row=insert_position, column=7)
-                link_cell.value = f"→ {split_sheet}"
-                # Create hyperlink to the split sheet
-                from openpyxl.worksheet.hyperlink import Hyperlink
-                from openpyxl.styles import Font
-                link_cell.hyperlink = Hyperlink(ref=link_cell.coordinate, target=f"#'{split_sheet}'!A1")
-                # Apply blue hyperlink styling
-                link_cell.font = Font(color='000000FF', underline='single')
-                
-                logger.debug(f"Inserted Index row {insert_position}: {split_sheet} (Part {part_num})")
-                insert_position += 1
-        
-        # Step 3: Delete any remaining rows that still have old Table_ID
-        # (These are pre-existing duplicate entries from extraction phase)
-        # Iterate in reverse to safely delete rows without affecting indices
-        rows_to_delete = []
-        for row_num in range(2, index_ws.max_row + 1):
-            table_id = index_ws.cell(row=row_num, column=3).value
-            # Only match EXACT Table_ID (not partial matches)
-            if table_id is not None and str(table_id).strip() == original_sheet_name:
-                rows_to_delete.append(row_num)
-        
-        # Delete rows in reverse order to maintain correct indices
-        for row_num in reversed(rows_to_delete):
-            index_ws.delete_rows(row_num, 1)
-            logger.debug(f"Deleted duplicate Index row {row_num}: Table_ID was '{original_sheet_name}'")
+        IndexManager.update_index_for_splits(wb, original_sheet_name, split_sheets)
     
     def _extract_block_metadata(self, ws: Worksheet, block: Dict) -> Dict[str, Set[str]]:
         """
@@ -597,6 +539,94 @@ class TableMerger:
                 combined = MetadataBuilder.merge_metadata_sets(combined, cell_meta)
         
         return combined
+    
+    def _normalize_column_header_to_code(self, header: str, source_filename: str = '') -> dict:
+        """
+        Normalize column header to standard quarter code format.
+        
+        Uses QuarterDateMapper for conversion. Also detects and splits L1 headers
+        like 'Assets', 'Liability', 'Average Balances' that may be merged with L2.
+        
+        Args:
+            header: Column header string (e.g., "Three Months Ended March 31, 2025")
+            source_filename: Source filename for 10-K detection
+            
+        Returns:
+            Dict with 'code' (Q1-QTD-2025), 'l1' (optional), 'display' (original)
+        """
+        result = {
+            'code': '',
+            'l1': '',       # Optional L1 component (Assets, Liability, etc.)
+            'display': header,
+            'l2': '',       # Period type (Three Months Ended)
+            'l3': '',       # Date (March 31, 2025)
+        }
+        
+        if not header:
+            return result
+        
+        header_str = str(header).strip()
+        
+        # Known L1 prefixes that may be merged with L2
+        L1_PATTERNS = [
+            'assets', 'liability', 'liabilities', 'average balance', 'average balances',
+            'average monthly', 'ending balance', 'beginning balance',
+            'amortized cost', 'fair value', 'net revenue', 'net revenues',
+        ]
+        
+        # Check if header starts with L1 pattern
+        header_lower = header_str.lower()
+        l1_found = ''
+        remaining = header_str
+        
+        for pattern in L1_PATTERNS:
+            if header_lower.startswith(pattern):
+                # Find where L1 ends and L2 begins
+                # L2 typically starts with 'Three Months', 'Six Months', 'At', 'As of'
+                l2_markers = ['three months', 'six months', 'nine months', 'year ended', 'at ', 'as of ']
+                
+                for marker in l2_markers:
+                    idx = header_lower.find(marker)
+                    if idx > 0:
+                        l1_found = header_str[:idx].strip()
+                        remaining = header_str[idx:].strip()
+                        break
+                
+                if l1_found:
+                    break
+        
+        result['l1'] = l1_found
+        
+        # Convert remaining to code using QuarterDateMapper
+        report_type = '10k' if source_filename and '10k' in source_filename.lower() else ''
+        code = QuarterDateMapper.display_to_code(remaining, report_type)
+        
+        result['code'] = code
+        result['display'] = remaining
+        
+        # Determine L2 and L3 from the code
+        parts = code.split('-')
+        if len(parts) >= 2:
+            quarter = parts[0]
+            year = parts[-1]
+            
+            if len(parts) == 2:
+                # Point-in-time: Q1-2025
+                result['l2'] = ''
+                result['l3'] = QuarterDateMapper.code_to_display(code)
+            elif len(parts) == 3:
+                # Period: Q1-QTD-2025 or Q2-YTD-2025
+                period = parts[1]
+                if period == 'QTD':
+                    result['l2'] = 'Three Months Ended'
+                elif period == 'YTD' and quarter == 'Q2':
+                    result['l2'] = 'Six Months Ended'
+                elif period == 'YTD' and quarter == 'Q3':
+                    result['l2'] = 'Nine Months Ended'
+                month, day = QuarterDateMapper.QUARTER_END_DATES.get(quarter, ('', ''))
+                result['l3'] = f"{month} {day}, {year}" if month else year
+        
+        return result
     
     def _merge_metadata_rows(self, ws: Worksheet, first_block: Dict, all_blocks: List[Dict]) -> None:
         """
@@ -655,114 +685,9 @@ class TableMerger:
         """
         Find all table blocks in a worksheet.
         
-        A table block:
-        - Starts after a "Source:" row
-        - Ends before the next metadata section (Row Header) or end of content
-        
-        Returns:
-            List of table block dicts with start/end rows and row labels
+        Delegates to BlockDetector for centralized logic.
         """
-        blocks = []
-        
-        # First pass: find all Source: rows (they mark the end of metadata, start of table data)
-        source_rows = []
-        metadata_rows = []  # Track "Row Header" rows that start new metadata sections
-        
-        for row_num in range(1, ws.max_row + 1):
-            cell_value = ws.cell(row=row_num, column=1).value
-            if cell_value is None:
-                continue
-            
-            cell_str = str(cell_value).strip()
-            
-            if MetadataLabels.is_sources(cell_str):
-                source_rows.append(row_num)
-            # Detect metadata boundary markers using centralized patterns
-            elif any(cell_str.lower().startswith(marker) for marker in METADATA_BOUNDARY_MARKERS):
-                metadata_rows.append(row_num)
-        
-        if not source_rows:
-            return blocks
-        
-        # For each Source: row, find the table data range
-        for i, source_row in enumerate(source_rows):
-            # Table data starts after Source: row (skip completely empty rows)
-            data_start = source_row + 1
-            while data_start <= ws.max_row:
-                # Check all columns for data (not just column 1)
-                # This ensures we capture header rows like year rows that have empty col 1
-                row_has_data = False
-                for col in range(1, ws.max_column + 1):
-                    cell_val = ws.cell(row=data_start, column=col).value
-                    if cell_val is not None and str(cell_val).strip():
-                        row_has_data = True
-                        break
-                if row_has_data:
-                    break
-                data_start += 1
-            
-            if data_start > ws.max_row:
-                continue
-            
-            # Table data ends before next metadata section or next Source/end of sheet
-            data_end = ws.max_row
-            
-            # Find the next metadata section (Row Header) that comes after this source row
-            for meta_row in metadata_rows:
-                if meta_row > source_row:
-                    data_end = meta_row - 1
-                    break
-            
-            # Skip empty rows at the end
-            while data_end > data_start:
-                has_data = False
-                for col in range(1, min(MAX_COL_SCAN, ws.max_column + 1)):
-                    if ws.cell(row=data_end, column=col).value is not None:
-                        has_data = True
-                        break
-                if has_data:
-                    break
-                data_end -= 1
-            
-            if data_end <= data_start:
-                continue
-            
-            # Find the metadata_start_row for this table block
-            # Metadata belongs to THIS table if it's between the previous source_row and this source_row
-            prev_source_row = source_rows[i - 1] if i > 0 else 0
-            
-            # Get all metadata rows that belong to this table (after prev source, before current source)
-            table_metadata_rows = [m for m in metadata_rows if prev_source_row < m < source_row]
-            
-            if table_metadata_rows:
-                # Use the earliest (minimum) metadata row as the start
-                metadata_start = min(table_metadata_rows)
-            else:
-                metadata_start = source_row
-            
-            block = {
-                'metadata_start_row': metadata_start,  # Dynamic: where metadata section begins
-                'source_row': source_row,
-                'start_row': data_start,
-                'end_row': data_end,
-                'row_labels': [],
-                'header_row': data_start,  # First data row typically has headers like "$ in millions"
-                'data_start_row': data_start  # Will be updated to skip header rows
-            }
-            
-            # Detect header rows (rows with column headers like "$ in millions", date headers)
-            # and data rows (rows with actual values)
-            self._identify_header_and_data_rows(ws, block)
-            
-            # Extract row labels from data rows
-            block['row_labels'] = self._extract_row_labels(ws, block)
-            
-            if block['row_labels']:  # Only add blocks with actual data
-                # Check for mid-table column headers that indicate a split is needed
-                split_blocks = self._split_block_on_new_headers(ws, block)
-                blocks.extend(split_blocks)
-        
-        return blocks
+        return BlockDetector.find_table_blocks(ws, self._extract_row_labels)
     
     def _split_block_on_new_headers(self, ws: Worksheet, block: Dict) -> List[Dict]:
         """

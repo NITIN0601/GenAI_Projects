@@ -48,12 +48,14 @@ from config.settings import settings
 from src.pipeline.steps import (
     run_download,
     run_extract,
+    run_process,
     run_embed,
     run_view_db,
     run_search,
     run_query,
     run_consolidate,
     run_process_advanced,
+    run_transpose,
 )
 
 # Import CLI helpers
@@ -468,6 +470,125 @@ def process_advanced(
 
 
 # ============================================================================
+# STEP 2: PROCESS (Data Normalization)
+# ============================================================================
+
+@app.command()
+def process(
+    source: str = typer.Option(None, "--source", "-s", help="Source directory (default: data/extracted_raw)"),
+    dest: str = typer.Option(None, "--dest", "-d", help="Destination directory (default: data/processed)"),
+    skip_advanced: bool = typer.Option(False, "--skip-advanced", help="Skip process-advanced step"),
+    skip_consolidate: bool = typer.Option(False, "--skip-consolidate", help="Skip consolidate step"),
+    skip_transpose: bool = typer.Option(False, "--skip-transpose", help="Skip transpose step")
+) -> None:
+    """
+    Step 2: Process and normalize extracted data, then continue pipeline.
+    
+    Pipeline: Process → Process-Advanced → Consolidate → Transpose
+    
+    Applies OCR fixes, currency/percentage conversion, column header normalization.
+    
+    Examples:
+        python main.py process
+        python main.py process --skip-advanced  # Skip remaining steps
+        python main.py process --source ./data/extracted_raw
+    """
+    console.print("\n[bold green]🔧 Step 2: Process Data[/bold green]\n")
+    console.print("[cyan]Normalizing and cleaning extracted data...[/cyan]\n")
+    
+    # Step 1: Process
+    result = run_process(source_dir=source, dest_dir=dest)
+    
+    if not result.success:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
+        raise typer.Exit(code=1)
+    
+    console.print(f"[green]✓ {result.message}[/green]")
+    console.print(f"[dim]Files processed: {result.data.get('files_processed', 0)}[/dim]")
+    
+    # Step 2: Process Advanced
+    if not skip_advanced:
+        console.print("\n[bold]Step 3: Advanced Processing (Table Merging)[/bold]")
+        advanced_result = run_process_advanced()
+        
+        if advanced_result.success:
+            console.print(f"[green]✓ {advanced_result.message}[/green]")
+        else:
+            console.print(f"[yellow]⚠ Advanced processing: {advanced_result.error}[/yellow]")
+    else:
+        console.print("\n[dim]Step 3: Advanced Processing (skipped)[/dim]")
+    
+    # Step 3: Consolidate
+    if not skip_consolidate:
+        console.print("\n[bold]Step 4: Consolidate Tables[/bold]")
+        consolidate_result = run_consolidate(table_title=None, output_format='both')
+        
+        if consolidate_result.success:
+            console.print(f"[green]✓ {consolidate_result.message}[/green]")
+        else:
+            console.print(f"[yellow]⚠ Consolidation: {consolidate_result.error}[/yellow]")
+    else:
+        console.print("\n[dim]Step 4: Consolidate (skipped)[/dim]")
+    
+    # Step 4: Transpose
+    if not skip_transpose and not skip_consolidate:
+        console.print("\n[bold]Step 5: Transpose Tables[/bold]")
+        transpose_result = run_transpose()
+        
+        if transpose_result.success:
+            console.print(f"[green]✓ {transpose_result.message}[/green]")
+        else:
+            console.print(f"[yellow]⚠ Transpose: {transpose_result.error}[/yellow]")
+    else:
+        console.print("\n[dim]Step 5: Transpose (skipped)[/dim]")
+    
+    console.print("\n[bold green]✓ Processing Pipeline Complete![/bold green]")
+    console.print()
+
+
+# ============================================================================
+# STEP 5: TRANSPOSE (Time-Series Conversion)
+# ============================================================================
+
+@app.command()
+def transpose(
+    source: str = typer.Option(None, "--source", "-s", help="Source file (default: data/extracted/consolidated_tables.xlsx)"),
+    output: str = typer.Option(None, "--output", "-o", help="Output file (default: data/extracted/consolidated_tables_transposed.xlsx)")
+) -> None:
+    """
+    Step 5: Transpose consolidated tables to time-series format.
+    
+    Converts wide tables (dates as columns) to long format (dates as rows).
+    
+    Examples:
+        python main.py transpose
+        python main.py transpose --source ./data/extracted/consolidated_tables.xlsx
+    """
+    console.print("\n[bold green]🔄 Step 5: Transpose Tables[/bold green]\n")
+    console.print("[cyan]Converting to time-series format...[/cyan]\n")
+    
+    result = run_transpose(source_file=source, output_file=output)
+    
+    if not result.success:
+        console.print(f"[red]✗ Error: {result.error}[/red]")
+        raise typer.Exit(code=1)
+    
+    console.print(f"[green]✓ {result.message}[/green]")
+    console.print(f"[dim]Sheets processed: {result.data.get('sheets_processed', 0)}[/dim]")
+    console.print(f"[dim]Sheets skipped: {result.data.get('sheets_skipped', 0)}[/dim]")
+    
+    if result.data.get('output_path'):
+        console.print(f"\n[bold]Output:[/bold] [cyan]{result.data['output_path']}[/cyan]")
+    
+    if result.data.get('errors'):
+        console.print("\n[bold yellow]Warnings:[/bold yellow]")
+        for err in result.data['errors']:
+            console.print(f"  [yellow]⚠ {err}[/yellow]")
+    
+    console.print()
+
+
+# ============================================================================
 # INTERACTIVE MODE
 # ============================================================================
 
@@ -520,6 +641,7 @@ def pipeline(
         python main.py pipeline --yr 25 --skip-embed  # Skip embedding
     """
     console.print("\n[bold green]🚀 Running Complete Pipeline[/bold green]\n")
+    console.print("[dim]Pipeline: Download → Extract → Process → Process-Advanced → Consolidate → Transpose → Embed[/dim]\n")
     
     # Use source or settings default
     if source is None:
@@ -542,25 +664,41 @@ def pipeline(
         console.print(f"  [red]✗ {extract_result.error}[/red]")
         raise typer.Exit(code=1)
     
-    # Step 3: Process Advanced (merge tables with identical row labels)
-    console.print("\n[bold]Step 3: Advanced Processing (Table Merging)[/bold]")
+    # Step 3: Process (data normalization)
+    console.print("\n[bold]Step 3: Process Data[/bold]")
+    process_result = run_process()
+    if process_result.success:
+        console.print(f"  [green]✓ {process_result.message}[/green]")
+    else:
+        console.print(f"  [yellow]⚠ {process_result.error}[/yellow]")
+    
+    # Step 4: Process Advanced (merge tables with identical row labels)
+    console.print("\n[bold]Step 4: Advanced Processing (Table Merging)[/bold]")
     advanced_result = run_process_advanced()
     if advanced_result.success:
         console.print(f"  [green]✓ {advanced_result.message}[/green]")
     else:
         console.print(f"  [yellow]⚠ {advanced_result.error}[/yellow]")
     
-    # Step 4: Consolidate tables
-    console.print("\n[bold]Step 4: Consolidate Tables[/bold]")
+    # Step 5: Consolidate tables
+    console.print("\n[bold]Step 5: Consolidate Tables[/bold]")
     consolidate_result = run_consolidate(table_title=None, output_format='both')
     if consolidate_result.success:
         console.print(f"  [green]✓ {consolidate_result.message}[/green]")
     else:
         console.print(f"  [yellow]⚠ {consolidate_result.error}[/yellow]")
     
-    # Step 5: Embed (optional)
+    # Step 6: Transpose (time-series conversion)
+    console.print("\n[bold]Step 6: Transpose Tables[/bold]")
+    transpose_result = run_transpose()
+    if transpose_result.success:
+        console.print(f"  [green]✓ {transpose_result.message}[/green]")
+    else:
+        console.print(f"  [yellow]⚠ {transpose_result.error}[/yellow]")
+    
+    # Step 7: Embed (optional)
     if not skip_embed:
-        console.print("\n[bold]Step 5: Embed + Store[/bold]")
+        console.print("\n[bold]Step 7: Embed + Store[/bold]")
         embed_result = run_embed(extracted_data=extract_result.data)
         if embed_result.success:
             console.print(f"  [green]✓ {embed_result.message}[/green]")
@@ -568,7 +706,7 @@ def pipeline(
             console.print(f"  [red]✗ {embed_result.error}[/red]")
             raise typer.Exit(code=1)
     else:
-        console.print("\n[dim]Step 5: Embed (skipped)[/dim]")
+        console.print("\n[dim]Step 7: Embed (skipped)[/dim]")
     
     console.print("\n[bold green]✓ Pipeline Complete![/bold green]")
     console.print("[cyan]Ready for queries. Try:[/cyan]")

@@ -1,0 +1,100 @@
+{
+    "_description": "Section hierarchy patterns for Morgan Stanley 10-Q/10-K documents",
+    "_note": "Patterns are matched case-insensitively using 'contains' logic. Order matters - more specific patterns first.",
+    "toc_patterns": [
+        "Management's Discussion and Analysis of Financial Condition",
+        "Quantitative and Qualitative Disclosures About Market Risk",
+        "Financial Statements and Supplementary Data",
+        "Controls and Procedures",
+        "Legal Proceedings",
+        "Risk Factors"
+    ],
+    "main_section_patterns": [
+        "Management's Discussion and Analysis",
+        "Notes to Consolidated Financial Statements",
+        "Consolidated Income Statement",
+        "Consolidated Balance Sheet",
+        "Consolidated Cash Flow Statement",
+        "Consolidated Statement of Changes",
+        "Financial Data Supplement",
+        "Quantitative and Qualitative Disclosures"
+    ],
+    "section1_patterns": [
+        "Executive Summary",
+        "Business Segments",
+        "Business Segment Results",
+        "Liquidity and Capital Resources",
+        "Regulatory Requirements",
+        "Credit Ratings",
+        "Controls and Procedures"
+    ],
+    "section2_patterns": {
+        "_description": "Business segments and major sub-sections (Note numbers)",
+        "patterns": [
+            "Institutional Securities",
+            "Wealth Management",
+            "Investment Management",
+            "Corporate and Other",
+            "Equity, Fixed Income and Other Net Revenues",
+            "Collateralized Transactions",
+            "Collateralized Financing",
+            "2. Significant Accounting",
+            "5. Fair Value Option",
+            "6. Derivative Instruments",
+            "7. Investment Securities",
+            "8. Collateralized Transactions",
+            "10. Other Assets",
+            "13. Commitments, Guarantees",
+            "14. Variable Interest",
+            "15. Regulatory Requirements",
+            "16. Total Equity",
+            "17. Interest Income"
+        ]
+    },
+    "section3_patterns": {
+        "_description": "Topics within business segments",
+        "patterns": [
+            "Investment Banking",
+            "Net New Assets",
+            "Non-interest Expense",
+            "Net Interest Income",
+            "Fee-Based",
+            "Trading",
+            "Asset Management",
+            "Assets under Management",
+            "Liquidity Resources",
+            "Fair Value Asset"
+        ]
+    },
+    "section4_patterns": {
+        "_description": "Detailed breakdowns within topics",
+        "patterns": [
+            "Rollforward",
+            "Rollforwards",
+            "Average",
+            "Channel",
+            "by Region",
+            "by Product",
+            "by Asset Class"
+        ]
+    },
+    "table_title_patterns": {
+        "_description": "Patterns that identify table titles (should NOT be treated as section headers)",
+        "patterns": [
+            "Income Statement Information",
+            "Wealth Management Metrics",
+            "Investment Banking Volumes",
+            "Equity and Fixed Income Net Revenues",
+            "Selected Financial Information",
+            "Reconciliation",
+            "Statistical Data",
+            "Rollforwards",
+            "Average AUM",
+            "Average Fee Rates",
+            "Fee-Based Client Assets",
+            "Advisor-led Channel",
+            "Self-directed Channel",
+            "Workplace Channel"
+        ]
+    }
+}

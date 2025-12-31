@@ -51,6 +51,246 @@ _NOTE_HEADER_PATTERN = re.compile(r'^Note\s+\d+', re.IGNORECASE)
 _NUMBERED_HEADER_PATTERN = re.compile(r'^\d+\.\s+[A-Z]')
 
 
+# =============================================================================
+# SECTION HIERARCHY TRACKER
+# =============================================================================
+
+class SectionHierarchyTracker:
+    """
+    Dynamic section hierarchy tracker for financial documents.
+    
+    Uses pattern matching + frequency analysis + position-based fallback
+    to classify section headers into hierarchy levels:
+    - toc: Table of Contents entry (e.g., "Management's Discussion and Analysis of Financial Condition...")
+    - main: Main section (repeating on multiple pages)
+    - section1: Primary subsection (e.g., "Executive Summary", "Business Segments")
+    - section2: Secondary subsection (e.g., "Institutional Securities", "Wealth Management")
+    - section3: Topic (e.g., "Investment Banking", "Net New Assets")
+    - section4: Detail (e.g., "Advisor-led Channel", "Rollforward")
+    """
+    
+    def __init__(self, config_path: str = None):
+        """Initialize with optional config file path."""
+        self.patterns = self._load_patterns(config_path)
+        self.current = {
+            'toc': '',
+            'main': '',
+            'section1': '',
+            'section2': '',
+            'section3': '',
+            'section4': ''
+        }
+        self.repeating_headers = set()  # Headers that appear 3+ times (MAIN sections)
+        self.header_counts = {}  # Track frequency of each header
+        
+    def _load_patterns(self, config_path: str = None) -> dict:
+        """Load section patterns from config file."""
+        import json
+        
+        if config_path is None:
+            # Default path
+            config_path = Path(__file__).parent.parent.parent.parent.parent / 'config' / 'section_patterns.json'
+        
+        try:
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning(f"Could not load section patterns config: {e}")
+            return self._default_patterns()
+    
+    def _default_patterns(self) -> dict:
+        """Default patterns if config file not found."""
+        return {
+            'toc_patterns': ["Management's Discussion and Analysis of Financial Condition"],
+            'main_section_patterns': ["Management's Discussion and Analysis"],
+            'section1_patterns': ["Executive Summary", "Business Segments"],
+            'section2_patterns': {'patterns': ["Institutional Securities", "Wealth Management", "Investment Management"]},
+            'section3_patterns': {'patterns': ["Investment Banking", "Income Statement", "Net New Assets"]},
+            'section4_patterns': {'patterns': ["Rollforward", "Average", "Channel"]}
+        }
+    
+    def pre_scan_headers(self, headers: list) -> None:
+        """
+        Pre-scan all section headers to identify repeating headers (MAIN sections).
+        
+        Args:
+            headers: List of (page, text) tuples
+        """
+        from collections import Counter
+        
+        # Count each header
+        texts = [h[1] for h in headers]
+        counts = Counter(texts)
+        
+        # Headers appearing 3+ times are MAIN sections
+        self.repeating_headers = {text for text, count in counts.items() if count >= 3}
+        self.header_counts = dict(counts)
+        
+        logger.debug(f"Found {len(self.repeating_headers)} repeating headers (MAIN sections)")
+    
+    def classify_header(self, text: str) -> str:
+        """
+        Classify a section header into hierarchy level.
+        
+        Returns: 'toc', 'main', 'section1', 'section2', 'section3', 'section4', 'table_title', or 'unknown'
+        """
+        # Step 1: Normalize text - fix OCR broken words
+        text_normalized = self._normalize_ocr_text(text)
+        text_lower = text_normalized.lower().strip()
+        
+        # Step 2: Check for table title patterns FIRST - these should NOT update section hierarchy
+        table_title_data = self.patterns.get('table_title_patterns', {})
+        table_title_patterns = table_title_data.get('patterns', []) if isinstance(table_title_data, dict) else table_title_data
+        for pattern in table_title_patterns:
+            if pattern.lower() in text_lower:
+                return 'table_title'
+        
+        # Rule 1: Check for TOC-level patterns
+        for pattern in self.patterns.get('toc_patterns', []):
+            if pattern.lower() in text_lower:
+                return 'toc'
+        
+        # Rule 2: Check for MAIN section patterns (before repeating headers check)
+        for pattern in self.patterns.get('main_section_patterns', []):
+            if pattern.lower() in text_lower:
+                return 'main'
+        
+        # Rule 3: Check if this is a repeating header (MAIN section)
+        # But only if it's not already classified as something more specific
+        if text in self.repeating_headers:
+            # Check if it matches section patterns first
+            if not self._matches_section_pattern(text_lower):
+                return 'main'
+        
+        # Rule 4: Check for Section1 patterns
+        for pattern in self.patterns.get('section1_patterns', []):
+            if pattern.lower() in text_lower:
+                return 'section1'
+        
+        # Rule 5: Check for Section2 patterns (business segments)
+        section2_data = self.patterns.get('section2_patterns', {})
+        section2_patterns = section2_data.get('patterns', []) if isinstance(section2_data, dict) else section2_data
+        for pattern in section2_patterns:
+            if pattern.lower() in text_lower:
+                return 'section2'
+        
+        # Rule 6: Check for Section3 patterns (topics)
+        section3_data = self.patterns.get('section3_patterns', {})
+        section3_patterns = section3_data.get('patterns', []) if isinstance(section3_data, dict) else section3_data
+        for pattern in section3_patterns:
+            if pattern.lower() in text_lower:
+                return 'section3'
+        
+        # Rule 7: Check for Section4 patterns (details)
+        section4_data = self.patterns.get('section4_patterns', {})
+        section4_patterns = section4_data.get('patterns', []) if isinstance(section4_data, dict) else section4_data
+        for pattern in section4_patterns:
+            if pattern.lower() in text_lower:
+                return 'section4'
+        
+        # Fallback: unknown (will use position-based logic)
+        return 'unknown'
+    
+    def _normalize_ocr_text(self, text: str) -> str:
+        """
+        Normalize OCR text to fix common issues like broken words.
+        
+        Args:
+            text: Raw OCR text
+            
+        Returns:
+            Normalized text with OCR issues fixed
+        """
+        import re
+        
+        # Fix common OCR broken words
+        ocr_fixes = {
+            r'Wealth\s+Manageme\s*nt': 'Wealth Management',
+            r'Institutional\s+Securitie\s*s': 'Institutional Securities',
+            r'Investment\s+Manageme\s*nt': 'Investment Management',
+            r'Manageme\s*nt\'?s?\s+Discussion': "Management's Discussion",
+        }
+        
+        result = text
+        for pattern, replacement in ocr_fixes.items():
+            result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+        
+        # Collapse multiple spaces
+        result = re.sub(r'\s+', ' ', result).strip()
+        
+        return result
+    
+    def _matches_section_pattern(self, text_lower: str) -> bool:
+        """Check if text matches any section 1-4 pattern."""
+        for level in ['section1_patterns', 'section2_patterns', 'section3_patterns', 'section4_patterns']:
+            data = self.patterns.get(level, {})
+            patterns = data.get('patterns', []) if isinstance(data, dict) else data
+            for pattern in patterns:
+                if pattern.lower() in text_lower:
+                    return True
+        return False
+    
+    def process_header(self, text: str, page: int) -> dict:
+        """
+        Process a section header and update current hierarchy state.
+        
+        Args:
+            text: Section header text
+            page: Page number
+            
+        Returns:
+            Current hierarchy state after processing
+        """
+        level = self.classify_header(text)
+        
+        # Table titles should NOT update section hierarchy
+        if level == 'table_title':
+            return self.get_current_hierarchy()
+        
+        if level == 'toc':
+            self.current['toc'] = self._normalize_ocr_text(text)
+            # TOC clears everything below
+            self.current['main'] = ''
+            self.current['section1'] = ''
+            self.current['section2'] = ''
+            self.current['section3'] = ''
+            self.current['section4'] = ''
+        elif level == 'main':
+            self.current['main'] = self._normalize_ocr_text(text)
+            # Main doesn't clear section1+ (they persist across pages)
+        elif level == 'section1':
+            self.current['section1'] = self._normalize_ocr_text(text)
+            self.current['section2'] = ''
+            self.current['section3'] = ''
+            self.current['section4'] = ''
+        elif level == 'section2':
+            self.current['section2'] = self._normalize_ocr_text(text)
+            self.current['section3'] = ''
+            self.current['section4'] = ''
+        elif level == 'section3':
+            self.current['section3'] = self._normalize_ocr_text(text)
+            self.current['section4'] = ''
+        elif level == 'section4':
+            self.current['section4'] = self._normalize_ocr_text(text)
+        elif level == 'unknown':
+            # Position-based fallback: if we're within a section2, this is likely section3
+            if self.current['section2'] and not self.current['section3']:
+                self.current['section3'] = self._normalize_ocr_text(text)
+            elif self.current['section3'] and not self.current['section4']:
+                self.current['section4'] = self._normalize_ocr_text(text)
+            elif self.current['section1'] and not self.current['section2']:
+                self.current['section2'] = self._normalize_ocr_text(text)
+            else:
+                # Default: treat as section3
+                self.current['section3'] = self._normalize_ocr_text(text)
+        
+        return self.get_current_hierarchy()
+    
+    def get_current_hierarchy(self) -> dict:
+        """Get copy of current hierarchy state."""
+        return self.current.copy()
+
+
 class DoclingHelper:
     """Helper class for common Docling operations."""
     
@@ -676,6 +916,108 @@ class DoclingHelper:
         return {'level1': '', 'level2': '', 'level3': ''}
     
     @staticmethod
+    def extract_full_section_hierarchy(doc) -> dict:
+        """
+        Extract full section hierarchy using SectionHierarchyTracker.
+        
+        This method provides deeper hierarchy detection than extract_toc_hierarchy,
+        using pattern matching, frequency analysis, and position-based fallback.
+        
+        Args:
+            doc: Docling document
+            
+        Returns:
+            Dict mapping page numbers to full section hierarchy:
+            {page: {'toc': ..., 'main': ..., 'section1': ..., 'section2': ..., 'section3': ..., 'section4': ...}}
+        """
+        hierarchy = {}
+        tracker = SectionHierarchyTracker()
+        
+        try:
+            items_list = list(doc.iterate_items())
+            
+            # Step 1: Collect all section headers for pre-scan
+            all_headers = []
+            for item_data in items_list:
+                item = item_data[0] if isinstance(item_data, tuple) else item_data
+                
+                if not hasattr(item, 'label') or not item.label:
+                    continue
+                
+                label_str = str(item.label).upper()
+                if 'SECTION' not in label_str and 'TITLE' not in label_str:
+                    continue
+                
+                if not hasattr(item, 'text') or not item.text:
+                    continue
+                
+                text = str(item.text).strip()
+                if len(text) < 5 or len(text) > 100:
+                    continue
+                
+                page = DoclingHelper.get_item_page(item)
+                all_headers.append((page, text))
+            
+            # Step 2: Pre-scan to identify repeating headers (MAIN sections)
+            tracker.pre_scan_headers(all_headers)
+            
+            # Step 3: Process headers in page order
+            all_headers.sort(key=lambda x: x[0])
+            
+            for page, text in all_headers:
+                current = tracker.process_header(text, page)
+                hierarchy[page] = current.copy()
+            
+            # Step 4: Fill gaps - propagate hierarchy to pages without headers
+            if hierarchy:
+                max_page = max(hierarchy.keys())
+                current_state = {'toc': '', 'main': '', 'section1': '', 'section2': '', 'section3': '', 'section4': ''}
+                
+                for pg in range(1, max_page + 1):
+                    if pg in hierarchy:
+                        current_state = hierarchy[pg].copy()
+                    else:
+                        hierarchy[pg] = current_state.copy()
+            
+            logger.debug(f"Built full section hierarchy for {len(hierarchy)} pages")
+            
+        except Exception as e:
+            logger.debug(f"Error extracting full section hierarchy: {e}")
+        
+        return hierarchy
+    
+    @staticmethod
+    def get_full_hierarchy_for_page(hierarchy: dict, page_no: int) -> dict:
+        """
+        Get full section hierarchy for a given page number.
+        
+        Args:
+            hierarchy: Dict from extract_full_section_hierarchy()
+            page_no: Page number to look up
+            
+        Returns:
+            Dict with toc, main, section1, section2, section3, section4
+        """
+        empty = {'toc': '', 'main': '', 'section1': '', 'section2': '', 'section3': '', 'section4': ''}
+        
+        if not hierarchy:
+            return empty
+        
+        if page_no in hierarchy:
+            return hierarchy[page_no]
+        
+        # Find closest lower page
+        best_page = 0
+        for pg in hierarchy.keys():
+            if pg <= page_no and pg > best_page:
+                best_page = pg
+        
+        if best_page:
+            return hierarchy[best_page]
+        
+        return empty
+    
+    @staticmethod
     def get_section_for_page(toc_sections: dict, page_no: int) -> str:
         """
         Get section name for a given page number using TOC mapping.
@@ -968,6 +1310,168 @@ class DoclingHelper:
         return ""
     
     @staticmethod
+    def extract_table_title_hybrid(doc, table_item, table_index: int, page_no: int) -> str:
+        """
+        HYBRID table title extraction - combines multiple approaches for best accuracy.
+        
+        Strategy:
+        1. Get IMMEDIATE preceding text on same page (most accurate for same-page tables)
+        2. Validate if it looks like a table title (not a section header or footnote)
+        3. Fallback to pattern-based approach if immediate text is invalid
+        
+        Args:
+            doc: Docling document
+            table_item: The table item
+            table_index: Index of table in document
+            page_no: Page number
+            
+        Returns:
+            Extracted table title
+        """
+        import json
+        
+        # Load config for table title patterns
+        try:
+            config_path = Path(__file__).parent.parent.parent.parent.parent / 'config' / 'section_patterns.json'
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            table_title_patterns = config.get('table_title_patterns', {}).get('patterns', [])
+            section_patterns = (
+                config.get('main_section_patterns', []) +
+                config.get('section1_patterns', []) +
+                config.get('section2_patterns', {}).get('patterns', []) +
+                config.get('section3_patterns', {}).get('patterns', [])
+            )
+        except Exception:
+            table_title_patterns = []
+            section_patterns = []
+        
+        def is_table_title_candidate(text: str) -> bool:
+            """Check if text is a good table title candidate."""
+            if not text or len(text) < 5 or len(text) > 120:
+                return False
+            
+            text_lower = text.lower().strip()
+            
+            # Reject clear non-titles
+            invalid_starters = [
+                'the ', 'our ', 'this ', 'these ', 'such ', 'certain ',
+                'see ', 'refer ', 'note:', 'notes:', 'source:',
+                '(', '*', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0'
+            ]
+            for starter in invalid_starters:
+                if text_lower.startswith(starter):
+                    return False
+            
+            # Reject if contains sentence indicators
+            if text.count('.') >= 2 or (text.endswith('.') and len(text) > 60):
+                return False
+            
+            # Reject section headers (not table titles)
+            section_headers_to_reject = [
+                "management's discussion and analysis",
+                "business segments", "business segment results",
+                "executive summary", "institutional securities", 
+                "wealth management", "investment management",
+            ]
+            for header in section_headers_to_reject:
+                if text_lower == header or (text_lower.startswith(header) and len(text_lower) < len(header) + 10):
+                    return False
+            
+            return True
+        
+        def is_known_table_title(text: str) -> bool:
+            """Check if text matches a known table title pattern."""
+            text_lower = text.lower().strip()
+            for pattern in table_title_patterns:
+                if pattern.lower() in text_lower:
+                    return True
+            return False
+        
+        def clean_title(text: str) -> str:
+            """Clean up the title text."""
+            text = re.sub(r'^\d+[\.\:\s]+\s*', '', text)  # Remove leading numbers
+            text = re.sub(r'\s+\d+\s*$', '', text)  # Remove trailing numbers
+            text = re.sub(r'\s*\(\d+\)\s*$', '', text)  # Remove (N) at end
+            return text.strip()[:100]
+        
+        # === APPROACH 1: Get immediate preceding text (most accurate) ===
+        items_list = list(doc.iterate_items())
+        immediate_candidates = []  # (text, distance_from_table, label)
+        
+        table_found = False
+        distance = 0
+        
+        for item_data in reversed(items_list):
+            item = item_data[0] if isinstance(item_data, tuple) else item_data
+            
+            if item is table_item:
+                table_found = True
+                distance = 0
+                continue
+            
+            if not table_found:
+                continue
+            
+            distance += 1
+            if distance > 10:  # Only look at 10 items before the table
+                break
+            
+            item_page = DoclingHelper.get_item_page(item)
+            if item_page != page_no and item_page != page_no - 1:
+                continue  # Only same page or previous page
+            
+            if not hasattr(item, 'text') or not item.text:
+                continue
+            
+            text = str(item.text).strip()
+            label = str(item.label) if hasattr(item, 'label') else 'UNKNOWN'
+            
+            if 5 < len(text) < 120:
+                immediate_candidates.append((text, distance, label, item_page))
+        
+        # === APPROACH 2: Evaluate candidates and pick the best ===
+        best_title = None
+        best_score = 0
+        
+        for text, distance, label, item_page in immediate_candidates:
+            score = 0
+            
+            # Known table title pattern = highest priority
+            if is_known_table_title(text):
+                score += 100
+            
+            # Same page = better than previous page
+            if item_page == page_no:
+                score += 50
+            
+            # Closer to table = better
+            score += (10 - distance) * 5
+            
+            # SECTION_HEADER or TITLE label = likely title
+            if 'SECTION' in label.upper() or 'TITLE' in label.upper():
+                score += 30
+            
+            # Good candidate = bonus
+            if is_table_title_candidate(text):
+                score += 20
+            
+            # Short and capitalized = likely title
+            if text[0].isupper() and len(text) < 60:
+                score += 10
+            
+            if score > best_score:
+                best_score = score
+                best_title = text
+        
+        # === Return the best title found ===
+        if best_title and best_score >= 50:
+            return clean_title(best_title)
+        
+        # === FALLBACK: Use the original method ===
+        return DoclingHelper.extract_table_title(doc, table_item, table_index, page_no)
+    
+    @staticmethod
     def extract_table_title(doc, table_item, table_index: int, page_no: int) -> str:
         """
         Extract meaningful table title from surrounding context.
@@ -996,7 +1500,7 @@ class DoclingHelper:
             return text.strip()[:100]
 
         def is_footnote(text: str) -> bool:
-            """Check if text looks like a footnote."""
+            """Check if text looks like a footnote or explanatory text."""
             text_lower = text.lower().strip()
             
             # Footnote patterns to filter out
@@ -1007,6 +1511,13 @@ class DoclingHelper:
                 'see the accompanying', 'as discussed', 'as described',
                 '(1)', '(2)', '(3)', '(a)', '(b)', '(c)',  # Numbered refs
                 'note:', 'notes:', 'source:', 'sources:',
+                'are held', 'is held', 'are primarily', 'is primarily',
+                'includes', 'excludes', 'represents', 'consists of',
+                'based on', 'pursuant to', 'subject to', 'related to',
+                'effective', 'applicable', 'accordance with',
+                'can be set', 'is currently set', 'has been set',
+                'is currently', 'has been', 'was set', 'were set',
+                'is set by', 'are set by', 'determined by',
             ]
             
             for pattern in footnote_patterns:
@@ -1019,6 +1530,20 @@ class DoclingHelper:
             
             # Very short text starting with parens is likely footnote
             if len(text) < 30 and text.startswith('('):
+                return True
+            
+            # Text starting with "Our", "The", "This", "These" followed by descriptive text is usually footnote
+            sentence_starters = ['our ', 'the ', 'this ', 'these ', 'such ', 'certain ']
+            for starter in sentence_starters:
+                if text_lower.startswith(starter) and len(text) > 40:
+                    return True
+            
+            # Text with multiple periods (sentences) is likely explanatory text, not a title
+            if text.count('.') >= 2:
+                return True
+            
+            # Text ending with period is often explanatory, unless it's short
+            if text.endswith('.') and len(text) > 50:
                 return True
             
             return False
@@ -1062,13 +1587,30 @@ class DoclingHelper:
             if is_footnote(text):
                 return False
             
+            # Check if this matches a known table title pattern from config
+            # If so, it's a valid title even if it matches invalid_patterns
+            try:
+                import json
+                config_path = Path(__file__).parent.parent.parent.parent.parent / 'config' / 'section_patterns.json'
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                
+                table_title_data = config.get('table_title_patterns', {})
+                table_title_patterns = table_title_data.get('patterns', []) if isinstance(table_title_data, dict) else table_title_data
+                
+                for pattern in table_title_patterns:
+                    if pattern.lower() in text_lower:
+                        return True  # Known table title - accept it
+            except Exception:
+                pass  # Continue with other checks
+            
             invalid_patterns = [
                 'three months ended', 'six months ended', 'nine months ended',
                 'year ended', 'quarter ended', 'at march', 'at december',
                 '$ in millions', '$ in billions', 'in millions', 'in billions',
                 'unaudited', 'address of principal', 'the following', 'as follows',
                 'morgan stanley', 'consolidated statements', 'condensed consolidated',
-                'selected financial', 'supplemental financial',
+                "management's discussion and analysis",  # This is a section header, not table title
             ]
             
             for pattern in invalid_patterns:

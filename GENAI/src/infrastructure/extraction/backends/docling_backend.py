@@ -398,7 +398,7 @@ class DoclingBackend(ExtractionBackend):
         table_id = f"{filename}_p{page_no}_{table_index_on_page}"
         
         # Get better table title
-        caption = DoclingHelper.extract_table_title(doc, table_item, table_index, page_no)
+        caption = DoclingHelper.extract_table_title_hybrid(doc, table_item, table_index, page_no)
         
         # Get section name (e.g., "Institutional Securities", "Wealth Management")
         section_name = DoclingHelper.extract_section_name(doc, table_item, page_no)

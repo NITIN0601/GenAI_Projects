@@ -14,14 +14,15 @@ Usage:
     
     # Per-PDF export
     exporter.export_pdf_tables(tables, "10q0625.pdf")
-    # -> data/processed/10q0625_tables.xlsx
+    # -> data/extracted_raw/10q0625_tables.xlsx
     
     # Combined export (after all PDFs processed)
     exporter.export_combined_tables(all_tables)
-    # -> data/extracted/all_tables_combined.xlsx
+    # -> data/consolidate/all_tables_combined.xlsx
     
     # For consolidated multi-file merge, use:
     from src.infrastructure.extraction.consolidation.consolidated_exporter import get_consolidated_exporter
+
 """
 
 __version__ = "2.1.0"
@@ -38,8 +39,11 @@ from src.utils import get_logger
 from src.core import get_paths
 from src.infrastructure.extraction.formatters.header_detector import HeaderDetector
 from src.infrastructure.extraction.exporters.base_exporter import BaseExcelExporter
+# Import from new focused module
+from src.infrastructure.extraction.exporters.toc_builder import TOCBuilder
 from src.utils.excel_utils import ExcelUtils
-from src.utils.metadata_builder import MetadataLabels, MetadataBuilder
+from src.utils.metadata_labels import MetadataLabels
+from src.utils.metadata_builder import MetadataBuilder
 from src.utils.financial_domain import extract_quarter_from_header, extract_year_from_header, convert_year_to_q4_header
 
 logger = get_logger(__name__)
@@ -64,11 +68,12 @@ class ExcelTableExporter(BaseExcelExporter):
         """Initialize exporter with paths from PathManager."""
         super().__init__()
         self.paths = get_paths()
-        self.processed_dir = self.paths.data_dir / "processed"
+        # Step 1 output: extracted_raw (per docs/pipeline_operations.md)
+        self.extracted_raw_dir = self.paths.data_dir / "extracted_raw"
         self.extracted_dir = self.paths.data_dir / "extracted"
         
         # Ensure directories exist
-        self.processed_dir.mkdir(parents=True, exist_ok=True)
+        self.extracted_raw_dir.mkdir(parents=True, exist_ok=True)
         self.extracted_dir.mkdir(parents=True, exist_ok=True)
     
     def export_pdf_tables(
@@ -90,7 +95,7 @@ class ExcelTableExporter(BaseExcelExporter):
         Returns:
             Path to created Excel file
         """
-        output_dir = Path(output_dir) if output_dir else self.processed_dir
+        output_dir = Path(output_dir) if output_dir else self.extracted_raw_dir
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate output filename
@@ -151,7 +156,10 @@ class ExcelTableExporter(BaseExcelExporter):
             
             # Create workbook
             with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-                # Create Index sheet first
+                # Create TOC sheet first (hierarchical section view)
+                self._create_toc_sheet(writer, tables)
+                
+                # Create Index sheet
                 self._create_index_sheet(writer, tables, tables_by_title)
                 
                 # Create table sheets - use Table_ID as sheet name
@@ -267,6 +275,24 @@ class ExcelTableExporter(BaseExcelExporter):
         """Sanitize string for Excel sheet name. Delegates to ExcelUtils."""
         return ExcelUtils.sanitize_sheet_name(name)
     
+    def _create_toc_sheet(
+        self,
+        writer: pd.ExcelWriter,
+        tables: List[Dict[str, Any]]
+    ) -> None:
+        """
+        Create TOC sheet with hierarchical section columns.
+        
+        Delegates to TOCBuilder for centralized logic.
+        """
+        TOCBuilder.create_toc_sheet(
+            writer,
+            tables,
+            clean_title_func=self._clean_title_for_grouping,
+            normalize_title_func=self._normalize_title_for_grouping,
+            get_column_letter_func=self._get_column_letter
+        )
+    
     def _create_index_sheet(
         self,
         writer: pd.ExcelWriter,
@@ -276,105 +302,16 @@ class ExcelTableExporter(BaseExcelExporter):
         """
         Create Index sheet with comprehensive table metadata.
         
-        Columns: Source, PageNo, Table_ID, Location_ID, Section, Table Title, Link
-        
-        Location_ID = <pageNo>_<Table_IndexID_perpage>
-        Section is included to show why tables with same title might be separate.
+        Delegates to TOCBuilder for centralized logic.
         """
-        index_data = []
-        
-        # Track tables per page to generate Location_ID
-        page_table_counts = {}
-        
-        # Track unique logical tables to assign Table_ID (Section + Title)
-        logical_table_ids = {}
-        next_table_id = 1
-        
-        for table in tables:
-            metadata = table.get('metadata', {})
-            title = metadata.get('table_title', 'Untitled')
-            section = metadata.get('section_name', '')  # Get section name
-            
-            # Clean title to identify logical table (remove row ranges)
-            cleaned_title = self._clean_title_for_grouping(title)
-            normalized_title = self._normalize_title_for_grouping(cleaned_title)
-            
-            # Create grouping key: Section + Title (consistent with _group_tables_by_title)
-            # Fix OCR broken words and normalize whitespace
-            section_fixed = ExcelUtils.fix_ocr_broken_words(section) if section else ''
-            section_normalized = re.sub(r'\s+', ' ', section_fixed).strip().lower() if section_fixed else ''
-            if section_normalized:
-                grouping_key = f"{section_normalized}::{normalized_title}"
-            else:
-                grouping_key = f"default::{normalized_title}"
-            
-            # Assign Table_ID based on unique Section + Title combination
-            if grouping_key not in logical_table_ids:
-                logical_table_ids[grouping_key] = str(next_table_id)
-                next_table_id += 1
-            
-            table_id = logical_table_ids[grouping_key]
-            
-            # Get page number
-            page_no = metadata.get('page_no', 'N/A')
-            
-            # Generate Location_ID as <pageNo>_<TableIndexID_perpage>
-            if page_no != 'N/A':
-                if page_no not in page_table_counts:
-                    page_table_counts[page_no] = 0
-                page_table_counts[page_no] += 1
-                location_id = f"{page_no}_{page_table_counts[page_no]}"
-            else:
-                location_id = ''
-            
-            # Required columns per spec (now includes Section)
-            # Fix OCR broken words and normalize whitespace
-            section_clean = ExcelUtils.fix_ocr_broken_words(section) if section else ''
-            section_clean = re.sub(r'\s+', ' ', section_clean).strip() if section_clean else ''
-            index_data.append({
-                'Source': metadata.get('source_doc', 'Unknown'),
-                'PageNo': page_no,
-                'Table_ID': table_id,
-                'Location_ID': location_id,
-                'Section': section_clean,  # Normalized Section column
-                'Table Title': title,
-                'Link': table_id  # Use Table_ID as link target (sheet name)
-            })
-        
-        df = pd.DataFrame(index_data)
-        
-        # Ensure columns in correct order (now includes Section)
-        REQUIRED_COLUMNS = ['Source', 'PageNo', 'Table_ID', 'Location_ID', 'Section', 'Table Title', 'Link']
-        cols_to_keep = [c for c in REQUIRED_COLUMNS if c in df.columns]
-        if cols_to_keep:
-            df = df[cols_to_keep]
-        
-        df.to_excel(writer, sheet_name='Index', index=False)
-        
-        # Auto-adjust column widths with smart sizing
-        worksheet = writer.sheets['Index']
-        for idx, col in enumerate(df.columns):
-            col_letter = self._get_column_letter(idx)
-            
-            max_content_len = df[col].astype(str).map(len).max() if len(df) > 0 else 0
-            header_len = len(col)
-            max_len = max(max_content_len, header_len) + 2
-            
-            # Apply reasonable limits based on column type
-            if col == 'Table Title':
-                max_len = min(max_len, 60)
-            elif col == 'Section':
-                max_len = min(max_len, 25)  # Section column
-            elif col in ['Source', 'Table_ID', 'Location_ID']:
-                max_len = min(max_len, 25)
-            elif col == 'PageNo':
-                max_len = min(max_len, 10)
-            elif col == 'Link':
-                max_len = min(max_len, 15)
-            else:
-                max_len = min(max_len, 20)
-            
-            worksheet.column_dimensions[col_letter].width = max_len
+        TOCBuilder.create_index_sheet(
+            writer,
+            tables,
+            tables_by_title,
+            clean_title_func=self._clean_title_for_grouping,
+            normalize_title_func=self._normalize_title_for_grouping,
+            get_column_letter_func=self._get_column_letter
+        )
     
     def _get_column_letter(self, idx: int) -> str:
         """Convert column index to Excel column letter. Delegates to ExcelUtils."""
