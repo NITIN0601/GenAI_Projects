@@ -302,13 +302,23 @@ def is_new_table_header_row(row_values: list, first_col_value) -> bool:
     Check if a row represents a NEW column header (indicating table split).
     
     Criteria:
-    1. First column is empty or blank
+    1. First column is empty OR is a unit indicator ($ in millions, etc.)
     2. Other columns contain date/period patterns
     """
     first_val = str(first_col_value).strip() if first_col_value else ''
-    if first_val and first_val.lower() not in ['', 'nan', 'none']:
+    first_val_lower = first_val.lower()
+    
+    # Empty first column is OK
+    is_empty_first_col = not first_val or first_val_lower in ['', 'nan', 'none']
+    
+    # Unit indicators in first column are also OK (they indicate a new table header)
+    is_unit_indicator_first_col = first_val and is_unit_indicator(first_val)
+    
+    # If first column has content that is NOT a unit indicator, this is not a header row
+    if not is_empty_first_col and not is_unit_indicator_first_col:
         return False
     
+    # Check if other columns contain date/period patterns
     other_cols_text = ' '.join(str(v) for v in row_values[1:] if v).lower()
     if not other_cols_text:
         return False

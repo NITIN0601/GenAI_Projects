@@ -85,7 +85,8 @@ class ProcessStep(StepInterface):
         from src.core import get_paths
         
         paths = get_paths()
-        source_path = Path(self.source_dir) if self.source_dir else Path(paths.data_dir) / "processed"
+        # Step 2: reads from extracted_raw (must match execute() source)
+        source_path = Path(self.source_dir) if self.source_dir else Path(paths.data_dir) / "extracted_raw"
         
         if not source_path.exists():
             logger.warning(f"Source directory does not exist: {source_path}")
@@ -205,8 +206,10 @@ class ProcessStep(StepInterface):
         tables = self._find_all_tables(ws)
         
         if not tables:
-            # Fall back to processing the whole sheet as one table starting at row 13
-            tables = [{'start_row': 13, 'end_row': ws.max_row, 'header_row': 13}]
+            # Fall back to processing the whole sheet as one table
+            # Dynamically find where data starts after Source(s): marker
+            fallback_start = self._find_first_data_row_after_source(ws)
+            tables = [{'start_row': fallback_start, 'end_row': ws.max_row, 'header_row': fallback_start}]
         
         logger.debug(f"Found {len(tables)} table(s) in sheet (is_10k={is_10k})")
         
@@ -247,7 +250,7 @@ class ProcessStep(StepInterface):
                         tables.append({
                             'start_row': current_table_start,
                             'end_row': row - 1,
-                            'source_row': row
+                            'source_row': current_table_start  # Use the table's OWN source row
                         })
                     current_table_start = row
         
@@ -483,6 +486,41 @@ class ProcessStep(StepInterface):
         
         return str_value if isinstance(value, str) else value, None
     
+    def _find_first_data_row_after_source(self, ws) -> int:
+        """
+        Find the first row with data after the Source(s): marker.
+        
+        Scans for patterns like "Table Title:", "Source:", "Source(s):" and returns
+        the first row after that which contains data.
+        
+        Returns:
+            Row number where data starts (default: 13 if pattern not found)
+        """
+        source_row = None
+        
+        # Scan for Source(s): or Source: marker
+        for row in range(1, min(ws.max_row + 1, 30)):
+            cell_val = ws.cell(row, 1).value
+            if cell_val:
+                cell_str = str(cell_val).strip().lower()
+                if cell_str.startswith('source(s):') or cell_str.startswith('source:'):
+                    source_row = row
+                    break
+        
+        if source_row is None:
+            # No Source: found, return default
+            return 13
+        
+        # Find first row with data after source row
+        for row in range(source_row + 1, min(ws.max_row + 1, source_row + 10)):
+            # Check if row has any content
+            for col in range(1, min(ws.max_column + 1, 10)):
+                cell_val = ws.cell(row, col).value
+                if cell_val and str(cell_val).strip():
+                    return row
+        
+        return source_row + 1  # Default to row after source
+    
     def _is_key_value_table(self, ws) -> bool:
         """
         Detect if a worksheet contains a key-value table (not a data table with column headers).
@@ -492,11 +530,6 @@ class ProcessStep(StepInterface):
         - Single data values in column B (not spanning headers)
         - Very few columns with data (typically 2-3)
         - Row labels that look like field names, not data categories
-        
-        Example:
-            Row 13: |Announcement date  |January 16, 2025  |
-            Row 14: |Amount per share   |0.925             |
-            Row 15: |Date paid          |February 14, 2025 |
         """
         KEY_VALUE_LABELS = [
             'announcement date', 'amount per share', 'date paid', 'date to be paid',
@@ -504,11 +537,14 @@ class ProcessStep(StepInterface):
             'payment date', 'declaration date'
         ]
         
-        # Check rows 13-16 for key-value patterns
+        # Dynamically find where data starts
+        data_start = self._find_first_data_row_after_source(ws)
+        
+        # Check data rows for key-value patterns
         kv_pattern_count = 0
         total_rows_checked = 0
         
-        for row in range(13, min(ws.max_row + 1, 20)):
+        for row in range(data_start, min(ws.max_row + 1, data_start + 7)):
             col_a = ws.cell(row, 1).value
             col_b = ws.cell(row, 2).value
             col_c = ws.cell(row, 3).value
@@ -522,13 +558,11 @@ class ProcessStep(StepInterface):
             # Check if column A looks like a key-value label
             is_kv_label = any(label in col_a_lower for label in KEY_VALUE_LABELS)
             
-            # Additional check: column B has content but column C is empty
-            has_single_value = col_b and (not col_c or str(col_c).strip() == '')
-            
-            if is_kv_label or (has_single_value and ':' not in col_a_lower and len(col_a_lower) > 5):
+            # Only count explicit key-value label matches, not generic single-column checks
+            if is_kv_label:
                 kv_pattern_count += 1
         
-        # If most rows look like key-value pairs, treat as key-value table
+        # Require at least 2 explicit key-value labels to treat as key-value table
         return total_rows_checked > 0 and kv_pattern_count >= 2
     
     def _process_data_cells_only(self, ws, stats: Dict):
@@ -538,8 +572,11 @@ class ProcessStep(StepInterface):
         """
         from openpyxl.styles import numbers
         
+        # Dynamically find where data starts
+        data_start = self._find_first_data_row_after_source(ws)
+        
         # Just process percentage and numeric formatting
-        for row in range(13, ws.max_row + 1):
+        for row in range(data_start, ws.max_row + 1):
             for col in range(1, ws.max_column + 1):
                 cell = ws.cell(row, col)
                 if cell.value is None:
@@ -593,21 +630,16 @@ class ProcessStep(StepInterface):
                 logger.debug(f"Could not unmerge {merge_range}: {e}")
         
         if num_header_rows == 1:
-            # 1-level: Just ensure empty row after header
-            # Write normalized headers to the header row
+            # 1-level: Write normalized headers to the header row
+            # DO NOT add empty separator - data starts immediately after
             for col_idx in range(1, num_cols + 1):
                 if col_idx < len(normalized_headers) + 1 and normalized_headers[col_idx - 1]:
                     cell = ws.cell(row=header_row, column=col_idx)
                     if not isinstance(cell, MergedCell):
                         cell.value = normalized_headers[col_idx - 1]
             
-            # Add empty separator after header (if not already empty)
-            for col in range(1, num_cols + 1):
-                cell = ws.cell(row=header_row + 1, column=col)
-                if not isinstance(cell, MergedCell):
-                    cell.value = None
-            
-            stats['empty_rows_added'] = stats.get('empty_rows_added', 0) + 1
+            # For 1-level headers, the next row is DATA, not a header to remove
+            # So we DON'T set it to empty or add a separator
         
         elif num_header_rows == 2:
             # 2-level: Combine into single row + empty separator
@@ -896,7 +928,11 @@ class ProcessStep(StepInterface):
                 
                 # Build the combined header
                 if norm_code and category:
-                    combined.append(f"{norm_code} {category}")
+                    # Check if category is already in norm_code to prevent duplicates like "Q3-2025 AAA AAA"
+                    if category.lower() in norm_code.lower():
+                        combined.append(norm_code)
+                    else:
+                        combined.append(f"{norm_code} {category}")
                 elif norm_code:
                     combined.append(norm_code)
                 elif category:
@@ -907,6 +943,9 @@ class ProcessStep(StepInterface):
                         combined.append(category)
                 else:
                     combined.append('')
+        
+        # Final cleanup: dedupe repeated words and strip footnotes
+        combined = self._cleanup_headers(combined)
         
         return combined
     
@@ -1032,7 +1071,11 @@ class ProcessStep(StepInterface):
                 
                 # Build combined header - ALWAYS prepend date code if we have it
                 if norm_code and category:
-                    combined.append(f"{norm_code} {category}")
+                    # Check if category is already in norm_code to prevent duplicates
+                    if category.lower() in norm_code.lower():
+                        combined.append(norm_code)
+                    else:
+                        combined.append(f"{norm_code} {category}")
                 elif norm_code:
                     combined.append(norm_code)
                 elif category:
@@ -1045,7 +1088,56 @@ class ProcessStep(StepInterface):
                 else:
                     combined.append('')
         
+        # Final cleanup: dedupe repeated words and strip footnotes
+        combined = self._cleanup_headers(combined)
+        
         return combined
+    
+    def _cleanup_headers(self, headers: list) -> list:
+        """Clean up combined headers by removing duplicates and footnotes.
+        
+        - Removes consecutive duplicate words (e.g., 'AAA AAA' -> 'AAA')
+        - Strips trailing footnote markers (e.g., ' 1' from 'Netting 1')
+        - Preserves meaningful numbers like 'Level 1', 'Tier 1'
+        """
+        import re
+        
+        cleaned = []
+        for h in headers:
+            if not h:
+                cleaned.append('')
+                continue
+            
+            h = str(h)
+            
+            # Dedupe consecutive repeated words (case-insensitive)
+            words = h.split()
+            deduped = []
+            prev_word = None
+            for word in words:
+                if prev_word is None or word.lower() != prev_word.lower():
+                    deduped.append(word)
+                    prev_word = word
+            h = ' '.join(deduped)
+            
+            # Strip trailing footnote markers (but preserve Level 1, Tier 1, etc.)
+            preserve_patterns = [
+                r'\bLevel\s+\d+$',
+                r'\bTier\s+\d+$',
+                r'\bType\s+\d+$',
+            ]
+            should_strip = True
+            for pattern in preserve_patterns:
+                if re.search(pattern, h, re.IGNORECASE):
+                    should_strip = False
+                    break
+            
+            if should_strip:
+                h = re.sub(r'\s+\d+$', '', h)
+            
+            cleaned.append(h)
+        
+        return cleaned
     
     def _count_header_rows(self, ws) -> int:
         """Count header rows between Source: row and first data row."""
@@ -1091,7 +1183,10 @@ class ProcessStep(StepInterface):
         - Header rows (period types, years)
         - Section label rows (text only in column A)
         """
-        for row in range(13, min(ws.max_row + 1, 30)):
+        # Dynamically find where headers/data start after Source: marker
+        header_start = self._find_first_data_row_after_source(ws)
+        
+        for row in range(header_start, min(ws.max_row + 1, header_start + 20)):
             # Count numeric values in data columns (columns 2+)
             numeric_count = 0
             for col in range(2, min(ws.max_column + 1, 10)):

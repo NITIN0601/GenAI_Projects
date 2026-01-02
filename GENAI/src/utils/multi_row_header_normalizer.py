@@ -231,11 +231,13 @@ class MultiRowHeaderNormalizer:
             if not cls._is_date_related(val) and not cls._should_preserve(val):
                 # Could be a category like "Trading", "IS", "WM"
                 if len(val) <= 50 and not re.match(r'^\d+$', val):
+                    # Strip footnote markers from category names
+                    clean_val = cls._strip_footnote_marker(val)
                     if not ctx.category:
-                        ctx.category = val
+                        ctx.category = clean_val
                     elif ctx.l1_header == '':
                         ctx.l1_header = ctx.category
-                        ctx.category = val
+                        ctx.category = clean_val
         
         return ctx
     
@@ -245,74 +247,110 @@ class MultiRowHeaderNormalizer:
         Propagate spanning header context to columns with empty/missing values.
         
         For tables like:
-            | Three Months Ended |        | Six Months Ended |        |
-            | March 31,          |        | June 30,         |        |
-            | 2023               | 2024   | 2023             | 2024   |
+            |               | Three Months Ended September 30, 2025 |       |       |       |       |
+            | $ in millions | Trading         | Fees 1 | Net Int | All Other | Total |
             
-        Each period group should get its own month from row 1.
+        ALL columns under "Three Months Ended" should get the same period/month context.
         """
-        # Track spanning context per row
+        if not header_rows or not contexts:
+            return
+        
+        # FIRST PASS: For each row, track spans of period/date headers
+        # A span starts at a cell with period info and continues until next period or end
+        
         for row_idx, row in enumerate(header_rows):
             current_period = ''
             current_month = ''
-            current_l1 = ''
-            current_category = ''
+            current_year = ''
+            span_start_col = -1
             
-            for col_idx in range(len(contexts)):
-                ctx = contexts[col_idx]
+            for col_idx in range(len(row)):
                 cell_val = str(row[col_idx]).strip() if col_idx < len(row) and row[col_idx] else ''
                 cell_lower = cell_val.lower() if cell_val else ''
                 
-                # Check if this cell has period info - UPDATE current values
-                period_found = False
+                if not cell_val:
+                    # Empty cell - continue current span
+                    continue
+                
+                # Check if this cell starts a NEW period span
+                period_found = ''
                 for pattern, period_code in cls.PERIOD_PATTERNS:
                     if re.search(pattern, cell_lower):
-                        current_period = period_code
-                        # RESET month when new period starts - it will come from next row
-                        current_month = ''
-                        month = cls._extract_month(cell_lower)
-                        if month:
-                            current_month = month
-                        period_found = True
+                        period_found = period_code
                         break
                 
-                # Check for point-in-time - RESET month for new date
-                if not period_found and (re.match(r'^\s*at\s+', cell_lower) or re.match(r'^\s*as\s+of\s+', cell_lower)):
-                    current_period = 'POINT'
-                    current_month = ''  # Reset
-                    month = cls._extract_month(cell_lower)
-                    if month:
-                        current_month = month
-                        # Also update year for point-in-time
-                        year = cls._extract_year(cell_val)
-                        if year and not ctx.year:
-                            ctx.year = year
+                # Check for point-in-time
+                if not period_found:
+                    if re.match(r'^\s*at\s+', cell_lower) or re.match(r'^\s*as\s+of\s+', cell_lower):
+                        period_found = 'POINT'
                 
-                # Check for month in separate row (like "March 31,")
-                # Only update if cell has content
-                if cell_val and not cls._should_preserve(cell_val):
-                    month = cls._extract_month(cell_lower)
-                    if month:
-                        current_month = month
-                
-                # Track L1 headers 
-                if cell_val and not cls._is_date_related(cell_val) and not cls._should_preserve(cell_val):
-                    if row_idx == 0:  # First row often contains L1 headers
-                        current_l1 = cell_val
-                
-                # Track category (row with sub-columns like Trading, IS, WM)
-                if row_idx > 0 and cell_val and not cls._is_date_related(cell_val) and not cls._should_preserve(cell_val):
-                    current_category = cell_val
-                
-                # ALWAYS propagate current context to this column if it's missing
-                if not ctx.period_type and current_period:
-                    ctx.period_type = current_period
-                if not ctx.month and current_month:
-                    ctx.month = current_month
-                if not ctx.l1_header and current_l1:
-                    ctx.l1_header = current_l1
-                if not ctx.category and current_category:
-                    ctx.category = current_category
+                if period_found:
+                    # NEW span starts here
+                    current_period = period_found
+                    current_month = cls._extract_month(cell_lower)
+                    current_year = cls._extract_year(cell_val)
+                    span_start_col = col_idx
+                    
+                    # Apply to this column's context
+                    if col_idx < len(contexts):
+                        ctx = contexts[col_idx]
+                        if not ctx.period_type:
+                            ctx.period_type = current_period
+                        if not ctx.month and current_month:
+                            ctx.month = current_month
+                        if not ctx.year and current_year:
+                            ctx.year = current_year
+                else:
+                    # If current span is active and this cell has content,
+                    # propagate span context to this column
+                    if current_period and col_idx < len(contexts):
+                        ctx = contexts[col_idx]
+                        if not ctx.period_type:
+                            ctx.period_type = current_period
+                        if not ctx.month and current_month:
+                            ctx.month = current_month
+                        if not ctx.year and current_year:
+                            ctx.year = current_year
+        
+        # SECOND PASS: Propagate period, month, AND year from previous columns if still missing
+        # This handles cases where column 2 has the period but columns 3,4,5 need it too
+        last_period = ''
+        last_month = ''
+        last_year = ''
+        
+        for ctx in contexts:
+            # Update tracking when we see a column with period/month/year
+            if ctx.period_type:
+                last_period = ctx.period_type
+            if ctx.month:
+                last_month = ctx.month
+            if ctx.year:
+                last_year = ctx.year
+            
+            # Propagate to columns that have categories but no period/month/year
+            if ctx.category and not ctx.period_type and last_period:
+                ctx.period_type = last_period
+            if ctx.category and not ctx.month and last_month:
+                ctx.month = last_month
+            if ctx.category and not ctx.year and last_year:
+                ctx.year = last_year
+            
+            # ALSO propagate to columns that have ONLY a year but no period
+            # This handles "2024" columns following "Three Months Ended March 31, 2025"
+            if ctx.year and not ctx.period_type and last_period:
+                ctx.period_type = last_period
+            if ctx.year and not ctx.month and last_month:
+                ctx.month = last_month
+            
+            # DYNAMIC FIX: Also propagate to NON-DATE columns (preserve patterns like 'Average', 'High')
+            # These are columns where is_date_column=False but have raw values
+            if not ctx.is_date_column and ctx.raw_values and last_period:
+                if not ctx.period_type:
+                    ctx.period_type = last_period
+                if not ctx.month and last_month:
+                    ctx.month = last_month
+                if not ctx.year and last_year:
+                    ctx.year = last_year
     
     @classmethod
     def _normalize_column_context(
@@ -339,11 +377,33 @@ class MultiRowHeaderNormalizer:
                 if combined_lower in ['% change', 'change %']:
                     return '% change', '', '', '% change'
             
-            # Default: return first preserve-pattern value, or first value
+            # Get the preserve value
+            preserve_val = None
             for val in clean_vals:
                 if cls._should_preserve(val):
-                    return val.lower(), '', '', val.lower()
-            return clean_vals[0].lower() if clean_vals else '', '', '', ''
+                    preserve_val = val.lower()
+                    break
+            if not preserve_val:
+                preserve_val = clean_vals[0].lower() if clean_vals else ''
+            
+            # DYNAMIC FIX: If this column has date context from spanning header,
+            # prefix the preserve value with Q-code
+            if preserve_val and ctx.period_type and ctx.month and ctx.year:
+                quarter = cls.MONTH_TO_QUARTER.get(ctx.month.lower(), '')
+                if quarter:
+                    if ctx.period_type == 'QTD':
+                        code = f"{quarter}-QTD-{ctx.year}"
+                    elif ctx.period_type == 'YTD':
+                        code = f"{quarter}-YTD-{ctx.year}"
+                    elif ctx.period_type == 'POINT':
+                        code = f"{quarter}-{ctx.year}"
+                    else:
+                        code = f"{quarter}-{ctx.year}"
+                    # Capitalize preserve value nicely
+                    nice_val = preserve_val.title()
+                    return f"{code} {nice_val}", '', '', code
+            
+            return preserve_val, '', '', preserve_val
         
         # Handle fiscal quarter (4Q 2024)
         if ctx.period_type and re.match(r'^\dQ$', ctx.period_type):
@@ -371,10 +431,16 @@ class MultiRowHeaderNormalizer:
             quarter = cls.MONTH_TO_QUARTER.get(ctx.month.lower(), '')
         
         if not quarter and not ctx.year:
-            # Can't normalize - return original or category
+            # Can't normalize - return original or category (with footnote stripped)
             if ctx.category:
-                return ctx.category, ctx.l1_header, '', ctx.category
-            return ctx.raw_values[0] if ctx.raw_values else '', '', '', ''
+                cleaned = cls._dedupe_repeated_words(ctx.category)
+                return cleaned, ctx.l1_header, '', cleaned
+            if ctx.raw_values:
+                # Strip footnotes from passthrough values
+                cleaned = cls._strip_footnote_marker(ctx.raw_values[0])
+                cleaned = cls._dedupe_repeated_words(cleaned)
+                return cleaned, '', '', ''
+            return '', '', '', ''
         
         # Build normalized code
         code = ''
@@ -404,12 +470,15 @@ class MultiRowHeaderNormalizer:
             else:
                 code = f"{quarter}-{ctx.year}" if quarter else ctx.year
         
-        # Clean category (remove nan)
+        # Clean category (remove nan and strip footnotes)
         clean_category = ctx.category if ctx.category and ctx.category.lower() != 'nan' else ''
         
         # Append category if present
         if clean_category and code:
             code = f"{code} {clean_category}"
+        
+        # Deduplicate repeated words (e.g., "Q3-2025 AAA AAA" -> "Q3-2025 AAA")
+        code = cls._dedupe_repeated_words(code)
         
         return code, ctx.l1_header, l2_value, ctx.year
     
@@ -465,6 +534,58 @@ class MultiRowHeaderNormalizer:
             if re.match(pattern, text_lower, re.IGNORECASE):
                 return True
         return False
+    
+    @classmethod
+    def _strip_footnote_marker(cls, text: str) -> str:
+        """Remove trailing footnote markers like ' 1', ' 2', ' 3' from text.
+        
+        Preserves meaningful numbered categories:
+        - 'Level 1', 'Level 2', 'Level 3' - keep the numbers
+        - 'Tier 1', 'Tier 2' - keep the numbers
+        - 'Netting 1' - footnote, strip it
+        - 'Fees 1', 'Net Interest 2' - footnotes, strip them
+        """
+        text = text.strip()
+        
+        # Patterns where trailing numbers are MEANINGFUL (not footnotes)
+        preserve_patterns = [
+            r'^Level\s+\d+$',      # Level 1, Level 2, Level 3
+            r'^Tier\s+\d+$',       # Tier 1, Tier 2
+            r'^Type\s+\d+$',       # Type 1, Type 2
+            r'^Class\s+\d+$',      # Class 1, Class 2
+            r'^Category\s+\d+$',   # Category 1, Category 2
+        ]
+        
+        for pattern in preserve_patterns:
+            if re.match(pattern, text, re.IGNORECASE):
+                return text  # Keep the number
+        
+        # Otherwise strip trailing footnote markers
+        return re.sub(r'\s+\d+$', '', text)
+    
+    @classmethod
+    def _dedupe_repeated_words(cls, text: str) -> str:
+        """Remove consecutive duplicate words from text.
+        
+        Examples:
+            'Q3-2025 AAA AAA' -> 'Q3-2025 AAA'
+            'total Total' -> 'total'
+            'Q3-2025 Level Level 1' -> 'Q3-2025 Level 1'
+        """
+        if not text:
+            return text
+        
+        words = text.split()
+        result = []
+        prev_word = None
+        
+        for word in words:
+            # Case-insensitive comparison for deduplication
+            if prev_word is None or word.lower() != prev_word.lower():
+                result.append(word)
+                prev_word = word
+        
+        return ' '.join(result)
     
     @classmethod
     def normalize_single_header(cls, header: str, source_filename: str = '') -> str:

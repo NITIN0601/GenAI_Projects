@@ -342,6 +342,7 @@ class TableMerger:
         - Rename original sheet to {sheet_name}_1 (first table stays there)
         - Create new sheets {sheet_name}_2, _3, etc. for subsequent tables
         - Update Index: remove original entry, add entries for all _N sheets
+        - Uses first row label as subtable name for descriptive titles
         
         Args:
             wb: openpyxl Workbook
@@ -363,6 +364,14 @@ class TableMerger:
             return []  # Nothing to split
         
         all_split_sheets = []
+        split_subtable_info = {}  # Track subtable names for each split sheet
+        
+        # Get first row label from first block as its subtable name
+        first_block = table_blocks[0] if table_blocks else None
+        first_block_subtitle = ''
+        if first_block and first_block.get('row_labels'):
+            # Use first row label (title case) as subtitle
+            first_block_subtitle = first_block['row_labels'][0].strip().title()
         
         # Step 1: Rename original sheet to _1 (first table stays there)
         original_new_name = f"{sheet_name}_1"
@@ -371,16 +380,25 @@ class TableMerger:
         
         ws.title = original_new_name
         all_split_sheets.append(original_new_name)
+        split_subtable_info[original_new_name] = first_block_subtitle
         logger.info(f"Renamed sheet '{sheet_name}' to '{original_new_name}'")
         
         # Step 2: Create new sheets for subsequent blocks
         split_index = 2  # Start from _2
         
         for block in blocks_to_split:
+            # Get first row label from this block as its subtable name
+            block_subtitle = ''
+            if block.get('row_labels'):
+                block_subtitle = block['row_labels'][0].strip().title()
+            
             # Generate new sheet name
             new_sheet_name = f"{sheet_name}_{split_index}"
             if len(new_sheet_name) > 31:
                 new_sheet_name = f"{sheet_name[:25]}_{split_index}"
+            
+            # Track subtable info for Index update
+            split_subtable_info[new_sheet_name] = block_subtitle
             
             # Get the position of the original (now renamed) sheet to insert after it
             original_pos = wb.sheetnames.index(original_new_name)
@@ -441,29 +459,34 @@ class TableMerger:
             # Extract column headers from the copied table data and update metadata
             self._update_split_sheet_column_headers(new_ws, table_data_start_row)
             
+            # Update the Table Title metadata row inside split sheet to include subtable name
+            if block_subtitle:
+                self._update_split_sheet_table_title(new_ws, block_subtitle)
+            
             # Clear original rows from source sheet (metadata + data)
             self._clear_block_rows(ws, block)
             
             all_split_sheets.append(new_sheet_name)
             split_index += 1
-            logger.info(f"Split table to new sheet '{new_sheet_name}'")
+            logger.info(f"Split table to new sheet '{new_sheet_name}' (subtitle: {block_subtitle})")
         
         # Step 2.5: Validate _1 sheet still has content after clearing split blocks
         # The first block should remain in the _1 sheet
-        if self._is_sheet_near_empty(ws):
-            first_block = table_blocks[0] if table_blocks else None
-            if first_block:
-                logger.warning(
-                    f"Sheet '{original_new_name}' is near-empty after split. "
-                    f"First block: rows {first_block.get('start_row')}-{first_block.get('end_row')} "
-                    f"with {len(first_block.get('row_labels', []))} row labels. "
-                    f"This may indicate block detection issues."
-                )
-            else:
-                logger.warning(f"Sheet '{original_new_name}' is near-empty and no first block found.")
+        # Only warn if the sheet has fewer data rows than expected from first block
+        first_block = table_blocks[0] if table_blocks else None
+        expected_data_rows = len(first_block.get('row_labels', [])) if first_block else 0
         
-        # Step 3: Update Index - remove original entry and add all split entries
-        self._update_index_for_splits(wb, sheet_name, all_split_sheets)
+        # Use a lower threshold - only warn if truly empty (0 or 1 data rows)
+        if self._is_sheet_near_empty(ws, min_data_rows=1):
+            if first_block:
+                logger.debug(
+                    f"Sheet '{original_new_name}' has minimal data after split. "
+                    f"First block: rows {first_block.get('start_row')}-{first_block.get('end_row')} "
+                    f"with {expected_data_rows} row labels."
+                )
+        
+        # Step 3: Update Index - remove original entry and add all split entries with subtable names
+        self._update_index_for_splits(wb, sheet_name, all_split_sheets, split_subtable_info)
         
         return all_split_sheets
     
@@ -534,6 +557,32 @@ class TableMerger:
             else:
                 # No more blank rows - log warning
                 logger.warning(f"No blank row available for metadata label '{label}'")
+
+    def _update_split_sheet_table_title(self, ws: Worksheet, subtitle: str) -> None:
+        """
+        Update the Table Title metadata row inside a split sheet to include subtable name.
+        
+        Finds the "Table Title:" row and appends the subtitle with underscore separator.
+        Example: "Table Title: Wealth Management Metrics" becomes 
+                 "Table Title: Wealth Management Metrics_Net New Assets"
+        
+        Args:
+            ws: The worksheet to update
+            subtitle: The subtable identifier to append (e.g., "Net New Assets")
+        """
+        if not subtitle:
+            return
+        
+        # Find the Table Title row (scan first 20 rows)
+        for row_num in range(1, min(21, ws.max_row + 1)):
+            cell_val = ws.cell(row=row_num, column=1).value
+            if cell_val and MetadataLabels.TABLE_TITLE in str(cell_val):
+                current_title = str(cell_val).strip()
+                # Append subtitle with underscore
+                new_title = f"{current_title}_{subtitle}"
+                ws.cell(row=row_num, column=1).value = new_title
+                logger.debug(f"Updated Table Title: {current_title} -> {new_title}")
+                break
 
     def _update_split_sheet_column_headers(self, ws: Worksheet, data_start_row: int) -> None:
         """
@@ -692,13 +741,20 @@ class TableMerger:
         """
         IndexManager.update_index_for_split_sheets(wb, new_sheets)
     
-    def _update_index_for_splits(self, wb, original_sheet_name: str, split_sheets: List[str]) -> None:
+    def _update_index_for_splits(self, wb, original_sheet_name: str, split_sheets: List[str], 
+                                   subtable_info: Dict[str, str] = None) -> None:
         """
         Update Index when a sheet is split: update original row and insert new rows.
         
         Delegates to IndexManager for centralized logic.
+        
+        Args:
+            wb: Workbook
+            original_sheet_name: Original sheet name before split
+            split_sheets: List of new sheet names after split
+            subtable_info: Dict mapping sheet name to first row label (subtitle)
         """
-        IndexManager.update_index_for_splits(wb, original_sheet_name, split_sheets)
+        IndexManager.update_index_for_splits(wb, original_sheet_name, split_sheets, subtable_info)
     
     def _extract_block_metadata(self, ws: Worksheet, block: Dict) -> Dict[str, Set[str]]:
         """

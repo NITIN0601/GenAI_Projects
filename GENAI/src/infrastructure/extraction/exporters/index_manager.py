@@ -67,24 +67,31 @@ class IndexManager:
             next_row += 1
     
     @classmethod
-    def update_index_for_splits(cls, wb: Workbook, original_sheet_name: str, split_sheets: List[str]) -> None:
+    def update_index_for_splits(cls, wb: Workbook, original_sheet_name: str, split_sheets: List[str],
+                                subtable_info: Dict[str, str] = None) -> None:
         """
         Update Index when a sheet is split: update original row and insert new rows.
         
         Index structure: Source(A), PageNo(B), Table_ID(C), Location_ID(D), Section(E), Table Title(F), Link(G)
         
         When sheet "9" splits into ["9_1", "9_2"]:
-        - Update the original row for "9" -> "9_1" with (Part 1)
-        - Insert a new row after it for "9_2" with (Part 2)
+        - Update the original row for "9" -> "9_1" with subtitle from subtable_info
+        - Insert a new row after it for "9_2" with its subtitle
+        
+        Example: "Wealth Management Metrics" splits into:
+        - "Wealth Management Metrics_Net New Assets"
+        - "Wealth Management Metrics_Advisor-Led"
         
         Args:
             wb: openpyxl Workbook
             original_sheet_name: Original sheet name (e.g., '9')
             split_sheets: List of split sheet names (e.g., ['9_1', '9_2'])
+            subtable_info: Dict mapping sheet name to first row label (subtitle)
         """
         if 'Index' not in wb.sheetnames or not split_sheets:
             return
         
+        subtable_info = subtable_info or {}
         index_ws = wb['Index']
         
         # Find the first row that matches the original sheet name in Table_ID column (C)
@@ -108,18 +115,26 @@ class IndexManager:
             'title': index_ws.cell(row=original_row, column=6).value,  # Table Title
         }
         
+        title_base = str(original_data['title'] or 'Split Table').strip()
+        
         # Step 1: Update the original row with first split sheet (9_1)
         first_split = split_sheets[0]
-        title_base = original_data['title'] or 'Split Table'
+        first_subtitle = subtable_info.get(first_split, '')
+        
+        # Create descriptive title: "Original Title_Subtitle" or "Original Title (Part 1)" if no subtitle
+        if first_subtitle:
+            new_title = f"{title_base}_{first_subtitle}"
+        else:
+            new_title = f"{title_base} (Part 1)"
         
         index_ws.cell(row=original_row, column=3).value = first_split  # Table_ID
-        index_ws.cell(row=original_row, column=6).value = f"{title_base} (Part 1)"  # Title
+        index_ws.cell(row=original_row, column=6).value = new_title  # Title
         link_cell = index_ws.cell(row=original_row, column=7)
         link_cell.value = f"→ {first_split}"
         # Create hyperlink to the split sheet
         from openpyxl.worksheet.hyperlink import Hyperlink
         link_cell.hyperlink = Hyperlink(ref=link_cell.coordinate, target=f"#'{first_split}'!A1")
-        logger.debug(f"Updated Index row {original_row}: {first_split} (Part 1)")
+        logger.debug(f"Updated Index row {original_row}: {first_split} -> {new_title}")
         
         # Step 2: Insert new rows for additional split sheets (9_2, 9_3, etc.)
         if len(split_sheets) > 1:
@@ -129,13 +144,20 @@ class IndexManager:
                 # Insert a new row at the position
                 index_ws.insert_rows(insert_position)
                 
+                # Get subtitle for this split
+                subtitle = subtable_info.get(split_sheet, '')
+                if subtitle:
+                    new_title = f"{title_base}_{subtitle}"
+                else:
+                    new_title = f"{title_base} (Part {part_num})"
+                
                 # Copy data from original row
                 index_ws.cell(row=insert_position, column=1).value = original_data['source']
                 index_ws.cell(row=insert_position, column=2).value = original_data['page_no']
                 index_ws.cell(row=insert_position, column=3).value = split_sheet  # Table_ID
                 index_ws.cell(row=insert_position, column=4).value = f"{original_sheet_name}_{part_num}"  # Location_ID
                 index_ws.cell(row=insert_position, column=5).value = original_data['section']
-                index_ws.cell(row=insert_position, column=6).value = f"{title_base} (Part {part_num})"
+                index_ws.cell(row=insert_position, column=6).value = new_title
                 link_cell = index_ws.cell(row=insert_position, column=7)
                 link_cell.value = f"→ {split_sheet}"
                 # Create hyperlink to the split sheet
@@ -145,7 +167,7 @@ class IndexManager:
                 # Apply blue hyperlink styling
                 link_cell.font = Font(color='000000FF', underline='single')
                 
-                logger.debug(f"Inserted Index row {insert_position}: {split_sheet} (Part {part_num})")
+                logger.debug(f"Inserted Index row {insert_position}: {split_sheet} -> {new_title}")
                 insert_position += 1
         
         # Step 3: Delete any remaining rows that still have old Table_ID

@@ -37,6 +37,7 @@ from src.infrastructure.extraction.exporters.base_exporter import BaseExcelExpor
 from src.infrastructure.extraction.consolidation.table_detection import TableDetector
 from src.infrastructure.extraction.consolidation.table_grouping import TableGrouper
 from src.infrastructure.extraction.consolidation.excel_formatting import ExcelFormatter
+from src.infrastructure.extraction.consolidation.period_type_detector import PeriodTypeDetector
 from src.utils.constants import (
     CONSOLIDATION_YEAR_MIN,
     CONSOLIDATION_YEAR_MAX,
@@ -1047,14 +1048,134 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         
         logger.info(f"Created TOC sheet with {len(df)} entries")
     
+    def _create_merged_table_sheets_with_split(
+        self,
+        writer: pd.ExcelWriter,
+        base_sheet_name: str,
+        tables: List[Dict[str, Any]],
+        transpose: bool = False,
+        title_to_sheet_name: Dict[str, dict] = None,
+        normalized_key: str = None
+    ) -> Dict[str, str]:
+        """
+        Create merged sheets with period type splitting.
+        
+        If tables have columns with multiple period types (e.g., Qn-YYYY and Qn-QTD-YYYY),
+        split into separate sheets:
+        - {sheet_name}_1 for point_in_time (Qn-YYYY)
+        - {sheet_name}_2 for period_based (Qn-QTD-YYYY, Qn-YTD-YYYY)
+        - {sheet_name}_3 for annual (YYYY)
+        
+        Args:
+            writer: Excel writer
+            base_sheet_name: Base sheet name (e.g., "5")
+            tables: List of table dicts to merge
+            transpose: If True, transpose the output
+            title_to_sheet_name: Mapping dict to update with split sheet info
+            normalized_key: The normalized key for this table group
+            
+        Returns:
+            Dict mapping created sheet names to their period types
+        """
+        if not tables:
+            return {}
+        
+        # First, collect all column headers by running a pre-analysis pass
+        all_column_headers = set()
+        
+        for table_info in tables:
+            df = table_info['data']
+            if df.empty:
+                continue
+            
+            # Find header rows
+            l1_row, l2_row, data_start = self._find_header_rows(df)
+            
+            # Collect column headers from L2 row (where period codes are)
+            header_row_idx = l2_row if l2_row is not None else (l1_row if l1_row is not None else 0)
+            if header_row_idx < len(df):
+                for col_idx in range(1, len(df.columns)):
+                    val = df.iloc[header_row_idx, col_idx]
+                    if pd.notna(val) and str(val).strip():
+                        all_column_headers.add(str(val).strip())
+        
+        # Classify headers by period type
+        period_types_found = set()
+        for header in all_column_headers:
+            period_type = PeriodTypeDetector.classify_header(header)
+            if period_type != 'other':
+                period_types_found.add(period_type)
+        
+        # If only one period type (or none), create single sheet without suffix
+        if len(period_types_found) <= 1:
+            created = self._create_merged_table_sheet(writer, base_sheet_name, tables, transpose)
+            if created:
+                return {base_sheet_name: list(period_types_found)[0] if period_types_found else 'mixed'}
+            return {}
+        
+        # Multiple period types - need to split
+        logger.info(f"Sheet {base_sheet_name}: Splitting by period types: {period_types_found}")
+        
+        created_sheets = {}
+        
+        # For each period type, filter the column data and create separate sheet
+        for period_type in sorted(period_types_found):
+            suffix = PeriodTypeDetector.get_suffix(period_type)
+            split_sheet_name = f"{base_sheet_name}{suffix}"
+            
+            # Ensure sheet name <= 31 chars
+            if len(split_sheet_name) > 31:
+                split_sheet_name = f"{base_sheet_name[:28]}{suffix}"
+            
+            # Create the sheet with period type filter
+            # We pass the period_type to filter columns during sheet creation
+            created = self._create_merged_table_sheet(
+                writer, 
+                split_sheet_name, 
+                tables, 
+                transpose,
+                period_type_filter=period_type
+            )
+            
+            if created:
+                created_sheets[split_sheet_name] = period_type
+                
+                # Update title_to_sheet_name mapping for Index
+                if title_to_sheet_name and normalized_key:
+                    label = PeriodTypeDetector.get_label(period_type)
+                    original_mapping = title_to_sheet_name.get(normalized_key, {})
+                    
+                    # Create new entry for split sheet
+                    split_key = f"{normalized_key}::{period_type}"
+                    title_to_sheet_name[split_key] = {
+                        'unique_sheet_name': split_sheet_name,
+                        'display_title': f"{original_mapping.get('display_title', '')} {label}",
+                        'section': original_mapping.get('section', ''),
+                        'original_title': original_mapping.get('original_title', ''),
+                        'period_type': period_type,
+                        'is_split_sheet': True,
+                        'parent_key': normalized_key
+                    }
+        
+        return created_sheets
+    
     def _create_merged_table_sheet(
         self,
         writer: pd.ExcelWriter,
         title: str,
         tables: List[Dict[str, Any]],
-        transpose: bool = False
+        transpose: bool = False,
+        period_type_filter: Optional[str] = None
     ) -> bool:
         """Create merged sheet with tables from multiple sources.
+        
+        Args:
+            writer: Excel writer
+            title: Sheet name
+            tables: List of table dicts to merge
+            transpose: If True, transpose the output
+            period_type_filter: If provided, only include columns matching this period type
+                                ('point_in_time', 'period_based', 'annual')
         
         Returns:
             True if sheet has data, False if empty (sheet not created)
