@@ -133,13 +133,15 @@ def download(
 def extract(
     source: str = typer.Option(None, "--source", "-s", help="PDF directory"),
     force: bool = typer.Option(False, "--force", "-f", help="Force re-extraction"),
+    skip_process: bool = typer.Option(False, "--skip-process", help="Skip process step"),
     skip_advanced: bool = typer.Option(False, "--skip-advanced", help="Skip process-advanced step"),
-    skip_consolidate: bool = typer.Option(False, "--skip-consolidate", help="Skip consolidate step")
+    skip_consolidate: bool = typer.Option(False, "--skip-consolidate", help="Skip consolidate step"),
+    skip_transpose: bool = typer.Option(False, "--skip-transpose", help="Skip transpose step")
 ) -> None:
     """
     Step 2: Extract tables from PDFs using Docling.
     
-    Full pipeline: extract → process-advanced → consolidate
+    Full pipeline: extract → process → process-advanced → consolidate → transpose
     
     Example:
         python main.py extract --source ../raw_data
@@ -158,9 +160,21 @@ def extract(
     
     console.print(f"[green]✓ {result.message}[/green]")
     
-    # Step 2: Process Advanced (merge tables with identical row labels)
+    # Step 2: Process (data normalization) - NEW!
+    if not skip_process:
+        console.print("\n[bold]Step 2: Process Data (Normalization)[/bold]")
+        process_result = run_process()
+        
+        if process_result.success:
+            console.print(f"[green]✓ {process_result.message}[/green]")
+        else:
+            console.print(f"[yellow]⚠ Processing: {process_result.error}[/yellow]")
+    else:
+        console.print("\n[dim]Step 2: Process Data (skipped)[/dim]")
+    
+    # Step 3: Process Advanced (merge tables with identical row labels)
     if not skip_advanced:
-        console.print("\n[bold]Step 2: Advanced Processing (Table Merging)[/bold]")
+        console.print("\n[bold]Step 3: Advanced Processing (Table Merging)[/bold]")
         advanced_result = run_process_advanced()
         
         if advanced_result.success:
@@ -168,11 +182,11 @@ def extract(
         else:
             console.print(f"[yellow]⚠ Advanced processing: {advanced_result.error}[/yellow]")
     else:
-        console.print("\n[dim]Step 2: Advanced Processing (skipped)[/dim]")
+        console.print("\n[dim]Step 3: Advanced Processing (skipped)[/dim]")
     
-    # Step 3: Consolidate
+    # Step 4: Consolidate
     if not skip_consolidate:
-        console.print("\n[bold]Step 3: Consolidate Tables[/bold]")
+        console.print("\n[bold]Step 4: Consolidate Tables[/bold]")
         consolidate_result = run_consolidate(table_title=None, output_format='both')
         
         if consolidate_result.success:
@@ -180,7 +194,19 @@ def extract(
         else:
             console.print(f"[yellow]⚠ Consolidation: {consolidate_result.error}[/yellow]")
     else:
-        console.print("\n[dim]Step 3: Consolidate (skipped)[/dim]")
+        console.print("\n[dim]Step 4: Consolidate (skipped)[/dim]")
+    
+    # Step 5: Transpose - NEW!
+    if not skip_transpose and not skip_consolidate:
+        console.print("\n[bold]Step 5: Transpose Tables[/bold]")
+        transpose_result = run_transpose()
+        
+        if transpose_result.success:
+            console.print(f"[green]✓ {transpose_result.message}[/green]")
+        else:
+            console.print(f"[yellow]⚠ Transpose: {transpose_result.error}[/yellow]")
+    else:
+        console.print("\n[dim]Step 5: Transpose (skipped)[/dim]")
     
     console.print("\n[bold green]✓ Extraction Pipeline Complete![/bold green]")
     console.print()

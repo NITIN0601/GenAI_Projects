@@ -198,8 +198,12 @@ class BlockDetector:
             return [block]
         
         # Create split blocks
+        # IMPORTANT: Only the FIRST split block should inherit the original metadata.
+        # Subsequent split blocks should have metadata_start_row = start_row to prevent
+        # clearing overlap (which would destroy the first block's data).
         result_blocks = []
         current_start = block['start_row']
+        is_first_split = True
         
         for split_row in split_points:
             # Create block ending before the split point
@@ -208,10 +212,19 @@ class BlockDetector:
                 new_block['start_row'] = current_start
                 new_block['end_row'] = split_row - 1
                 new_block['data_start_row'] = current_start
+                
+                # Only first split block keeps original metadata
+                # Subsequent blocks have no metadata to copy (they share with first)
+                if not is_first_split:
+                    new_block['metadata_start_row'] = current_start
+                    new_block['source_row'] = current_start
+                    new_block['_is_sub_block'] = True  # Mark as sub-block
+                
                 if extract_labels_func:
                     new_block['row_labels'] = extract_labels_func(ws, new_block)
                 if new_block.get('row_labels'):
                     result_blocks.append(new_block)
+                    is_first_split = False
             
             # Next block starts at the split point
             current_start = split_row
@@ -222,6 +235,13 @@ class BlockDetector:
             new_block['start_row'] = current_start
             new_block['end_row'] = data_end
             new_block['data_start_row'] = current_start
+            
+            # Not first block, so set metadata to own range
+            if not is_first_split:
+                new_block['metadata_start_row'] = current_start
+                new_block['source_row'] = current_start
+                new_block['_is_sub_block'] = True
+            
             if extract_labels_func:
                 new_block['row_labels'] = extract_labels_func(ws, new_block)
             if new_block.get('row_labels'):

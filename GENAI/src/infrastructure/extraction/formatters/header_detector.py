@@ -298,17 +298,29 @@ class HeaderDetector:
         
         Example: ["Three Months Ended", "Three Months Ended", "Nine Months Ended", "Nine Months Ended"]
         Returns: ["Three Months Ended", "Nine Months Ended"]
+        
+        Also handles headers with Level N suffixes:
+        ["At Sept 30, 2025 Level 1", "At Sept 30, 2025 Level 2"]
+        Returns: ["At Sept 30, 2025"]
         """
         if not headers:
             return []
         
-        seen = set()
+        seen_normalized = set()
         result = []
         for h in headers:
-            h_normalized = h.strip().lower()
-            if h_normalized and h_normalized not in seen:
-                seen.add(h_normalized)
-                result.append(h.strip())
+            if not h or not h.strip():
+                continue
+            
+            # Use centralized normalization
+            h_normalized = cls._normalize_for_dedup(h)
+            
+            if h_normalized and h_normalized not in seen_normalized:
+                seen_normalized.add(h_normalized)
+                # Clean the header before storing
+                clean_h = re.sub(r'\s*Level\s*\d+\s*$', '', h.strip(), flags=re.IGNORECASE)
+                result.append(clean_h.strip())
+        
         return result
     
     @staticmethod
@@ -322,14 +334,70 @@ class HeaderDetector:
         return [p.strip() for p in parts if p.strip()]
     
     @classmethod
+    def _normalize_for_dedup(cls, header: str) -> str:
+        """
+        Normalize a header string for deduplication comparison.
+        
+        Strips common suffixes that make headers appear different but are 
+        semantically the same:
+        - "Level 1", "Level 2", "Level 3" suffixes
+        - "(1)", "(2)", "(3)" suffixes
+        - "Fair Value", "Carrying Value" suffixes (for fair value tables)
+        - Leading/trailing whitespace and extra spaces
+        
+        Args:
+            header: Original header string
+            
+        Returns:
+            Normalized header for comparison
+        """
+        if not header:
+            return ''
+        
+        h = str(header).strip()
+        
+        # Remove Level N suffixes (common in multi-level tables)
+        h = re.sub(r'\s*Level\s*\d+\s*$', '', h, flags=re.IGNORECASE)
+        
+        # Remove parenthesized numbers at end: (1), (2), etc.
+        h = re.sub(r'\s*\(\d+\)\s*$', '', h)
+        
+        # Remove trailing "1" or "2" that might be footnote refs
+        h = re.sub(r'\s+\d\s*$', '', h)
+        
+        # Remove common suffixes that differentiate but don't add semantic value
+        h = re.sub(r'\s*(Fair Value|Carrying Value|Amortized Cost)\s*$', '', h, flags=re.IGNORECASE)
+        
+        # Normalize whitespace
+        h = re.sub(r'\s+', ' ', h).strip()
+        
+        return h.lower()
+    
+    @classmethod
     def dedupe_preserve_order(cls, items: List[str]) -> List[str]:
-        """Deduplicate a list while preserving order."""
-        seen = set()
+        """
+        Deduplicate a list while preserving order.
+        
+        Uses intelligent normalization to detect headers that differ only by
+        suffixes like "Level 1", "Level 2" and treats them as duplicates.
+        Keeps the first occurrence (typically the simplest form).
+        """
+        seen_normalized = set()
         result = []
+        
         for item in items:
-            if item and item not in seen and str(item).lower() not in ['nan', 'none', 'unnamed', '']:
-                seen.add(item)
-                result.append(item)
+            if not item or str(item).lower() in ['nan', 'none', 'unnamed', '']:
+                continue
+            
+            # Normalize for comparison
+            normalized = cls._normalize_for_dedup(item)
+            
+            if normalized and normalized not in seen_normalized:
+                seen_normalized.add(normalized)
+                # Store the original item (or a cleaned version without Level suffix)
+                clean_item = re.sub(r'\s*Level\s*\d+\s*$', '', str(item).strip(), flags=re.IGNORECASE)
+                result.append(clean_item.strip())
+        
         return result
     
     @classmethod

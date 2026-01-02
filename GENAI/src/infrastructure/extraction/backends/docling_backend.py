@@ -397,21 +397,25 @@ class DoclingBackend(ExtractionBackend):
         filename = Path(pdf_path).stem
         table_id = f"{filename}_p{page_no}_{table_index_on_page}"
         
-        # Get better table title
-        caption = DoclingHelper.extract_table_title_hybrid(doc, table_item, table_index, page_no)
+        # Get structured table metadata (section, title, subtitle)
+        table_metadata = DoclingHelper.extract_table_metadata(doc, table_item, table_index, page_no)
         
-        # Get section name (e.g., "Institutional Securities", "Wealth Management")
-        section_name = DoclingHelper.extract_section_name(doc, table_item, page_no)
+        # For backward compatibility: combine title + subtitle for table_title field
+        if table_metadata.get('table_subtitle'):
+            combined_title = f"{table_metadata['table_title']}_{table_metadata['table_subtitle']}"
+        else:
+            combined_title = table_metadata['table_title']
         
         # Create metadata with footnotes, section, and page-based table_id
         metadata = PDFMetadataExtractor.create_metadata(
             pdf_path=pdf_path,
             page_no=page_no,
-            table_title=caption,
+            table_title=combined_title,  # Combined format for Index sheet
             table_index=table_index,
             table_id=table_id,  # Page-based ID: e.g., "10q0624_p7_1"
-            table_index_on_page=table_index_on_page,  # NEW: index on this page
-            section_name=section_name,
+            table_index_on_page=table_index_on_page,  # Index on this page
+            section_name=table_metadata.get('table_section', ''),
+            table_subtitle=table_metadata.get('table_subtitle'),  # NEW: separate subtitle
             footnote_references=list(set(fn for fns in footnotes_map.values() for fn in fns)) if footnotes_map else None
         )
         

@@ -49,6 +49,86 @@ from src.utils.financial_domain import extract_quarter_from_header, extract_year
 logger = get_logger(__name__)
 
 
+# =============================================================================
+# DYNAMIC HEADER DETECTION HELPERS
+# =============================================================================
+
+# Unit patterns that indicate column header rows (case-insensitive)
+UNIT_PATTERNS = ['$ in millions', '$ in billions', '$ in thousands', 
+                 'in millions', 'in billions', 'in thousands',
+                 '$in millions', '$in billions']  # Handle no-space variants
+
+MAX_HEADER_LEVELS = 4  # Track up to 4 header levels above unit row
+
+
+def is_unit_row(row_values: list) -> bool:
+    """
+    Detect if row is a unit row (column header starting with $ in millions, etc.)
+    
+    Args:
+        row_values: List of cell values in the row
+        
+    Returns:
+        True if first column matches a unit pattern
+    """
+    if not row_values:
+        return False
+    first_col = str(row_values[0]).strip().lower() if row_values[0] else ''
+    return any(first_col.startswith(p.lower()) for p in UNIT_PATTERNS)
+
+
+def is_header_row(row_values: list) -> bool:
+    """
+    Detect if row is a header row (not a data row).
+    
+    A header row has:
+    - First column empty OR text-only, AND
+    - Other columns have text (dates, periods) not pure numeric data
+    
+    Args:
+        row_values: List of cell values in the row
+        
+    Returns:
+        True if row appears to be a header
+    """
+    if not row_values or len(row_values) < 2:
+        return False
+    
+    # Check first column
+    first_col = str(row_values[0]).strip() if row_values[0] else ''
+    
+    # First col should be empty or non-numeric for spanning headers
+    if first_col:
+        # If first col has pure numbers (not dates), it's likely data
+        first_clean = first_col.replace(',', '').replace('.', '').replace('-', '').replace('$', '').replace('%', '')
+        if first_clean.isdigit() and len(first_clean) > 2 and not (1900 <= int(first_clean) <= 2100):
+            return False  # Numeric data, not header
+    
+    # Check if other columns have numeric data (which would make it a data row)
+    numeric_count = 0
+    text_count = 0
+    for val in row_values[1:]:
+        if val is None or str(val).strip() == '':
+            continue
+        val_str = str(val).strip()
+        val_clean = val_str.replace(',', '').replace('.', '').replace('-', '').replace('$', '').replace('%', '').replace(' ', '')
+        
+        # Check if it's a year (1990-2100)
+        if val_clean.isdigit() and len(val_clean) == 4 and 1990 <= int(val_clean) <= 2100:
+            text_count += 1  # Years are headers
+        elif val_clean.lstrip('-').isdigit() and len(val_clean) > 2:
+            numeric_count += 1  # Numeric data
+        elif val_str:
+            text_count += 1  # Text header
+    
+    # If mostly numeric, it's a data row
+    if numeric_count > text_count and numeric_count > 1:
+        return False
+    
+    # If mostly text or empty, it's likely a header
+    return text_count > 0 or first_col == ''
+
+
 class ExcelTableExporter(BaseExcelExporter):
     """
     Export extracted tables to multi-sheet Excel with Index.
@@ -338,6 +418,10 @@ class ExcelTableExporter(BaseExcelExporter):
         - Row 9: <blank>
         - Row 10+: Table data
         
+        For multi-page tables with consecutive pages:
+        - Consolidates Source line: Source(s): pdf_pg24, pdf_pg25, pdf_pg26
+        - Combines all table data into one continuous block
+        
         Args:
             writer: Excel writer
             sheet_name: Sheet name (Table_ID, e.g., "1", "2")
@@ -348,20 +432,122 @@ class ExcelTableExporter(BaseExcelExporter):
         # Row 1: Add "Back to Index" link placeholder
         all_rows.append(['← Back to Index'])
         
-        # Process each table with its own full metadata block
-        for i, table in enumerate(tables):
-            # Add 2 blank lines before each table (except first)
-            if i > 0:
-                all_rows.append([])
-                all_rows.append([])
-            
-            # Generate metadata + data rows for this table
-            table_rows = self._generate_single_table_rows(table)
-            all_rows.extend(table_rows)
+        # Collect all page numbers to detect multi-page pattern
+        all_pages = []
+        for table in tables:
+            metadata = table.get('metadata', {})
+            page_no = metadata.get('page_no')
+            if page_no is not None and page_no != 'N/A':
+                try:
+                    all_pages.append(int(page_no))
+                except (ValueError, TypeError):
+                    pass
+        
+        unique_pages = sorted(set(all_pages))
+        is_consecutive_multipage = (
+            len(unique_pages) > 1 and 
+            unique_pages == list(range(unique_pages[0], unique_pages[-1] + 1))
+        )
+        
+        if is_consecutive_multipage:
+            # Consolidate multi-page tables into single metadata block
+            all_rows.extend(self._generate_consolidated_table_rows(tables, unique_pages))
+        else:
+            # Original behavior: separate metadata block per chunk
+            for i, table in enumerate(tables):
+                # Add 2 blank lines before each table (except first)
+                if i > 0:
+                    all_rows.append([])
+                    all_rows.append([])
+                
+                # Generate metadata + data rows for this table
+                table_rows = self._generate_single_table_rows(table)
+                all_rows.extend(table_rows)
         
         # Create DataFrame from all rows
         df = pd.DataFrame(all_rows)
         df.to_excel(writer, sheet_name=sheet_name, index=False, header=False)
+    
+    def _generate_consolidated_table_rows(
+        self, 
+        tables: List[Dict[str, Any]], 
+        pages: List[int]
+    ) -> List[List[Any]]:
+        """
+        Generate consolidated rows for multi-page tables.
+        
+        Creates ONE metadata block with consolidated Source line,
+        then combines all table data.
+        """
+        if not tables:
+            return []
+        
+        # Use first table for metadata template
+        first_table = tables[0]
+        metadata = first_table.get('metadata', {})
+        display_title = metadata.get('_cleaned_title', metadata.get('table_title', 'Untitled'))
+        source_doc = metadata.get('source_doc', 'Unknown')
+        
+        # Generate rows using first table's metadata
+        rows = self._generate_single_table_rows_without_data(first_table)
+        
+        # Replace Source line with consolidated version
+        source_parts = [f"{source_doc}_pg{p}" for p in pages]
+        source_str = ', '.join(source_parts)
+        if metadata.get('year'):
+            source_str += f", {metadata.get('year')}"
+        if metadata.get('quarter'):
+            source_str += f" {metadata.get('quarter')}"
+        
+        # Find and replace Source line
+        for i, row in enumerate(rows):
+            if row and len(row) > 0 and 'Source' in str(row[0]):
+                rows[i] = [f"{MetadataLabels.SOURCES} {source_str}"]
+                break
+        
+        # Combine data from all tables with proper separation
+        first_chunk = True
+        for table in tables:
+            table_df = self._parse_table_content(table.get('content', ''))
+            if not table_df.empty:
+                # Add blank line before each table chunk (except first)
+                if not first_chunk:
+                    rows.append([])  # Blank line separator
+                first_chunk = False
+                
+                # Add column headers for this chunk
+                def clean_header(c):
+                    if pd.isna(c):
+                        return ''
+                    if isinstance(c, float) and c == int(c):
+                        return str(int(c))
+                    return str(c)
+                rows.append([clean_header(c) for c in table_df.columns])
+                
+                # Add data rows
+                for _, row in table_df.iterrows():
+                    cleaned_row = [ExcelUtils.clean_cell_value(v) if pd.notna(v) else '' for v in row]
+                    rows.append(cleaned_row)
+        
+        return rows
+    
+    def _generate_single_table_rows_without_data(self, table: Dict[str, Any]) -> List[List[Any]]:
+        """Generate metadata rows only (no data) for consolidated tables."""
+        # Reuse existing logic but stop before data rows
+        full_rows = self._generate_single_table_rows(table)
+        
+        # Find where data starts (after Source line + blank)
+        source_idx = None
+        for i, row in enumerate(full_rows):
+            if row and len(row) > 0 and 'Source' in str(row[0]):
+                source_idx = i
+                break
+        
+        if source_idx is not None:
+            # Return up to 2 rows after Source (Source + blank + col headers)
+            return full_rows[:source_idx + 3]
+        return full_rows[:12]  # Fallback: first 12 rows are metadata
+
     
     def _detect_column_header_levels(self, content: str) -> Dict[str, Any]:
         """
@@ -645,9 +831,9 @@ class ExcelTableExporter(BaseExcelExporter):
         # Empty row after Source for visual separation
         rows.append([])
         
-        # === TABLE DATA ===
+        # === TABLE DATA WITH DYNAMIC HEADER TRACKING ===
         if not table_df.empty:
-            # Column headers
+            # Column headers (first row of table)
             def clean_header(c):
                 if pd.isna(c):
                     return ''
@@ -656,12 +842,39 @@ class ExcelTableExporter(BaseExcelExporter):
                 return str(c)
             rows.append([clean_header(c) for c in table_df.columns])
             
-            # Data rows with L1 cleaning
-            for _, row in table_df.iterrows():
+            # Track header rows for mid-table replication
+            header_stack = []  # Stack of up to MAX_HEADER_LEVELS header rows
+            first_unit_row_seen = False  # Track if we've seen the first unit row
+            
+            # Data rows with L1 cleaning and dynamic header tracking
+            for idx, row in table_df.iterrows():
+                row_values = row.tolist()
                 cleaned_row = []
                 is_l1_row = False
                 
-                # Check if L1 row
+                # Check if this is a unit row ($ in millions, etc.)
+                current_is_unit_row = is_unit_row(row_values)
+                
+                # If this is a unit row and we've already seen one, insert cached headers
+                if current_is_unit_row:
+                    if first_unit_row_seen and header_stack:
+                        # Insert blank line before repeated headers
+                        rows.append([])
+                        # Insert cached header rows (up to MAX_HEADER_LEVELS)
+                        for header_row in header_stack:
+                            rows.append(header_row)
+                    first_unit_row_seen = True
+                    # Clear header stack after unit row (we'll rebuild for next occurrence)
+                    header_stack = []
+                
+                # Check if this is a header row (to cache for later)
+                elif is_header_row(row_values) and first_unit_row_seen:
+                    # This is a header row after data - cache it for next unit row
+                    header_stack.append(row_values)
+                    if len(header_stack) > MAX_HEADER_LEVELS:
+                        header_stack.pop(0)  # Keep only last MAX_HEADER_LEVELS
+                
+                # Check if L1 row (section header within data)
                 if len(row) > 1:
                     first_val = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
                     if first_val:
@@ -678,6 +891,7 @@ class ExcelTableExporter(BaseExcelExporter):
                                         has_numeric = True
                         is_l1_row = all_same or not has_numeric
                 
+                # Clean and add the row
                 for i, v in enumerate(row):
                     if pd.isna(v):
                         cleaned_row.append('')
@@ -758,6 +972,38 @@ class ExcelTableExporter(BaseExcelExporter):
                         cell.font = Font(color="0000FF", underline="single")
                     else:
                         logger.warning(f"Sheet '{sheet_name}' not found in workbook")
+            
+            # Add hyperlinks in TOC sheet (Sheet column)
+            if 'TOC' in wb.sheetnames:
+                toc_sheet = wb['TOC']
+                
+                # Find the Sheet column index dynamically
+                toc_header = [toc_sheet.cell(row=1, column=c).value for c in range(1, toc_sheet.max_column + 1)]
+                sheet_col = None
+                for i, h in enumerate(toc_header, start=1):
+                    if isinstance(h, str) and h.strip().lower() == 'sheet':
+                        sheet_col = i
+                        break
+                
+                if sheet_col:
+                    for row in range(2, toc_sheet.max_row + 1):  # Skip header
+                        cell = toc_sheet.cell(row=row, column=sheet_col)
+                        raw_value = cell.value
+                        
+                        table_id = None
+                        if raw_value is not None:
+                            try:
+                                raw_str = str(raw_value).strip()
+                            except Exception:
+                                raw_str = ''
+                            table_id = raw_str
+                        
+                        if table_id:
+                            sheet_name = table_id
+                            if sheet_name in wb.sheetnames:
+                                cell.hyperlink = f"#'{sheet_name}'!A1"
+                                cell.value = f"→ {sheet_name}"
+                                cell.font = Font(color="0000FF", underline="single")
             
             # Add back-links in each table sheet
             for sheet_name in tables_by_title.keys():

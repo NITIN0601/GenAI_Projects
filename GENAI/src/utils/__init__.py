@@ -41,6 +41,8 @@ from src.utils.excel_utils import ExcelUtils
 from src.utils.metadata_labels import MetadataLabels, TableMetadata
 from src.utils.quarter_mapper import QuarterDateMapper
 from src.utils.metadata_builder import MetadataBuilder
+from src.utils.multi_row_header_normalizer import MultiRowHeaderNormalizer, normalize_headers, normalize_header
+from src.utils.text_normalizer import TextNormalizer, normalize_text, clean_footnotes
 
 # Re-export tracing from infrastructure for convenience
 from src.infrastructure.observability import (
@@ -81,6 +83,10 @@ __all__ = [
     'TableMetadata',
     'MetadataLabels',
     'QuarterDateMapper',
+    # Header normalization
+    'MultiRowHeaderNormalizer',
+    'normalize_headers',
+    'normalize_header',
     # Tracing (re-exported from infrastructure.observability)
     'setup_tracing',
     'is_tracing_enabled',

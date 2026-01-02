@@ -97,25 +97,30 @@ class TOCBuilder:
             title_clean = ExcelUtils.fix_ocr_broken_words(str(title)) if title else ''
             title_clean = re.sub(r'\s+', ' ', title_clean).strip()
             
+            # Clean section directly from metadata (not re-classified)
+            section_clean = ExcelUtils.fix_ocr_broken_words(section_str) if section_str else ''
+            section_clean = re.sub(r'\s+', ' ', section_clean).strip() if section_clean else '-'
+            
             toc_data.append({
+                'Page': page_no,
+                'Section': section_clean,  # ACTUAL section from metadata
+                'Table Title': title_clean,
                 'Table of Contents': hierarchy.get('toc', '') or '-',
                 'Main Section': hierarchy.get('main', '') or '-',
                 'Section1': hierarchy.get('section1', '') or '-',
                 'Section2': hierarchy.get('section2', '') or '-',
                 'Section3': hierarchy.get('section3', '') or '-',
                 'Section4': hierarchy.get('section4', '') or '-',
-                'Table Title': title_clean,
-                'Page': page_no,
                 'Sheet': table_id
             })
         
         # Create DataFrame and write to sheet
         df = pd.DataFrame(toc_data)
         
-        # Sort by hierarchy
+        # Sort by page number (ascending) as primary sort
         df = df.sort_values(
-            by=['Table of Contents', 'Main Section', 'Section1', 'Section2', 'Section3', 'Section4', 'Table Title'],
-            key=lambda x: x.astype(str).str.lower().fillna('')
+            by=['Page', 'Section', 'Table Title'],
+            key=lambda x: pd.to_numeric(x, errors='coerce') if x.name == 'Page' else x.astype(str).str.lower().fillna('')
         )
         
         df.to_excel(writer, sheet_name='TOC', index=False)

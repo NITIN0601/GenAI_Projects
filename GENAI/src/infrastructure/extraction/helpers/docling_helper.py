@@ -1199,9 +1199,9 @@ class DoclingHelper:
         Extract the section name that contains this table.
         
         Uses multiple strategies in priority order:
-        1. TOC-based lookup (most reliable)
-        2. Pattern matching for SECTION_HEADER/TITLE labels
-        3. Numbered section pattern matching
+        1. Backwards search for numbered SECTION_HEADER (most precise)
+        2. TOC-based lookup (fallback)
+        3. Pattern matching for other headers
         
         Args:
             doc: Docling document
@@ -1212,7 +1212,40 @@ class DoclingHelper:
         Returns:
             Section name or empty string if not found
         """
-        # Strategy 1: TOC-based lookup (most reliable)
+        # Strategy 1: Backwards search for numbered SECTION_HEADER (most precise)
+        # This correctly handles multiple sections on same page
+        try:
+            items_list = list(doc.iterate_items())
+            table_found = False
+            distance = 0
+            
+            for item_data in reversed(items_list):
+                item = item_data[0] if isinstance(item_data, tuple) else item_data
+                
+                if item is table_item:
+                    table_found = True
+                    distance = 0
+                    continue
+                
+                if not table_found:
+                    continue
+                
+                distance += 1
+                if distance > 100:  # Search up to 100 items back for section
+                    break
+                
+                # Look for SECTION_HEADER with numbered section pattern (e.g., "19. Segment...")
+                if hasattr(item, 'label'):
+                    label = str(item.label.value) if hasattr(item.label, 'value') else str(item.label)
+                    if 'SECTION' in label.upper() and hasattr(item, 'text') and item.text:
+                        text = item.text.strip()
+                        # Check if it's a numbered section (e.g., "19. Segment, Geographic...")
+                        if re.match(r'^\d+\.\s+[A-Z]', text):
+                            return text
+        except Exception:
+            pass
+        
+        # Strategy 2: TOC-based lookup (fallback)
         if toc_sections is None:
             doc_id = id(doc)
             if doc_id not in DoclingHelper._toc_cache:
@@ -1346,12 +1379,121 @@ class DoclingHelper:
             table_title_patterns = []
             section_patterns = []
         
+        # =====================================================================
+        # DYNAMIC TITLE DETECTION PATTERNS
+        # Based on analysis of 972 tables across 4 PDFs
+        # =====================================================================
+        
+        # Short headers (< 30 chars) that are SUB-HEADERS needing parent context
+        # These appear frequently near tables but aren't the main title
+        SUB_HEADER_PATTERNS = [
+            # Generic sub-table markers
+            r'^by\s+(region|property\s*type|product|asset\s*class|industry|type)$',
+            r'^(americas|emea|asia|total)$',
+            # Common short headers that repeat frequently
+            r'^risk disclosures$',
+            r'^table of contents$',
+            r'^deposits$',
+            r'^dividends$',
+            r'^employee loans$',
+            r'^fund interests$',
+            r'^share repurchases$',
+            r'^non-consolidated vies$',
+        ]
+        
+        # Headers that START with these are valid MAIN titles
+        VALID_TITLE_STARTERS = [
+            'institutional securities',
+            'wealth management',
+            'investment management', 
+            'assets under management',
+            'net income applicable',
+            'consolidated results',
+            'allowance for credit losses',
+            'fair value',
+            'regulatory capital',
+            'liquidity resources',
+            'credit spread',
+            'selected financial',
+            'reconciliation',
+        ]
+        
+        # Minimum length for a standalone title (shorter needs parent)
+        MIN_STANDALONE_TITLE_LENGTH = 30
+        
+        def is_sub_header(text: str) -> bool:
+            """Check if text is a short sub-header that needs parent context."""
+            text_lower = text.lower().strip()
+            
+            # Check against known sub-header patterns
+            for pattern in SUB_HEADER_PATTERNS:
+                if re.match(pattern, text_lower, re.IGNORECASE):
+                    return True
+            
+            # Short headers (< 25 chars) that don't start with valid starters
+            if len(text) < 25:
+                for starter in VALID_TITLE_STARTERS:
+                    if text_lower.startswith(starter):
+                        return False  # It's a valid title, not sub-header
+                return True  # Short and not a valid starter = sub-header
+            
+            return False
+        
+        def is_valid_main_title(text: str) -> bool:
+            """Check if text is a valid main table title."""
+            text_lower = text.lower().strip()
+            
+            # Must be reasonably long
+            if len(text) < 15:
+                return False
+            
+            # Must start with capital letter
+            if not text[0].isupper():
+                return False
+            
+            # Check for valid title starters
+            for starter in VALID_TITLE_STARTERS:
+                if text_lower.startswith(starter):
+                    return True
+            
+            # Or be long and descriptive (> 30 chars)
+            if len(text) >= MIN_STANDALONE_TITLE_LENGTH:
+                # But not if it's a known invalid pattern
+                invalid_patterns = [
+                    'notes to consolidated financial',
+                    'management\'s discussion and analysis',
+                    'securities registered pursuant',
+                ]
+                for inv in invalid_patterns:
+                    if inv in text_lower:
+                        return False
+                return True
+            
+            return False
+        
+        def is_sub_table_title(text: str) -> bool:
+            """Wrapper for backward compatibility."""
+            return is_sub_header(text)
+        
         def is_table_title_candidate(text: str) -> bool:
             """Check if text is a good table title candidate."""
             if not text or len(text) < 5 or len(text) > 120:
                 return False
             
             text_lower = text.lower().strip()
+            
+            # Reject table data patterns (numbers, currency, dates)
+            table_data_patterns = [
+                r'^\s*\$',  # Starts with $
+                r'^\s*\(\d+\)',  # Starts with (N)
+                r'^\s*[\d,]+$',  # Pure numbers
+                r'^\s*[\d,]+\s*%?$',  # Numbers with optional %
+                r'^(sept|oct|nov|dec|jan|feb|mar|apr|may|jun|jul|aug)\s+\d',  # Date abbrev
+                r'^\d{4}$',  # Just a year
+            ]
+            for pattern in table_data_patterns:
+                if re.match(pattern, text_lower):
+                    return False
             
             # Reject clear non-titles
             invalid_starters = [
@@ -1367,15 +1509,14 @@ class DoclingHelper:
             if text.count('.') >= 2 or (text.endswith('.') and len(text) > 60):
                 return False
             
-            # Reject section headers (not table titles)
-            section_headers_to_reject = [
-                "management's discussion and analysis",
-                "business segments", "business segment results",
-                "executive summary", "institutional securities", 
-                "wealth management", "investment management",
+            # Reject standalone date/period headers (not table titles)
+            date_period_patterns = [
+                r'^at\s+(january|february|march|april|may|june|july|august|september|october|november|december)',
+                r'^(three|six|nine)\s+months?\s+ended',
+                r'^year\s+ended',
             ]
-            for header in section_headers_to_reject:
-                if text_lower == header or (text_lower.startswith(header) and len(text_lower) < len(header) + 10):
+            for pattern in date_period_patterns:
+                if re.match(pattern, text_lower):
                     return False
             
             return True
@@ -1396,6 +1537,7 @@ class DoclingHelper:
             return text.strip()[:100]
         
         # === APPROACH 1: Get immediate preceding text (most accurate) ===
+        # Extended to 30 items and 3 pages back for multi-page tables
         items_list = list(doc.iterate_items())
         immediate_candidates = []  # (text, distance_from_table, label)
         
@@ -1414,12 +1556,12 @@ class DoclingHelper:
                 continue
             
             distance += 1
-            if distance > 10:  # Only look at 10 items before the table
+            if distance > 30:  # Extended: look at up to 30 items before (for multi-page tables)
                 break
             
             item_page = DoclingHelper.get_item_page(item)
-            if item_page != page_no and item_page != page_no - 1:
-                continue  # Only same page or previous page
+            if item_page < page_no - 3:  # Extended: allow up to 3 pages back for long tables
+                continue
             
             if not hasattr(item, 'text') or not item.text:
                 continue
@@ -1427,8 +1569,37 @@ class DoclingHelper:
             text = str(item.text).strip()
             label = str(item.label) if hasattr(item, 'label') else 'UNKNOWN'
             
-            if 5 < len(text) < 120:
+            # Only add if it passes basic title validation (rejects table data like numbers, "(7) $")
+            if 5 < len(text) < 120 and is_table_title_candidate(text):
                 immediate_candidates.append((text, distance, label, item_page))
+        
+        # Patterns that appear on every page but are NOT table titles
+        PAGE_HEADER_PATTERNS = [
+            'notes to consolidated financial statements',
+            'management\'s discussion and analysis',
+            'quarterly report on form 10',
+            'table of contents',
+        ]
+        
+        # Date/time fragments from multi-page tables (NOT table titles)
+        DATE_FRAGMENT_PATTERNS = [
+            r'^at\s+(january|february|march|april|may|june|july|august|september|october|november|december)',
+            r'^(three|six|nine)\s+months?\s+(ended|ending)',
+            r'^year\s+ended',
+            r'^(sept|oct|nov|dec|jan|feb|mar|apr|may|jun|jul|aug)\s+\d',
+            r'^\d{4}$',  # Just a year like "2025"
+        ]
+        
+        # Sentences/explanatory text that are NOT table titles
+        SENTENCE_PATTERNS = [
+            r'^we\s+and\s+our',  # "We and our U.S. Bank Subsidiaries..."
+            r'^for\s+a\s+further',  # "For a further description..."
+            r'^see\s+note\s+\d',  # "See Note 16..."
+            r'^commitments\s+and\s+contingent',  # "Commitments and contingent liabilities (see Note..."
+            r'^the\s+firm\s+has',  # "The Firm has additional..."
+            r'^amounts\s+include',  # "Amounts include..."
+            r'^includes?\s+derivative',  # "Includes derivative..."
+        ]
         
         # === APPROACH 2: Evaluate candidates and pick the best ===
         best_title = None
@@ -1436,6 +1607,22 @@ class DoclingHelper:
         
         for text, distance, label, item_page in immediate_candidates:
             score = 0
+            text_lower = text.lower()
+            
+            # PENALTY: Page headers that appear on every page
+            is_page_header = any(ph in text_lower for ph in PAGE_HEADER_PATTERNS)
+            if is_page_header:
+                score -= 200  # Strong penalty - should never be picked as title
+            
+            # PENALTY: Date fragments from multi-page tables
+            is_date_fragment = any(re.match(p, text_lower) for p in DATE_FRAGMENT_PATTERNS)
+            if is_date_fragment:
+                score -= 150  # Strong penalty - not a title
+            
+            # PENALTY: Explanatory sentences (not table titles)
+            is_sentence = any(re.match(p, text_lower) for p in SENTENCE_PATTERNS)
+            if is_sentence:
+                score -= 150  # Strong penalty - explanatory text, not title
             
             # Known table title pattern = highest priority
             if is_known_table_title(text):
@@ -1465,11 +1652,116 @@ class DoclingHelper:
                 best_title = text
         
         # === Return the best title found ===
-        if best_title and best_score >= 50:
-            return clean_title(best_title)
+        # Only accept if score is positive (not penalized)
+        if best_title and best_score >= 0:
+            cleaned = clean_title(best_title)
+            
+            # If best title is a sub-header (short/generic), try to find a better main title
+            if is_sub_header(cleaned):
+                # Look for a valid MAIN title instead
+                for text, distance, label, item_page in immediate_candidates:
+                    if text == best_title:
+                        continue
+                    # Check if it's a valid main title
+                    if is_valid_main_title(text):
+                        # Use the main title instead (don't combine with -)
+                        return clean_title(text)
+                
+                # If no main title found, still return sub-header 
+                # (better than "Table N (Page X)")
+            
+            return cleaned
         
-        # === FALLBACK: Use the original method ===
+        # === FALLBACK 1: Look for nearby SECTION_HEADER items ===
+        # Search backwards through document for the nearest SECTION_HEADER
+        items_list = list(doc.iterate_items())
+        table_found = False
+        distance = 0
+        
+        for item_data in reversed(items_list):
+            item = item_data[0] if isinstance(item_data, tuple) else item_data
+            
+            if item is table_item:
+                table_found = True
+                distance = 0
+                continue
+            
+            if not table_found:
+                continue
+            
+            distance += 1
+            if distance > 50:  # Search up to 50 items back
+                break
+            
+            # Check for SECTION_HEADER label
+            if hasattr(item, 'label'):
+                label = str(item.label.value) if hasattr(item.label, 'value') else str(item.label)
+                if 'SECTION' in label.upper() and hasattr(item, 'text') and item.text:
+                    text = item.text.strip()
+                    # Skip page headers
+                    if not any(ph in text.lower() for ph in PAGE_HEADER_PATTERNS):
+                        if is_table_title_candidate(text):
+                            return clean_title(text)
+        
+        # === FALLBACK 2: Use section name from TOC hierarchy ===
+        section_name = DoclingHelper.extract_section_name(doc, table_item, page_no)
+        if section_name and len(section_name) > 10:
+            return section_name
+        
+        # === Final FALLBACK: Use the original method ===
         return DoclingHelper.extract_table_title(doc, table_item, table_index, page_no)
+    
+    @staticmethod
+    def extract_table_metadata(doc, table_item, table_index: int, page_no: int) -> dict:
+        """
+        Extract structured table metadata with section, title, and optional subtitle.
+        
+        Returns:
+            Dict with:
+            - table_section: The section/chapter from TOC hierarchy
+            - table_title: The main table title
+            - table_subtitle: Optional short qualifier (e.g., "By Region", "At September 30")
+        """
+        # Get section from TOC hierarchy
+        table_section = DoclingHelper.extract_section_name(doc, table_item, page_no)
+        
+        # Get main title using hybrid extraction
+        table_title = DoclingHelper.extract_table_title_hybrid(doc, table_item, table_index, page_no)
+        
+        # Check if the title is actually a subtitle pattern (short qualifier)
+        # These are ONLY short qualifiers that modify a parent title, NOT main titles
+        SUBTITLE_PATTERNS = [
+            r'^by\s+(region|property|type|industry|product|segment)',  # "By Region", "By Type"
+            r'^(americas|emea|asia)$',  # Geographic qualifiers (not "Total")
+            r'^time deposit maturities$',  # Specific sub-table
+            r'^(non-consolidated|consolidated)\s+vies?$',
+        ]
+        
+        table_subtitle = None
+        title_lower = table_title.lower().strip() if table_title else ''
+        
+        # Check if the "title" is actually a subtitle pattern
+        is_subtitle = len(title_lower) < 30 and any(
+            re.match(p, title_lower) for p in SUBTITLE_PATTERNS
+        )
+        
+        if is_subtitle:
+            # The current "title" is actually a subtitle
+            table_subtitle = table_title
+            # Try to get the real title from section or look further back
+            # For now, use section as the title if available, otherwise use a generic name
+            if table_section and len(table_section) > 15:
+                table_title = table_section
+                table_section = ''  # Don't duplicate
+            else:
+                # Keep the subtitle as title if we can't find better
+                table_subtitle = None
+        
+        return {
+            'table_section': table_section or '',
+            'table_title': table_title or f'Table {table_index + 1} (Page {page_no})',
+            'table_subtitle': table_subtitle,  # None if not applicable
+        }
     
     @staticmethod
     def extract_table_title(doc, table_item, table_index: int, page_no: int) -> str:
@@ -1607,10 +1899,14 @@ class DoclingHelper:
             invalid_patterns = [
                 'three months ended', 'six months ended', 'nine months ended',
                 'year ended', 'quarter ended', 'at march', 'at december',
+                'at september', 'at june', 'at january', 'at february',
                 '$ in millions', '$ in billions', 'in millions', 'in billions',
                 'unaudited', 'address of principal', 'the following', 'as follows',
                 'morgan stanley', 'consolidated statements', 'condensed consolidated',
-                "management's discussion and analysis",  # This is a section header, not table title
+                "management's discussion and analysis",
+                'notes to consolidated financial statements',
+                'risk disclosures', 'trading risks',
+                'securities registered pursuant', '(registrant)',
             ]
             
             for pattern in invalid_patterns:

@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 from src.utils.metadata_labels import MetadataLabels, TableMetadata
 from src.utils.quarter_mapper import QuarterDateMapper
 from src.utils.header_parser import MultiLevelHeaderParser
-from src.utils.header_normalizer import ColumnHeaderNormalizer
 
 
 

@@ -63,6 +63,77 @@ class TableMerger:
         # Ensure destination exists
         self.dest_dir.mkdir(parents=True, exist_ok=True)
     
+    def _is_sheet_near_empty(self, ws: Worksheet, min_data_rows: int = 3) -> bool:
+        """
+        Check if a sheet has minimal content (near-empty).
+        
+        A sheet is considered near-empty if it has fewer than min_data_rows
+        of actual data (excluding metadata rows and blank rows).
+        
+        Args:
+            ws: Worksheet to check
+            min_data_rows: Minimum data rows required (default: 3)
+            
+        Returns:
+            True if sheet is near-empty
+        """
+        data_row_count = 0
+        
+        for row_num in range(1, ws.max_row + 1):
+            row_has_data = False
+            first_col_val = None
+            
+            for col_num in range(1, min(ws.max_column + 1, 20)):
+                cell_val = ws.cell(row=row_num, column=col_num).value
+                if col_num == 1:
+                    first_col_val = cell_val
+                if cell_val is not None and str(cell_val).strip():
+                    row_has_data = True
+                    break
+            
+            if not row_has_data:
+                continue
+            
+            # Skip metadata rows (check first column for metadata labels)
+            if first_col_val:
+                first_str = str(first_col_val).strip()
+                if any(label in first_str for label in [
+                    'Category', 'Line Items', 'Product/Entity', 
+                    'Column Header', 'Year/Quarter', 'Table Title', 'Source',
+                    '← Back to Index'
+                ]):
+                    continue
+            
+            data_row_count += 1
+            if data_row_count >= min_data_rows:
+                return False  # Has enough data
+        
+        return data_row_count < min_data_rows
+    
+    def _get_first_block_data(self, ws: Worksheet, first_block: Dict) -> List[List[Any]]:
+        """
+        Extract all data from the first table block (metadata + data).
+        
+        Args:
+            ws: Source worksheet
+            first_block: First table block dict
+            
+        Returns:
+            List of rows (each row is list of cell values)
+        """
+        rows_data = []
+        meta_start = first_block.get('metadata_start_row', first_block.get('source_row', 2))
+        data_end = first_block.get('end_row', ws.max_row)
+        
+        # Include row 1 (Back to Index link)
+        for row_num in range(1, data_end + 1):
+            row_values = []
+            for col_num in range(1, ws.max_column + 1):
+                row_values.append(ws.cell(row=row_num, column=col_num).value)
+            rows_data.append(row_values)
+        
+        return rows_data
+    
     def process_all_files(self, max_workers: int = 4) -> Dict[str, Any]:
         """
         Process all xlsx files in source directory with parallel processing.
@@ -332,9 +403,17 @@ class TableMerger:
             from openpyxl.worksheet.hyperlink import Hyperlink
             new_back_cell.hyperlink = Hyperlink(ref=new_back_cell.coordinate, target="#'Index'!A1")
             
-            # Copy metadata rows (from metadata_start_row to source_row)
-            meta_start = block.get('metadata_start_row', block['source_row'])
-            meta_end = block['source_row']
+            # Copy metadata rows
+            # For sub-blocks (created by split_block_on_new_headers), they share metadata
+            # with the first block, so copy from the first block's metadata range
+            if block.get('_is_sub_block') and table_blocks:
+                first_block = table_blocks[0]
+                meta_start = first_block.get('metadata_start_row', first_block['source_row'])
+                meta_end = first_block['source_row']
+            else:
+                meta_start = block.get('metadata_start_row', block['source_row'])
+                meta_end = block['source_row']
+            
             dest_row = 2  # Start after Back to Index
             
             for src_row in range(meta_start, meta_end + 1):
@@ -369,11 +448,93 @@ class TableMerger:
             split_index += 1
             logger.info(f"Split table to new sheet '{new_sheet_name}'")
         
+        # Step 2.5: Validate _1 sheet still has content after clearing split blocks
+        # The first block should remain in the _1 sheet
+        if self._is_sheet_near_empty(ws):
+            first_block = table_blocks[0] if table_blocks else None
+            if first_block:
+                logger.warning(
+                    f"Sheet '{original_new_name}' is near-empty after split. "
+                    f"First block: rows {first_block.get('start_row')}-{first_block.get('end_row')} "
+                    f"with {len(first_block.get('row_labels', []))} row labels. "
+                    f"This may indicate block detection issues."
+                )
+            else:
+                logger.warning(f"Sheet '{original_new_name}' is near-empty and no first block found.")
+        
         # Step 3: Update Index - remove original entry and add all split entries
         self._update_index_for_splits(wb, sheet_name, all_split_sheets)
         
         return all_split_sheets
     
+    def _ensure_metadata_labels(self, ws: Worksheet, data_start_row: int) -> None:
+        """
+        Ensure all required metadata labels exist in the split sheet.
+        
+        If metadata labels are missing, inserts them at appropriate positions
+        before the data starts. This handles cases where block detection
+        didn't properly identify metadata rows.
+        
+        Args:
+            ws: The worksheet to check/update
+            data_start_row: Row where table data starts
+        """
+        # Required metadata labels in order
+        REQUIRED_LABELS = [
+            MetadataLabels.CATEGORY_PARENT,
+            MetadataLabels.LINE_ITEMS,
+            MetadataLabels.PRODUCT_ENTITY,
+            MetadataLabels.COLUMN_HEADER_L1,
+            MetadataLabels.COLUMN_HEADER_L2,
+            MetadataLabels.COLUMN_HEADER_L3,
+            MetadataLabels.YEAR_QUARTER,
+            MetadataLabels.TABLE_TITLE,
+            MetadataLabels.SOURCES,
+        ]
+        
+        # Find existing labels
+        existing_labels = {}
+        for row_num in range(1, data_start_row):
+            cell_val = ws.cell(row=row_num, column=1).value
+            if cell_val:
+                cell_str = str(cell_val).strip()
+                for label in REQUIRED_LABELS:
+                    if label in cell_str:
+                        existing_labels[label] = row_num
+                        break
+        
+        # Check what's missing
+        missing_labels = [l for l in REQUIRED_LABELS if l not in existing_labels]
+        
+        if not missing_labels:
+            return  # All labels present
+        
+        # Find first blank row after row 1 (Back to Index) where we can add labels
+        # If no blank rows, we'll need to use existing structure
+        insert_row = 2
+        for row_num in range(2, data_start_row):
+            cell_val = ws.cell(row=row_num, column=1).value
+            if not cell_val or not str(cell_val).strip():
+                insert_row = row_num
+                break
+        
+        # Insert missing labels at blank rows (don't shift data)
+        # Find all blank rows we can use
+        blank_rows = []
+        for row_num in range(2, data_start_row):
+            cell_val = ws.cell(row=row_num, column=1).value
+            if not cell_val or not str(cell_val).strip():
+                blank_rows.append(row_num)
+        
+        # Assign missing labels to blank rows
+        for i, label in enumerate(missing_labels):
+            if i < len(blank_rows):
+                ws.cell(row=blank_rows[i], column=1).value = label
+                logger.debug(f"Added missing metadata label '{label}' at row {blank_rows[i]}")
+            else:
+                # No more blank rows - log warning
+                logger.warning(f"No blank row available for metadata label '{label}'")
+
     def _update_split_sheet_column_headers(self, ws: Worksheet, data_start_row: int) -> None:
         """
         Extract column headers from the first rows of split table and update metadata.
@@ -385,13 +546,21 @@ class TableMerger:
             ws: The new worksheet with split table
             data_start_row: Row where table data starts
         """
+        # First, ensure all required metadata labels exist
+        self._ensure_metadata_labels(ws, data_start_row)
+        
         # Find metadata rows to update
         l1_row = None
         l2_row = None
         l3_row = None
         year_quarter_row = None
+        category_row = None
+        line_items_row = None
+        product_entity_row = None
+        table_title_row = None
+        source_row = None
         
-        for row_num in range(1, 15):
+        for row_num in range(1, data_start_row):
             cell_val = ws.cell(row=row_num, column=1).value
             if not cell_val:
                 continue
@@ -405,9 +574,28 @@ class TableMerger:
                 l3_row = row_num
             elif MetadataLabels.YEAR_QUARTER in cell_str:
                 year_quarter_row = row_num
+            elif MetadataLabels.CATEGORY_PARENT in cell_str:
+                category_row = row_num
+            elif MetadataLabels.LINE_ITEMS in cell_str:
+                line_items_row = row_num
+            elif MetadataLabels.PRODUCT_ENTITY in cell_str:
+                product_entity_row = row_num
+            elif MetadataLabels.TABLE_TITLE in cell_str:
+                table_title_row = row_num
+            elif MetadataLabels.SOURCES in cell_str:
+                source_row = row_num
         
+        # Log if critical metadata rows are missing
+        missing = []
         if not l3_row:
-            return  # No metadata rows to update
+            missing.append('Column Header L3')
+        if not category_row:
+            missing.append('Category')
+        if not source_row:
+            missing.append('Source')
+        
+        if missing:
+            logger.warning(f"Split sheet missing metadata rows: {missing}")
         
         # Extract multi-row headers from table data area
         header_rows = []
