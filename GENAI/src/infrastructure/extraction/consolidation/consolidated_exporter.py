@@ -252,7 +252,10 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                                     for split_sheet_name in created_sheets:
                                         created_tables[f"{normalized_key}::{created_sheets[split_sheet_name]}"] = tables
                                 else:
-                                    # Single sheet - original behavior
+                                    # Single sheet created - update mapping to use the actual sheet name
+                                    # This fixes Index links when period-type splitting creates suffix like _3
+                                    actual_sheet_name = list(created_sheets.keys())[0]
+                                    mapping['unique_sheet_name'] = actual_sheet_name
                                     created_tables[normalized_key] = tables
                             else:
                                 logger.debug(f"Sheet {sheet_name} was not created (no data after processing)")
@@ -2198,12 +2201,15 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         header_row_count = 12 + len(header_frames)
         
         # Fix header rows: Convert any float years (e.g., 2025.0) back to strings
-        for row_idx in range(min(header_row_count, len(final_df))):
+        # Extend range to cover Row Label row which may be at row 13-15
+        fix_up_to_row = min(20, len(final_df))  # Cover all possible header rows
+        for row_idx in range(fix_up_to_row):
             for col_idx in range(len(final_df.columns)):
                 val = final_df.iloc[row_idx, col_idx]
                 if isinstance(val, float) and not pd.isna(val):
                     if val == int(val):
                         final_df.iloc[row_idx, col_idx] = str(int(val))
+
         
         # Write without pandas headers (we've included them in the data)
         final_df.to_excel(writer, sheet_name=title, index=False, header=False)

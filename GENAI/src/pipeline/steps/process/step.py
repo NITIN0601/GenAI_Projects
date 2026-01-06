@@ -50,6 +50,74 @@ from src.pipeline.steps.process.header_flattener import flatten_table_headers_dy
 
 logger = get_logger(__name__)
 
+# Month to quarter mapping - single source of truth
+MONTH_TO_QUARTER_MAP = {
+    'january': 'Q1', 'february': 'Q1', 'march': 'Q1',
+    'april': 'Q2', 'may': 'Q2', 'june': 'Q2',
+    'july': 'Q3', 'august': 'Q3', 'september': 'Q3',
+    'october': 'Q4', 'november': 'Q4', 'december': 'Q4',
+}
+
+
+def normalize_point_in_time_header(value: str) -> Optional[str]:
+    """
+    Normalize point-in-time headers like "At June 30, 2024" to "Q2-2024".
+    
+    Args:
+        value: Header string to normalize
+        
+    Returns:
+        Normalized quarter code (e.g., "Q2-2024") or None if not a point-in-time header
+    """
+    if not value:
+        return None
+    
+    val_lower = value.lower().strip()
+    
+    # Only process "At" or "As of" prefixed headers
+    if not (val_lower.startswith('at ') or val_lower.startswith('as of ')):
+        return None
+    
+    # Extract year
+    year_match = re.search(r'(20\d{2})', value)
+    if not year_match:
+        return None
+    
+    # Find month
+    detected_month = None
+    for month_name in MONTH_TO_QUARTER_MAP:
+        if month_name in val_lower:
+            detected_month = month_name
+            break
+    
+    if not detected_month:
+        return None
+    
+    quarter = MONTH_TO_QUARTER_MAP[detected_month]
+    return f"{quarter}-{year_match.group(1)}"
+
+
+def is_valid_date_code(code: str) -> bool:
+    """
+    Check if a string is a valid normalized date code.
+    
+    Valid codes:
+    - Q1-2024, Q2-2024, Q3-2024, Q4-2024 (point-in-time)
+    - Q1-QTD-2024, Q2-YTD-2024 (period-based)
+    - YTD-2024 (annual)
+    
+    Args:
+        code: String to validate
+        
+    Returns:
+        True if the code is a valid date code
+    """
+    if not code:
+        return False
+    return bool(
+        re.match(r'^Q[1-4](-QTD|-YTD)?-20\d{2}', code) or
+        re.match(r'^YTD-20\d{2}', code)
+    )
 
 class ProcessStep(StepInterface):
     """
@@ -248,26 +316,10 @@ class ProcessStep(StepInterface):
                     val = str(cell.value).strip()
                     val_lower = val.lower()
                     
-                    if val_lower.startswith('at ') or val_lower.startswith('as of '):
-                        # Extract month and year using simple pattern matching
-                        month_to_quarter = {
-                            'january': 'Q1', 'february': 'Q1', 'march': 'Q1',
-                            'april': 'Q2', 'may': 'Q2', 'june': 'Q2',
-                            'july': 'Q3', 'august': 'Q3', 'september': 'Q3',
-                            'october': 'Q4', 'november': 'Q4', 'december': 'Q4',
-                        }
-                        year_match = re.search(r'(20\d{2})', val)
-                        detected_month = None
-                        for month_name in month_to_quarter.keys():
-                            if month_name in val_lower:
-                                detected_month = month_name
-                                break
-                        
-                        if detected_month and year_match:
-                            quarter = month_to_quarter[detected_month]
-                            normalized_val = f"{quarter}-{year_match.group(1)}"
-                            cell.value = normalized_val
-                            stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
+                    normalized_val = normalize_point_in_time_header(val)
+                    if normalized_val:
+                        cell.value = normalized_val
+                        stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
         
         # Extract header rows (typically 1-4 rows starting from header_row)
         data_header_rows = []
@@ -289,30 +341,12 @@ class ProcessStep(StepInterface):
                     stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
                 
                 # Normalize point-in-time headers: "At June 30, 2024" -> "Q2-2024"
-                # This catches headers that might be in rows before the detected header_row
                 if val.strip():
-                    val_lower = val.lower().strip()
-                    if val_lower.startswith('at ') or val_lower.startswith('as of '):
-                        # Extract month and year using simple pattern matching
-                        month_to_quarter = {
-                            'january': 'Q1', 'february': 'Q1', 'march': 'Q1',
-                            'april': 'Q2', 'may': 'Q2', 'june': 'Q2',
-                            'july': 'Q3', 'august': 'Q3', 'september': 'Q3',
-                            'october': 'Q4', 'november': 'Q4', 'december': 'Q4',
-                        }
-                        year_match = re.search(r'(20\d{2})', val)
-                        detected_month = None
-                        for month_name in month_to_quarter.keys():
-                            if month_name in val_lower:
-                                detected_month = month_name
-                                break
-                        
-                        if detected_month and year_match:
-                            quarter = month_to_quarter[detected_month]
-                            normalized_val = f"{quarter}-{year_match.group(1)}"
-                            val = normalized_val
-                            cell.value = normalized_val
-                            stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
+                    normalized_val = normalize_point_in_time_header(val)
+                    if normalized_val:
+                        val = normalized_val
+                        cell.value = normalized_val
+                        stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
                 
                 row_values.append(val)
             
@@ -366,14 +400,9 @@ class ProcessStep(StepInterface):
                 
                 # Always apply normalized code if it's a valid date code
                 # Valid codes: Q1-2024, Q2-QTD-2024, Q3-YTD-2024, YTD-2024
-                if norm_val:
-                    is_valid_code = (
-                        re.match(r'^Q[1-4](-QTD|-YTD)?-20\d{2}', norm_val) or
-                        re.match(r'^YTD-20\d{2}', norm_val)
-                    )
-                    if is_valid_code:
-                        if safe_set_cell_value(ws, header_row, col_idx, norm_val):
-                            stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
+                if norm_val and is_valid_date_code(norm_val):
+                    if safe_set_cell_value(ws, header_row, col_idx, norm_val):
+                        stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
         
         # Clear second header row for multi-row headers to prevent duplicates
         # The normalized code is now in row 1, row 2 should be empty or cleared
@@ -387,11 +416,7 @@ class ProcessStep(StepInterface):
                 if orig_row2_val and norm_val:
                     orig_str = str(orig_row2_val).strip()
                     is_year_only = re.match(r'^20\d{2}$', orig_str)
-                    is_valid_code = (
-                        re.match(r'^Q[1-4](-QTD|-YTD)?-20\d{2}', norm_val) or
-                        re.match(r'^YTD-20\d{2}', norm_val)
-                    )
-                    if is_year_only and is_valid_code:
+                    if is_year_only and is_valid_date_code(norm_val):
                         # Clear the year from row 2 since it's merged into row 1
                         safe_set_cell_value(ws, header_row + 1, col_idx, None)
                         stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
@@ -447,17 +472,12 @@ class ProcessStep(StepInterface):
                     # Write normalized values back to cells (first row gets the codes)
                     for col_idx in range(2, min(len(mid_norm_headers) + 1, ws.max_column + 1)):
                         norm_val = mid_norm_headers[col_idx - 1] if col_idx - 1 < len(mid_norm_headers) else ''
-                        if norm_val:
-                            is_valid_code = (
-                                re.match(r'^Q[1-4](-QTD|-YTD)?-20\d{2}', norm_val) or
-                                re.match(r'^YTD-20\d{2}', norm_val)
-                            )
-                            if is_valid_code:
-                                if safe_set_cell_value(ws, row_idx, col_idx, norm_val):
-                                    stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
-                                # Clear year from next row if we used it
-                                if len(header_rows_to_normalize) > 1:
-                                    safe_set_cell_value(ws, row_idx + 1, col_idx, None)
+                        if norm_val and is_valid_date_code(norm_val):
+                            if safe_set_cell_value(ws, row_idx, col_idx, norm_val):
+                                stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
+                            # Clear year from next row if we used it
+                            if len(header_rows_to_normalize) > 1:
+                                safe_set_cell_value(ws, row_idx + 1, col_idx, None)
                     continue  # Move to next row after normalizing header
             
             # Process regular data cells

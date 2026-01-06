@@ -143,6 +143,9 @@ class ExcelFormatter:
                 
                 # Dynamically detect header rows
                 header_rows = cls._detect_header_rows(ws, row_label_row)
+                # IMPORTANT: Also include the Row Label row itself - it contains year headers
+                if row_label_row not in header_rows:
+                    header_rows.append(row_label_row)
                 data_start_row = row_label_row + 1
                 
                 # Fix header rows - convert year floats to int
@@ -183,7 +186,8 @@ class ExcelFormatter:
     
     @classmethod
     def _fix_header_years(cls, ws, header_rows: List[int]) -> None:
-        """Convert year floats to int in header rows."""
+        """Convert year floats to int in header rows and scan first 20 rows for any float years."""
+        # First, fix detected header rows
         for header_row in header_rows:
             if header_row > 0:
                 for col in range(1, ws.max_column + 1):
@@ -197,6 +201,16 @@ class ExcelFormatter:
                                 year = int(cleaned)
                                 if 2000 <= year <= 2099:
                                     cell.value = year
+        
+        # ALSO scan first 20 rows for any remaining float years
+        # This catches cases where Row Label row detection misses the actual header
+        for row in range(1, min(21, ws.max_row + 1)):
+            for col in range(1, ws.max_column + 1):
+                cell = ws.cell(row=row, column=col)
+                if cell.value is not None and isinstance(cell.value, float):
+                    # Check if it's a year value (2000-2099)
+                    if 2000 <= cell.value <= 2099 and cell.value == int(cell.value):
+                        cell.value = int(cell.value)
     
     @classmethod
     def _merge_spanning_headers(cls, ws, header_rows: List[int]) -> None:
