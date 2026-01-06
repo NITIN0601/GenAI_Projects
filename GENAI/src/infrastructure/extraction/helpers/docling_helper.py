@@ -1386,6 +1386,8 @@ class DoclingHelper:
         
         # Short headers (< 30 chars) that are SUB-HEADERS needing parent context
         # These appear frequently near tables but aren't the main title
+        # NOTE: Valid table titles like 'Deposits', 'Dividends' should NOT be here
+        #       Instead, add them to table_title_patterns in section_patterns.json
         SUB_HEADER_PATTERNS = [
             # Generic sub-table markers
             r'^by\s+(region|property\s*type|product|asset\s*class|industry|type)$',
@@ -1393,12 +1395,6 @@ class DoclingHelper:
             # Common short headers that repeat frequently
             r'^risk disclosures$',
             r'^table of contents$',
-            r'^deposits$',
-            r'^dividends$',
-            r'^employee loans$',
-            r'^fund interests$',
-            r'^share repurchases$',
-            r'^non-consolidated vies$',
         ]
         
         # Headers that START with these are valid MAIN titles
@@ -1416,6 +1412,15 @@ class DoclingHelper:
             'credit spread',
             'selected financial',
             'reconciliation',
+            'advisor-led',
+            'self-directed',
+            'workplace',
+            'deposits',
+            'dividends',
+            'borrowings',
+            'commitments',
+            'guarantees',
+            'forecasted',
         ]
         
         # Minimum length for a standalone title (shorter needs parent)
@@ -1424,6 +1429,12 @@ class DoclingHelper:
         def is_sub_header(text: str) -> bool:
             """Check if text is a short sub-header that needs parent context."""
             text_lower = text.lower().strip()
+            
+            # FIRST: Check if text matches a known table title pattern from config
+            # If it matches, it's a VALID title, not a sub-header
+            for pattern in table_title_patterns:
+                if pattern.lower() in text_lower or text_lower in pattern.lower():
+                    return False  # It's a known table title - NOT a sub-header
             
             # Check against known sub-header patterns
             for pattern in SUB_HEADER_PATTERNS:
@@ -1438,6 +1449,7 @@ class DoclingHelper:
                 return True  # Short and not a valid starter = sub-header
             
             return False
+
         
         def is_valid_main_title(text: str) -> bool:
             """Check if text is a valid main table title."""

@@ -60,14 +60,14 @@ def verify_imports():
         logger.info("Importing RAG pipeline...")
         from src.rag import RAGPipeline
         
-        logger.info("✅ All imports successful!")
+        logger.info("All imports successful!")
         return True
         
     except ImportError as e:
-        logger.error(f"❌ Import failed: {e}")
+        logger.error(f"Import failed: {e}")
         return False
     except Exception as e:
-        logger.error(f"❌ Verification failed: {e}")
+        logger.error(f"Verification failed: {e}")
         return False
 
 if __name__ == "__main__":

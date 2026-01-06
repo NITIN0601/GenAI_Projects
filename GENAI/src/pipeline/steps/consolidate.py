@@ -63,6 +63,8 @@ class ConsolidateStep(StepInterface):
         # If no table_title, perform a full Excel merge of all processed files
         if not table_title:
             try:
+                # Note: get_excel_exporter is factory function that creates ConsolidatedExcelExporter
+                # The consolidation logic is in domains/consolidate/
                 from src.infrastructure.extraction.exporters.excel_exporter import get_excel_exporter
                 exporter = get_excel_exporter()
                 merge_result = exporter.merge_processed_files()
@@ -76,8 +78,8 @@ class ConsolidateStep(StepInterface):
                         message=f"Consolidated all {merge_result.get('tables_merged', 0)} tables into {consolidated_path}",
                         metadata={
                             'mode': 'full_merge',
-                            'total_rows': 0, # Not applicable for full merge
-                            'total_columns': 0,
+                            'tables_merged': merge_result.get('tables_merged', 0),
+                            'sources_merged': merge_result.get('sources_merged', 0),
                             'quarters_included': [f"{merge_result.get('sources_merged', 0)} files merged"]
                         }
                     )

@@ -16,10 +16,6 @@ Usage:
     exporter.export_pdf_tables(tables, "10q0625.pdf")
     # -> data/extracted_raw/10q0625_tables.xlsx
     
-    # Combined export (after all PDFs processed)
-    exporter.export_combined_tables(all_tables)
-    # -> data/consolidate/all_tables_combined.xlsx
-    
     # For consolidated multi-file merge, use:
     from src.infrastructure.extraction.consolidation.consolidated_exporter import get_consolidated_exporter
 
@@ -45,6 +41,8 @@ from src.utils.excel_utils import ExcelUtils
 from src.utils.metadata_labels import MetadataLabels
 from src.utils.metadata_builder import MetadataBuilder
 from src.utils.financial_domain import extract_quarter_from_header, extract_year_from_header, convert_year_to_q4_header
+
+from openpyxl import load_workbook
 
 logger = get_logger(__name__)
 
@@ -150,11 +148,9 @@ class ExcelTableExporter(BaseExcelExporter):
         self.paths = get_paths()
         # Step 1 output: extracted_raw (per docs/pipeline_operations.md)
         self.extracted_raw_dir = self.paths.data_dir / "extracted_raw"
-        self.extracted_dir = self.paths.data_dir / "extracted"
         
-        # Ensure directories exist
+        # Ensure directory exists
         self.extracted_raw_dir.mkdir(parents=True, exist_ok=True)
-        self.extracted_dir.mkdir(parents=True, exist_ok=True)
     
     def export_pdf_tables(
         self,
@@ -184,30 +180,8 @@ class ExcelTableExporter(BaseExcelExporter):
         
         return self._create_excel_workbook(tables, output_path, source_pdf)
     
-    def export_combined_tables(
-        self,
-        all_tables: List[Dict[str, Any]],
-        output_dir: Optional[str] = None
-    ) -> str:
-        """
-        Export tables from all PDFs to single combined Excel.
-        
-        Groups tables by title across all sources.
-        
-        Args:
-            all_tables: List of all extracted tables from all PDFs
-            output_dir: Override output directory
-            
-        Returns:
-            Path to created Excel file
-        """
-        output_dir = Path(output_dir) if output_dir else self.extracted_dir
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        timestamp = datetime.now().strftime("%Y%m%d")
-        output_path = output_dir / f"all_tables_combined_{timestamp}.xlsx"
-        
-        return self._create_excel_workbook(all_tables, output_path, "Combined")
+    # NOTE: export_combined_tables was removed as it was unused.
+    # Use ConsolidatedExporter for cross-file consolidation instead.
     
     def _create_excel_workbook(
         self,
@@ -351,9 +325,7 @@ class ExcelTableExporter(BaseExcelExporter):
         # Use ExcelUtils for the actual normalization
         return ExcelUtils.normalize_title_for_grouping(cleaned) or "untitled"
     
-    def _sanitize_sheet_name(self, name: str) -> str:
-        """Sanitize string for Excel sheet name. Delegates to ExcelUtils."""
-        return ExcelUtils.sanitize_sheet_name(name)
+    # NOTE: _sanitize_sheet_name inherited from BaseExcelExporter
     
     def _create_toc_sheet(
         self,
@@ -393,9 +365,7 @@ class ExcelTableExporter(BaseExcelExporter):
             get_column_letter_func=self._get_column_letter
         )
     
-    def _get_column_letter(self, idx: int) -> str:
-        """Convert column index to Excel column letter. Delegates to ExcelUtils."""
-        return ExcelUtils.get_column_letter(idx)
+    # NOTE: _get_column_letter inherited from BaseExcelExporter
     
     def _create_table_sheet(
         self,
@@ -923,7 +893,6 @@ class ExcelTableExporter(BaseExcelExporter):
         Sheet names are now Table_IDs (e.g., "1", "2", "3"), so linking is simpler.
         """
         try:
-            from openpyxl import load_workbook
             from openpyxl.styles import Font
             
             wb = load_workbook(output_path)
@@ -1031,7 +1000,6 @@ class ExcelTableExporter(BaseExcelExporter):
         For example: "Three Months Ended" | "Three Months Ended" → merged cell
         """
         try:
-            from openpyxl import load_workbook
             from openpyxl.styles import Alignment
             
             wb = load_workbook(output_path)

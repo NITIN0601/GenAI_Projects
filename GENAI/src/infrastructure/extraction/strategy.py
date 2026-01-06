@@ -106,12 +106,12 @@ class ExtractionStrategy:
                     return result
                 
                 logger.warning(
-                    f"✗ {backend.get_name()} quality too low: "
+                    f"{backend.get_name()} quality too low: "
                     f"{quality:.1f} < {min_quality}, trying fallback..."
                 )
                 
             except Exception as e:
-                logger.error(f"✗ {backend.get_name()} failed: {e}")
+                logger.error(f"{backend.get_name()} failed: {e}")
                 continue
         
         # No backend met quality threshold
@@ -119,7 +119,7 @@ class ExtractionStrategy:
             # Return best result
             best = max(results, key=lambda r: r.quality_score)
             logger.warning(
-                f"⚠ No backend met quality threshold ({min_quality}). "
+                f"No backend met quality threshold ({min_quality}). "
                 f"Using best result from {best.backend.value} "
                 f"(quality: {best.quality_score:.1f})"
             )

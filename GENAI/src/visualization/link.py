@@ -763,7 +763,7 @@ class AnomalyVisualizer:
             plt.tight_layout(rect=[0, 0.02, 1, 0.99])
             plt.savefig(output_file, dpi=settings['dpi'], bbox_inches='tight')
             plt.close()
-            print(f"   ✓ Saved: {output_file}")
+            print(f"   Saved: {output_file}")
             return True
             
         except Exception as e:
@@ -858,7 +858,7 @@ class AnomalyDetectionAnalyzer:
             actual_value_name = self.config.columns['actual_value'].replace(' ', '_').replace('-', '_')
             summary_file = output_path / f'anomaly_summary_{actual_value_name}.csv'
             anomaly_df.to_csv(summary_file, index=False)
-            print(f"   ✓ Saved: {summary_file} ({len(anomaly_df)} anomalies)")
+            print(f"   Saved: {summary_file} ({len(anomaly_df)} anomalies)")
     
     def _generate_report(self, df: pd.DataFrame):
         """Generate text report"""
@@ -892,7 +892,7 @@ def create_default_config():
     """Create and save default configuration file"""
     config = AnomalyDetectionConfig()
     config.save_to_json('config_default.json')
-    print("✓ Default configuration created: config_default.json")
+    print("Default configuration created: config_default.json")
     print("  Edit this file to customize column mappings and settings")
 
 

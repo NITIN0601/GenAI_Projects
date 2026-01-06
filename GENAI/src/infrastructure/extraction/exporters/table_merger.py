@@ -459,6 +459,10 @@ class TableMerger:
             # Extract column headers from the copied table data and update metadata
             self._update_split_sheet_column_headers(new_ws, table_data_start_row)
             
+            # Add unit indicator to first column of header row if missing
+            # This copies '$ in billions/millions' from the first block's header
+            self._add_unit_indicator_to_split_sheet(ws, new_ws, first_block, table_data_start_row)
+            
             # Update the Table Title metadata row inside split sheet to include subtable name
             if block_subtitle:
                 self._update_split_sheet_table_title(new_ws, block_subtitle)
@@ -583,6 +587,56 @@ class TableMerger:
                 ws.cell(row=row_num, column=1).value = new_title
                 logger.debug(f"Updated Table Title: {current_title} -> {new_title}")
                 break
+
+    def _add_unit_indicator_to_split_sheet(self, source_ws: Worksheet, new_ws: Worksheet, 
+                                            first_block: Dict, data_start_row: int) -> None:
+        """
+        Add unit indicator ('$ in billions/millions') to split sheet header row.
+        
+        When a table is split, the new sub-table may have an empty first column in its
+        header row. This copies the unit indicator from the first block's header.
+        
+        Args:
+            source_ws: Original worksheet with unit indicator
+            new_ws: New split worksheet
+            first_block: First table block dict (contains unit indicator)
+            data_start_row: Row where table data starts in new_ws
+        """
+        if not first_block:
+            return
+        
+        # Find unit indicator in first block (usually in the header row)
+        unit_indicator = None
+        
+        # Search in the first block's data area for unit indicator
+        block_start = first_block.get('start_row', first_block.get('data_start_row', 13))
+        for row_num in range(block_start, min(block_start + 4, source_ws.max_row + 1)):
+            cell_val = source_ws.cell(row=row_num, column=1).value
+            if cell_val:
+                cell_str = str(cell_val).strip().lower()
+                if '$ in' in cell_str or 'in millions' in cell_str or 'in billions' in cell_str:
+                    unit_indicator = source_ws.cell(row=row_num, column=1).value
+                    break
+        
+        if not unit_indicator:
+            return
+        
+        # Find header row in new sheet (row with empty first col but has Q-codes in other cols)
+        for row_num in range(data_start_row, min(data_start_row + 4, new_ws.max_row + 1)):
+            first_col = new_ws.cell(row=row_num, column=1).value
+            first_val = str(first_col).strip() if first_col else ''
+            
+            # If first column is empty, check if other columns have Q-codes
+            if not first_val or first_val.lower() in ['', 'nan', 'none']:
+                # Check column 2 for Q-code pattern
+                col2_val = new_ws.cell(row=row_num, column=2).value
+                if col2_val:
+                    col2_str = str(col2_val).lower()
+                    if any(p in col2_str for p in ['q1-', 'q2-', 'q3-', 'q4-', 'ytd-']):
+                        # Found the header row - add unit indicator
+                        new_ws.cell(row=row_num, column=1).value = unit_indicator
+                        logger.debug(f"Added unit indicator '{unit_indicator}' to split sheet row {row_num}")
+                        return
 
     def _update_split_sheet_column_headers(self, ws: Worksheet, data_start_row: int) -> None:
         """

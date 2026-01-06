@@ -79,7 +79,7 @@ class EmbedStep(StepInterface):
         try:
             pbar = tqdm(
                 total=total_tables,
-                desc="🔢 Embedding",
+                desc="Embedding",
                 unit="table",
                 ncols=80,
                 bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
@@ -87,7 +87,7 @@ class EmbedStep(StepInterface):
             
             for doc_result in context.extracted_data:
                 filename = doc_result['file']
-                pbar.set_description(f"🔢 {filename[:25]}")
+                pbar.set_description(f"{filename[:25]}")
                 
                 pdf_hash = hashlib.md5(filename.encode()).hexdigest()
                 
@@ -132,21 +132,21 @@ class EmbedStep(StepInterface):
                     stats['total_embeddings'] += 1
                     pbar.update(1)
             
-            pbar.set_description("🔢 Embedding Complete")
+            pbar.set_description("Embedding Complete")
             pbar.close()
             
             # Store using vectordb manager
             if self.store_in_vectordb and all_chunks:
                 store_pbar = tqdm(
                     total=1,
-                    desc=f"💾 Storing in {vectordb_provider.upper()}",
+                    desc=f"Storing in {vectordb_provider.upper()}",
                     ncols=80,
                     bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt}'
                 )
                 vector_store.add_chunks(all_chunks)
                 stats['stored'] = len(all_chunks)
                 store_pbar.update(1)
-                store_pbar.set_description(f"💾 Stored {len(all_chunks)} chunks")
+                store_pbar.set_description(f"Stored {len(all_chunks)} chunks")
                 store_pbar.close()
             
             # Write to context

@@ -5,7 +5,9 @@ Common utility functions used by both ExcelTableExporter and ConsolidatedExcelEx
 """
 
 import re
-from typing import Optional
+from typing import Optional, Any, Union
+
+import pandas as pd
 
 
 class ExcelUtils:
@@ -103,6 +105,11 @@ class ExcelUtils:
         - "Difference between Contractual..."
         are grouped together.
         
+        Also strips Part numbers so tables with same content but different 
+        Part numbers across quarters can merge:
+        - "Wealth Management Metrics (Part 2)" -> "wealth management metrics"
+        - "Wealth Management Metrics (Part 5)" -> "wealth management metrics"
+        
         Args:
             title: Title to normalize
             clean_row_ranges: If True, remove (Rows X-Y) patterns
@@ -121,6 +128,10 @@ class ExcelUtils:
         if clean_row_ranges:
             # Remove row range patterns like (Rows 1-10)
             result = re.sub(r'\s*\(rows?\s*\d+[-–]\d+\)\s*$', '', result, flags=re.IGNORECASE)
+        
+        # Remove Part number patterns: "(Part 2)", "(Part 5)", etc.
+        # These can change between quarters but the table content stays same
+        result = re.sub(r'\s*\(part\s*\d+\)\s*', ' ', result, flags=re.IGNORECASE)
         
         # Remove leading section numbers
         result = re.sub(r'^\d+[\.:\s]+\s*', '', result)
@@ -161,7 +172,6 @@ class ExcelUtils:
         if not label:
             return ""
         
-        import pandas as pd
         if pd.isna(label):
             return ""
         
@@ -223,7 +233,6 @@ class ExcelUtils:
         if not text:
             return ""
         
-        import pandas as pd
         if pd.isna(text):
             return ""
         
@@ -290,7 +299,7 @@ class ExcelUtils:
         return text.strip()
     
     @staticmethod
-    def clean_currency_value(val) -> any:
+    def clean_currency_value(val) -> Union[float, str, Any]:
         """
         Convert currency string to float, keep special values as string.
         
@@ -308,7 +317,6 @@ class ExcelUtils:
             'N/A' -> 'N/A'
             '-' -> '-'
         """
-        import pandas as pd
         
         if pd.isna(val):
             return val
@@ -383,7 +391,6 @@ class ExcelUtils:
         Returns:
             Clean string suitable for Excel header
         """
-        import pandas as pd
         
         if pd.isna(val):
             return ''
@@ -411,7 +418,6 @@ class ExcelUtils:
         Returns:
             Float if currency/number, None otherwise
         """
-        import re
         
         if not val_str or not isinstance(val_str, str):
             return None
@@ -487,7 +493,6 @@ class ExcelUtils:
         Returns:
             Float for currency/numbers, string otherwise
         """
-        import pandas as pd
         
         if pd.isna(val):
             return ''

@@ -18,6 +18,10 @@ from src.pipeline.base import StepInterface, StepResult, StepStatus, PipelineCon
 from src.pipeline import PipelineResult, PipelineStep
 from src.utils import get_logger
 
+# External library imports (moved to module level for efficiency)
+import pandas as pd
+from openpyxl import load_workbook
+
 logger = get_logger(__name__)
 
 
@@ -77,8 +81,6 @@ class TransposeStep(StepInterface):
     
     def execute(self, context: PipelineContext) -> StepResult:
         """Execute transpose step."""
-        import pandas as pd
-        from openpyxl import load_workbook
         from src.core import get_paths
         from src.infrastructure.extraction.consolidation.consolidated_exporter_transpose import (
             create_transposed_dataframe,
@@ -155,43 +157,74 @@ class TransposeStep(StepInterface):
     
     def _process_sheet(self, source_path: Path, sheet_name: str, writer, stats: Dict):
         """Process and transpose a single sheet."""
-        import pandas as pd
         from src.infrastructure.extraction.consolidation.consolidated_exporter_transpose import (
             create_transposed_dataframe,
-            reconstruct_metadata_from_df
+            reconstruct_metadata_from_df,
+            skip_metadata_rows
         )
         
-        # Read the sheet
-        df = pd.read_excel(source_path, sheet_name=sheet_name)
+        # Read the sheet with no header (all rows as data)
+        df = pd.read_excel(source_path, sheet_name=sheet_name, header=None)
         
-        # Check for Row Label column (may be named differently)
-        first_col = df.columns[0] if len(df.columns) > 0 else None
-        if first_col is None:
-            logger.warning(f"Sheet {sheet_name} has no columns, skipping")
+        if df.empty:
+            logger.warning(f"Sheet {sheet_name} is empty, skipping")
             return
         
-        # If first column isn't 'Row Label', rename it
-        if first_col != 'Row Label' and 'Row Label' not in df.columns:
-            df = df.rename(columns={first_col: 'Row Label'})
+        # Find the header row (the one containing 'Row Label')
+        header_row_idx = None
+        for idx in range(min(20, len(df))):
+            first_cell = str(df.iloc[idx, 0]).strip() if pd.notna(df.iloc[idx, 0]) else ''
+            if first_cell == 'Row Label':
+                header_row_idx = idx
+                break
         
-        if 'Row Label' not in df.columns:
-            logger.warning(f"Sheet {sheet_name} has no Row Label column, skipping")
+        if header_row_idx is None:
+            logger.warning(f"Sheet {sheet_name} has no 'Row Label' header, skipping")
+            return
+        
+        # Set proper column headers from header row
+        headers = df.iloc[header_row_idx].tolist()
+        headers = [str(h) if pd.notna(h) else f'Unnamed_{i}' for i, h in enumerate(headers)]
+        
+        # Skip metadata rows and header row, keep only data rows
+        data_df = df.iloc[header_row_idx + 1:].reset_index(drop=True)
+        data_df.columns = headers
+        
+        # Ensure 'Row Label' column exists
+        if 'Row Label' not in data_df.columns:
+            logger.warning(f"Sheet {sheet_name} missing 'Row Label' column after processing, skipping")
             return
         
         # Reconstruct metadata for transpose
-        row_labels, label_to_section, normalized_row_labels = reconstruct_metadata_from_df(df)
+        row_labels, label_to_section, normalized_row_labels = reconstruct_metadata_from_df(data_df)
         
         # Transpose
         transposed_df = create_transposed_dataframe(
-            df, row_labels, label_to_section, normalized_row_labels
+            data_df, row_labels, label_to_section, normalized_row_labels
         )
+        
+        # Flatten MultiIndex columns before writing (pandas limitation)
+        # pd.DataFrame.to_excel doesn't support MultiIndex columns with index=False
+        if isinstance(transposed_df.columns, pd.MultiIndex):
+            # Sort the MultiIndex to avoid PerformanceWarning
+            transposed_df = transposed_df.sort_index(axis=1)
+            
+            # Convert MultiIndex to flat column names: "Category - Line Item"
+            flat_cols = []
+            for col in transposed_df.columns:
+                if isinstance(col, tuple):
+                    # Filter out empty parts and join with ' - '
+                    parts = [str(p).strip() for p in col if p and str(p).strip()]
+                    flat_cols.append(' - '.join(parts) if parts else 'Unnamed')
+                else:
+                    flat_cols.append(str(col))
+            transposed_df.columns = flat_cols
         
         # Write to output
         transposed_df.to_excel(writer, sheet_name=sheet_name, index=False)
     
     def _create_index_sheet(self, writer, total_sheets: int):
         """Create a simple index sheet for the transposed output."""
-        import pandas as pd
         
         index_data = {
             'Info': ['Transposed Tables Report'],
@@ -225,7 +258,7 @@ def run_transpose(
     if not step.validate(ctx):
         logger.warning("Validation failed - source file not found")
         return PipelineResult(
-            step=PipelineStep.TRANSPOSE if hasattr(PipelineStep, 'TRANSPOSE') else PipelineStep.CONSOLIDATE,
+            step=PipelineStep.TRANSPOSE,
             success=False,
             data={},
             message="Source file not found - run consolidate first",
@@ -236,7 +269,7 @@ def run_transpose(
     result = step.execute(ctx)
     
     return PipelineResult(
-        step=PipelineStep.TRANSPOSE if hasattr(PipelineStep, 'TRANSPOSE') else PipelineStep.CONSOLIDATE,
+        step=PipelineStep.TRANSPOSE,
         success=result.success,
         data=result.data,
         message=result.message,

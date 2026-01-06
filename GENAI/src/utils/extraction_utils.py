@@ -20,6 +20,8 @@ import hashlib
 import re
 import os
 
+import pandas as pd
+
 from src.domain.tables import TableMetadata
 from src.utils.logger import get_logger
 
@@ -473,11 +475,7 @@ class TableDataFrameConverter:
     @classmethod
     def html_to_dataframe(cls, html_content: str, index_col: int = 0) -> 'pd.DataFrame':
         """Convert HTML table to pandas DataFrame."""
-        try:
-            import pandas as pd
-            from io import StringIO
-        except ImportError:
-            raise ImportError("pandas is required: pip install pandas")
+        from io import StringIO
         
         tables = pd.read_html(StringIO(html_content))
         
@@ -500,10 +498,6 @@ class TableDataFrameConverter:
     @classmethod
     def markdown_to_dataframe(cls, markdown_content: str, index_col: int = 0) -> 'pd.DataFrame':
         """Convert markdown table to pandas DataFrame."""
-        try:
-            import pandas as pd
-        except ImportError:
-            raise ImportError("pandas is required: pip install pandas")
         
         lines = [line.strip() for line in markdown_content.split('\n') if line.strip()]
         
@@ -554,7 +548,6 @@ class TableDataFrameConverter:
     @classmethod
     def compare_periods(cls, df: 'pd.DataFrame', period1: str, period2: str) -> 'pd.DataFrame':
         """Create comparison DataFrame between two periods."""
-        import pandas as pd
         
         col1 = cls._find_column(df, period1)
         col2 = cls._find_column(df, period2)
@@ -607,19 +600,17 @@ class TableDataFrameConverter:
     
     @staticmethod
     def _normalize_row_label(label: str) -> str:
-        """Normalize row label."""
-        label = re.sub(r'\s+\d+$', '', label)
-        label = re.sub(r'\(\d+\)$', '', label)
-        return label.strip()
+        """Normalize row label. Delegates to ExcelUtils for centralized logic."""
+        from src.utils.excel_utils import ExcelUtils
+        return ExcelUtils.normalize_row_label(label)
     
     @staticmethod
     def _clean_currency_value(value) -> str:
         """Clean currency value for display."""
         try:
-            import pandas as pd
             if pd.isna(value):
                 return ''
-        except:
+        except (TypeError, ValueError):
             if value is None:
                 return ''
         value = str(value).strip()
@@ -633,10 +624,9 @@ class TableDataFrameConverter:
         if not value:
             return 0.0
         try:
-            import pandas as pd
             if pd.isna(value):
                 return 0.0
-        except:
+        except (TypeError, ValueError):
             pass
         cleaned = re.sub(r'[$,\s]', '', str(value))
         if cleaned.startswith('(') and cleaned.endswith(')'):

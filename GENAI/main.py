@@ -48,7 +48,7 @@ from config.settings import settings
 from src.pipeline.steps import (
     run_download,
     run_extract,
-    run_process,
+    ProcessStep,  # Class-based API (no run_process wrapper)
     run_embed,
     run_view_db,
     run_search,
@@ -57,6 +57,34 @@ from src.pipeline.steps import (
     run_process_advanced,
     run_transpose,
 )
+from src.pipeline.base import PipelineContext, StepStatus
+from src.pipeline import PipelineStep, PipelineResult
+
+
+def run_process(source_dir=None, dest_dir=None):
+    """Execute ProcessStep using class-based API."""
+    step = ProcessStep(source_dir=source_dir, dest_dir=dest_dir)
+    ctx = PipelineContext()
+    
+    if not step.validate(ctx):
+        return PipelineResult(
+            step=PipelineStep.PROCESS,
+            success=False,
+            data={},
+            message="No files to process - validation failed",
+            error="Validation failed: source directory empty or missing"
+        )
+    
+    result = step.execute(ctx)
+    
+    return PipelineResult(
+        step=PipelineStep.PROCESS,
+        success=result.status in (StepStatus.SUCCESS, StepStatus.PARTIAL_SUCCESS),
+        data=result.data,
+        message=result.message,
+        error=result.error,
+        metadata=result.metadata
+    )
 
 # Import CLI helpers
 from src.utils.helpers import (
@@ -109,7 +137,7 @@ def download(
         python main.py download --yr 25 --m 03  # Q1 2025
         python main.py download --yr 20-25      # All 2020-2025
     """
-    console.print("\n[bold green]📥 Step 1: Download Files[/bold green]\n")
+    console.print("\n[bold green]Step 1: Download Files[/bold green]\n")
     
     if not check_download_enabled():
         return
@@ -148,17 +176,17 @@ def extract(
         python main.py extract --force  # Full re-extraction
         python main.py extract --skip-advanced --skip-consolidate  # Extraction only
     """
-    console.print("\n[bold green]📄 Step 2: Extract Tables[/bold green]\n")
+    console.print("\n[bold green]Step 2: Extract Tables[/bold green]\n")
     
     # Step 1: Extract
     console.print("[bold]Step 1: Extract Tables from PDFs[/bold]")
     result = run_extract(source_dir=source, force=force)
     
     if not result.success:
-        console.print(f"[red]✗ Extraction failed: {result.error}[/red]")
+        console.print(f"[red]Extraction failed: {result.error}[/red]")
         raise typer.Exit(code=1)
     
-    console.print(f"[green]✓ {result.message}[/green]")
+    console.print(f"[green]{result.message}[/green]")
     
     # Step 2: Process (data normalization) - NEW!
     if not skip_process:
@@ -166,9 +194,9 @@ def extract(
         process_result = run_process()
         
         if process_result.success:
-            console.print(f"[green]✓ {process_result.message}[/green]")
+            console.print(f"[green]{process_result.message}[/green]")
         else:
-            console.print(f"[yellow]⚠ Processing: {process_result.error}[/yellow]")
+            console.print(f"[yellow]Processing: {process_result.error}[/yellow]")
     else:
         console.print("\n[dim]Step 2: Process Data (skipped)[/dim]")
     
@@ -178,9 +206,9 @@ def extract(
         advanced_result = run_process_advanced()
         
         if advanced_result.success:
-            console.print(f"[green]✓ {advanced_result.message}[/green]")
+            console.print(f"[green]{advanced_result.message}[/green]")
         else:
-            console.print(f"[yellow]⚠ Advanced processing: {advanced_result.error}[/yellow]")
+            console.print(f"[yellow]Advanced processing: {advanced_result.error}[/yellow]")
     else:
         console.print("\n[dim]Step 3: Advanced Processing (skipped)[/dim]")
     
@@ -190,9 +218,9 @@ def extract(
         consolidate_result = run_consolidate(table_title=None, output_format='both')
         
         if consolidate_result.success:
-            console.print(f"[green]✓ {consolidate_result.message}[/green]")
+            console.print(f"[green]{consolidate_result.message}[/green]")
         else:
-            console.print(f"[yellow]⚠ Consolidation: {consolidate_result.error}[/yellow]")
+            console.print(f"[yellow]Consolidation: {consolidate_result.error}[/yellow]")
     else:
         console.print("\n[dim]Step 4: Consolidate (skipped)[/dim]")
     
@@ -202,13 +230,13 @@ def extract(
         transpose_result = run_transpose()
         
         if transpose_result.success:
-            console.print(f"[green]✓ {transpose_result.message}[/green]")
+            console.print(f"[green]{transpose_result.message}[/green]")
         else:
-            console.print(f"[yellow]⚠ Transpose: {transpose_result.error}[/yellow]")
+            console.print(f"[yellow]Transpose: {transpose_result.error}[/yellow]")
     else:
         console.print("\n[dim]Step 5: Transpose (skipped)[/dim]")
     
-    console.print("\n[bold green]✓ Extraction Pipeline Complete![/bold green]")
+    console.print("\n[bold green]Extraction Pipeline Complete![/bold green]")
     console.print()
 
 
@@ -229,7 +257,7 @@ def embed(
         python main.py embed --source ./raw_data
         python main.py embed --source ./raw_data --local  # Offline mode
     """
-    console.print("\n[bold green]🔢 Steps 3-4: Extract + Embed + Store[/bold green]\n")
+    console.print("\n[bold green]Steps 3-4: Extract + Embed + Store[/bold green]\n")
     
     set_local_embedding_mode(local)
     
@@ -238,10 +266,10 @@ def embed(
     extract_result = run_extract(source_dir=source, force=force)
     
     if not extract_result.success:
-        console.print(f"[red]✗ Extraction failed: {extract_result.error}[/red]")
+        console.print(f"[red]Extraction failed: {extract_result.error}[/red]")
         raise typer.Exit(code=1)
     
-    console.print(f"[green]✓ {extract_result.message}[/green]")
+    console.print(f"[green]{extract_result.message}[/green]")
     
     # Step 4: Embed
     console.print("[cyan]Generating embeddings...[/cyan]")
@@ -268,14 +296,14 @@ def view_db(
         python main.py view-db --count 10
         python main.py view-db --local  # Offline mode
     """
-    console.print("\n[bold green]🗄️ Step 5: FAISS Database View[/bold green]\n")
+    console.print("\n[bold green]Step 5: FAISS Database View[/bold green]\n")
     
     set_local_embedding_mode(local)
     
     result = run_view_db(show_sample=sample, sample_count=count)
     
     if not result.success:
-        console.print(f"[red]✗ Error: {result.error}[/red]")
+        console.print(f"[red]Error: {result.error}[/red]")
         raise typer.Exit(code=1)
     
     db_info = result.data
@@ -288,7 +316,7 @@ def view_db(
     if db_info.get('table_titles'):
         console.print("[bold]Table Titles (first 20):[/bold]")
         for title in db_info['table_titles']:
-            console.print(f"  • {title}")
+            console.print(f"  - {title}")
         console.print()
     
     # Samples
@@ -336,7 +364,7 @@ def search(
         python main.py search "revenue" --local  # Offline mode
         python main.py search "revenue" --export  # Export to CSV
     """
-    console.print(f"\n[bold green]🔍 Step 6: FAISS Search[/bold green]\n")
+    console.print(f"\n[bold green]Step 6: FAISS Search[/bold green]\n")
     console.print(f"[cyan]Query:[/cyan] {query}\n")
     
     set_local_embedding_mode(local)
@@ -350,7 +378,7 @@ def search(
     result = run_search(query=query, top_k=top_k, filters=filters if filters else None)
     
     if not result.success:
-        console.print(f"[red]✗ Error: {result.error}[/red]")
+        console.print(f"[red]Error: {result.error}[/red]")
         raise typer.Exit(code=1)
     
     console.print(f"[green]Found {len(result.data)} results[/green]\n")
@@ -361,7 +389,7 @@ def search(
     # Export to CSV if requested
     if export:
         csv_path = export_results_to_csv(result.data, query)
-        console.print(f"\n[green]✓ Results exported to: {csv_path}[/green]")
+        console.print(f"\n[green]Results exported to: {csv_path}[/green]")
     
     console.print()
 
@@ -384,7 +412,7 @@ def query(
         python main.py query "What was revenue in Q1 2025?"
         python main.py query "What was revenue?" --local  # Offline embeddings
     """
-    console.print(f"\n[bold green]🤖 Step 7: LLM Query[/bold green]\n")
+    console.print(f"\n[bold green]Step 7: LLM Query[/bold green]\n")
     console.print(f"[cyan]Question:[/cyan] {question}\n")
     
     set_local_embedding_mode(local)
@@ -395,7 +423,7 @@ def query(
         console.print(f"[bold green]Answer:[/bold green]")
         console.print(result.data['answer'])
     else:
-        console.print(f"[red]✗ Error: {result.error}[/red]")
+        console.print(f"[red]Error: {result.error}[/red]")
         raise typer.Exit(code=1)
     
     console.print()
@@ -410,34 +438,43 @@ def consolidate(
     table_title: Optional[str] = typer.Argument(None, help="Table title to consolidate (leave empty to merge ALL tables)"),
     output_dir: str = typer.Option(None, "--output", "-o", help="Output directory"),
     format: str = typer.Option("both", "--format", "-f", help="csv, excel, or both"),
-    transpose: bool = typer.Option(True, "--transpose/--no-transpose", help="Timeseries format")
+    skip_transpose: bool = typer.Option(False, "--skip-transpose", help="Skip transpose step")
 ) -> None:
     """
     Steps 8-9: Consolidate tables and export as timeseries.
+    
+    Pipeline: Consolidate → Transpose
     
     Examples:
         python main.py consolidate "Balance Sheet"
         python main.py consolidate --format excel  # Merge ALL tables from extractions
     """
-    console.print(f"\n[bold green]📊 Steps 8-9: Consolidate + Export[/bold green]\n")
+    console.print(f"\n[bold green]Steps 8-9: Consolidate + Export[/bold green]\n")
     if table_title:
         console.print(f"[cyan]Table:[/cyan] {table_title}\n")
     else:
         console.print(f"[cyan]Merging ALL extracted tables into consolidated report...[/cyan]\n")
     
+    # Step 1: Consolidate
+    console.print("[bold]Step 1: Consolidate Tables[/bold]")
     result = run_consolidate(
         table_title=table_title,
         output_format=format,
         output_dir=output_dir,
-        transpose=transpose
+        transpose=False  # We'll run transpose separately
     )
     
     if not result.success:
-        console.print(f"[red]✗ Error: {result.error}[/red]")
+        console.print(f"[red]Error: {result.error}[/red]")
         raise typer.Exit(code=1)
     
-    console.print(f"[green]✓ {result.message}[/green]")
-    console.print(f"[dim]Rows: {result.metadata.get('total_rows', 0)}, Columns: {result.metadata.get('total_columns', 0)}[/dim]")
+    console.print(f"[green]{result.message}[/green]")
+    
+    # Display appropriate metadata based on mode
+    if result.metadata.get('mode') == 'full_merge':
+        console.print(f"[dim]Tables merged: {result.metadata.get('tables_merged', 0)}, Sources: {result.metadata.get('sources_merged', 0)} files[/dim]")
+    else:
+        console.print(f"[dim]Rows: {result.metadata.get('total_rows', 0)}, Columns: {result.metadata.get('total_columns', 0)}[/dim]")
     console.print(f"[dim]Quarters: {', '.join(result.metadata.get('quarters_included', []))}[/dim]")
     
     export_paths = result.data.get('export_paths', {})
@@ -446,7 +483,21 @@ def consolidate(
         for fmt, path in export_paths.items():
             console.print(f"  {fmt.upper()}: [cyan]{path}[/cyan]")
     
+    # Step 2: Transpose
+    if not skip_transpose:
+        console.print("\n[bold]Step 2: Transpose Tables[/bold]")
+        transpose_result = run_transpose()
+        
+        if transpose_result.success:
+            console.print(f"[green]{transpose_result.message}[/green]")
+        else:
+            console.print(f"[yellow]Transpose: {transpose_result.error}[/yellow]")
+    else:
+        console.print("\n[dim]Step 2: Transpose (skipped)[/dim]")
+    
+    console.print("\n[bold green]Consolidation Pipeline Complete![/bold green]")
     console.print()
+
 
 
 # ============================================================================
@@ -456,28 +507,34 @@ def consolidate(
 @app.command("process-advanced")
 def process_advanced(
     source: str = typer.Option(None, "--source", "-s", help="Source directory (default: data/processed)"),
-    dest: str = typer.Option(None, "--dest", "-d", help="Destination directory (default: data/processed_advanced)")
+    dest: str = typer.Option(None, "--dest", "-d", help="Destination directory (default: data/processed_advanced)"),
+    skip_consolidate: bool = typer.Option(False, "--skip-consolidate", help="Skip consolidate step"),
+    skip_transpose: bool = typer.Option(False, "--skip-transpose", help="Skip transpose step")
 ) -> None:
     """
     Step 10: Advanced processing - merge tables with identical row labels.
+    
+    Pipeline: Process-Advanced → Consolidate → Transpose
     
     Reads xlsx files from data/processed/, merges tables within the same sheet
     that have matching Column A (row labels), and outputs to data/processed_advanced/.
     
     Examples:
         python main.py process-advanced
-        python main.py process-advanced --source ./data/processed --dest ./data/processed_advanced
+        python main.py process-advanced --skip-consolidate  # Only advanced processing
     """
-    console.print("\n[bold green]📊 Step 10: Advanced Table Processing[/bold green]\n")
+    console.print("\n[bold green]Step 10: Advanced Table Processing[/bold green]\n")
     console.print("[cyan]Merging tables with identical row labels...[/cyan]\n")
     
+    # Step 1: Process Advanced
+    console.print("[bold]Step 1: Advanced Processing (Table Merging)[/bold]")
     result = run_process_advanced(source_dir=source, dest_dir=dest)
     
     if not result.success:
-        console.print(f"[red]✗ Error: {result.error}[/red]")
+        console.print(f"[red]Error: {result.error}[/red]")
         raise typer.Exit(code=1)
     
-    console.print(f"[green]✓ {result.message}[/green]")
+    console.print(f"[green]{result.message}[/green]")
     console.print(f"[dim]Files processed: {result.data.get('files_processed', 0)}[/dim]")
     console.print(f"[dim]Files with merges: {result.data.get('files_with_merges', 0)}[/dim]")
     console.print(f"[dim]Tables merged: {result.data.get('tables_merged', 0)}[/dim]")
@@ -490,9 +547,35 @@ def process_advanced(
     if result.data.get('errors'):
         console.print("\n[bold yellow]Warnings:[/bold yellow]")
         for err in result.data['errors']:
-            console.print(f"  [yellow]⚠ {err}[/yellow]")
+            console.print(f"  [yellow]{err}[/yellow]")
     
+    # Step 2: Consolidate
+    if not skip_consolidate:
+        console.print("\n[bold]Step 2: Consolidate Tables[/bold]")
+        consolidate_result = run_consolidate(table_title=None, output_format='both')
+        
+        if consolidate_result.success:
+            console.print(f"[green]{consolidate_result.message}[/green]")
+        else:
+            console.print(f"[yellow]Consolidation: {consolidate_result.error}[/yellow]")
+    else:
+        console.print("\n[dim]Step 2: Consolidate (skipped)[/dim]")
+    
+    # Step 3: Transpose
+    if not skip_transpose and not skip_consolidate:
+        console.print("\n[bold]Step 3: Transpose Tables[/bold]")
+        transpose_result = run_transpose()
+        
+        if transpose_result.success:
+            console.print(f"[green]{transpose_result.message}[/green]")
+        else:
+            console.print(f"[yellow]Transpose: {transpose_result.error}[/yellow]")
+    else:
+        console.print("\n[dim]Step 3: Transpose (skipped)[/dim]")
+    
+    console.print("\n[bold green]Advanced Processing Pipeline Complete![/bold green]")
     console.print()
+
 
 
 # ============================================================================
@@ -519,17 +602,17 @@ def process(
         python main.py process --skip-advanced  # Skip remaining steps
         python main.py process --source ./data/extracted_raw
     """
-    console.print("\n[bold green]🔧 Step 2: Process Data[/bold green]\n")
+    console.print("\n[bold green]Step 2: Process Data[/bold green]\n")
     console.print("[cyan]Normalizing and cleaning extracted data...[/cyan]\n")
     
     # Step 1: Process
     result = run_process(source_dir=source, dest_dir=dest)
     
     if not result.success:
-        console.print(f"[red]✗ Error: {result.error}[/red]")
+        console.print(f"[red]Error: {result.error}[/red]")
         raise typer.Exit(code=1)
     
-    console.print(f"[green]✓ {result.message}[/green]")
+    console.print(f"[green]{result.message}[/green]")
     console.print(f"[dim]Files processed: {result.data.get('files_processed', 0)}[/dim]")
     
     # Step 2: Process Advanced
@@ -538,9 +621,9 @@ def process(
         advanced_result = run_process_advanced()
         
         if advanced_result.success:
-            console.print(f"[green]✓ {advanced_result.message}[/green]")
+            console.print(f"[green]{advanced_result.message}[/green]")
         else:
-            console.print(f"[yellow]⚠ Advanced processing: {advanced_result.error}[/yellow]")
+            console.print(f"[yellow]Advanced processing: {advanced_result.error}[/yellow]")
     else:
         console.print("\n[dim]Step 3: Advanced Processing (skipped)[/dim]")
     
@@ -550,9 +633,9 @@ def process(
         consolidate_result = run_consolidate(table_title=None, output_format='both')
         
         if consolidate_result.success:
-            console.print(f"[green]✓ {consolidate_result.message}[/green]")
+            console.print(f"[green]{consolidate_result.message}[/green]")
         else:
-            console.print(f"[yellow]⚠ Consolidation: {consolidate_result.error}[/yellow]")
+            console.print(f"[yellow]Consolidation: {consolidate_result.error}[/yellow]")
     else:
         console.print("\n[dim]Step 4: Consolidate (skipped)[/dim]")
     
@@ -562,13 +645,13 @@ def process(
         transpose_result = run_transpose()
         
         if transpose_result.success:
-            console.print(f"[green]✓ {transpose_result.message}[/green]")
+            console.print(f"[green]{transpose_result.message}[/green]")
         else:
-            console.print(f"[yellow]⚠ Transpose: {transpose_result.error}[/yellow]")
+            console.print(f"[yellow]Transpose: {transpose_result.error}[/yellow]")
     else:
         console.print("\n[dim]Step 5: Transpose (skipped)[/dim]")
     
-    console.print("\n[bold green]✓ Processing Pipeline Complete![/bold green]")
+    console.print("\n[bold green]Processing Pipeline Complete![/bold green]")
     console.print()
 
 
@@ -590,16 +673,16 @@ def transpose(
         python main.py transpose
         python main.py transpose --source ./data/extracted/consolidated_tables.xlsx
     """
-    console.print("\n[bold green]🔄 Step 5: Transpose Tables[/bold green]\n")
+    console.print("\n[bold green]Step 5: Transpose Tables[/bold green]\n")
     console.print("[cyan]Converting to time-series format...[/cyan]\n")
     
     result = run_transpose(source_file=source, output_file=output)
     
     if not result.success:
-        console.print(f"[red]✗ Error: {result.error}[/red]")
+        console.print(f"[red]Error: {result.error}[/red]")
         raise typer.Exit(code=1)
     
-    console.print(f"[green]✓ {result.message}[/green]")
+    console.print(f"[green]{result.message}[/green]")
     console.print(f"[dim]Sheets processed: {result.data.get('sheets_processed', 0)}[/dim]")
     console.print(f"[dim]Sheets skipped: {result.data.get('sheets_skipped', 0)}[/dim]")
     
@@ -609,7 +692,7 @@ def transpose(
     if result.data.get('errors'):
         console.print("\n[bold yellow]Warnings:[/bold yellow]")
         for err in result.data['errors']:
-            console.print(f"  [yellow]⚠ {err}[/yellow]")
+            console.print(f"  [yellow]{err}[/yellow]")
     
     console.print()
 
@@ -621,7 +704,7 @@ def transpose(
 @app.command()
 def interactive() -> None:
     """Start interactive query mode."""
-    console.print("\n[bold green]💬 Interactive Query Mode[/bold green]")
+    console.print("\n[bold green]Interactive Query Mode[/bold green]")
     console.print("[dim]Type 'exit' to quit[/dim]\n")
     
     while True:
@@ -666,7 +749,7 @@ def pipeline(
         python main.py pipeline --yr 20-25
         python main.py pipeline --yr 25 --skip-embed  # Skip embedding
     """
-    console.print("\n[bold green]🚀 Running Complete Pipeline[/bold green]\n")
+    console.print("\n[bold green]Running Complete Pipeline[/bold green]\n")
     console.print("[dim]Pipeline: Download → Extract → Process → Process-Advanced → Consolidate → Transpose → Embed[/dim]\n")
     
     # Use source or settings default
@@ -677,64 +760,64 @@ def pipeline(
     console.print("[bold]Step 1: Download[/bold]")
     download_result = run_download(year_range=yr, month=m, output_dir=source)
     if download_result.success:
-        console.print(f"  [green]✓ {download_result.message}[/green]")
+        console.print(f"  [green]{download_result.message}[/green]")
     else:
-        console.print(f"  [yellow]⚠ {download_result.error}[/yellow]")
+        console.print(f"  [yellow]{download_result.error}[/yellow]")
     
     # Step 2: Extract
     console.print("\n[bold]Step 2: Extract Tables[/bold]")
     extract_result = run_extract(source_dir=source, force=force)
     if extract_result.success:
-        console.print(f"  [green]✓ {extract_result.message}[/green]")
+        console.print(f"  [green]{extract_result.message}[/green]")
     else:
-        console.print(f"  [red]✗ {extract_result.error}[/red]")
+        console.print(f"  [red]{extract_result.error}[/red]")
         raise typer.Exit(code=1)
     
     # Step 3: Process (data normalization)
     console.print("\n[bold]Step 3: Process Data[/bold]")
     process_result = run_process()
     if process_result.success:
-        console.print(f"  [green]✓ {process_result.message}[/green]")
+        console.print(f"  [green]{process_result.message}[/green]")
     else:
-        console.print(f"  [yellow]⚠ {process_result.error}[/yellow]")
+        console.print(f"  [yellow]{process_result.error}[/yellow]")
     
     # Step 4: Process Advanced (merge tables with identical row labels)
     console.print("\n[bold]Step 4: Advanced Processing (Table Merging)[/bold]")
     advanced_result = run_process_advanced()
     if advanced_result.success:
-        console.print(f"  [green]✓ {advanced_result.message}[/green]")
+        console.print(f"  [green]{advanced_result.message}[/green]")
     else:
-        console.print(f"  [yellow]⚠ {advanced_result.error}[/yellow]")
+        console.print(f"  [yellow]{advanced_result.error}[/yellow]")
     
     # Step 5: Consolidate tables
     console.print("\n[bold]Step 5: Consolidate Tables[/bold]")
     consolidate_result = run_consolidate(table_title=None, output_format='both')
     if consolidate_result.success:
-        console.print(f"  [green]✓ {consolidate_result.message}[/green]")
+        console.print(f"  [green]{consolidate_result.message}[/green]")
     else:
-        console.print(f"  [yellow]⚠ {consolidate_result.error}[/yellow]")
+        console.print(f"  [yellow]{consolidate_result.error}[/yellow]")
     
     # Step 6: Transpose (time-series conversion)
     console.print("\n[bold]Step 6: Transpose Tables[/bold]")
     transpose_result = run_transpose()
     if transpose_result.success:
-        console.print(f"  [green]✓ {transpose_result.message}[/green]")
+        console.print(f"  [green]{transpose_result.message}[/green]")
     else:
-        console.print(f"  [yellow]⚠ {transpose_result.error}[/yellow]")
+        console.print(f"  [yellow]{transpose_result.error}[/yellow]")
     
     # Step 7: Embed (optional)
     if not skip_embed:
         console.print("\n[bold]Step 7: Embed + Store[/bold]")
         embed_result = run_embed(extracted_data=extract_result.data)
         if embed_result.success:
-            console.print(f"  [green]✓ {embed_result.message}[/green]")
+            console.print(f"  [green]{embed_result.message}[/green]")
         else:
-            console.print(f"  [red]✗ {embed_result.error}[/red]")
+            console.print(f"  [red]{embed_result.error}[/red]")
             raise typer.Exit(code=1)
     else:
         console.print("\n[dim]Step 7: Embed (skipped)[/dim]")
     
-    console.print("\n[bold green]✓ Pipeline Complete![/bold green]")
+    console.print("\n[bold green]Pipeline Complete![/bold green]")
     console.print("[cyan]Ready for queries. Try:[/cyan]")
     console.print("  python main.py view-db")
     console.print("  python main.py search \"revenue\"")
@@ -790,7 +873,7 @@ def clear_cache(
         include_vectordb = False
         include_reports = False
     elif all:
-        if not dry_run and not typer.confirm("⚠️  This will delete ALL caches including vectordb. Continue?"):
+        if not dry_run and not typer.confirm("This will delete ALL caches including vectordb. Continue?"):
             console.print("[yellow]Cancelled[/yellow]")
             return
         include_pycache = True
@@ -804,7 +887,7 @@ def clear_cache(
         include_reports = reports
         
         if include_vectordb and not dry_run:
-            if not typer.confirm("⚠️  This will delete vector databases. Continue?"):
+            if not typer.confirm("This will delete vector databases. Continue?"):
                 console.print("[yellow]Cancelled[/yellow]")
                 return
     
@@ -818,7 +901,7 @@ def clear_cache(
         )
         
         if not dry_run:
-            console.print("[green]✓ Cleanup complete[/green]")
+            console.print("[green]Cleanup complete[/green]")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
 

@@ -173,7 +173,7 @@ def set_local_embedding_mode(local: bool) -> None:
         local: Boolean flag indicating if local mode should be used
     """
     if local:
-        console.print("[yellow]📴 Offline mode: Using local embeddings[/yellow]\n")
+        console.print("[yellow]Offline mode: Using local embeddings[/yellow]\n")
         settings.EMBEDDING_PROVIDER = "local"
 
 
@@ -185,7 +185,7 @@ def check_download_enabled() -> bool:
         True if downloads are enabled, False otherwise
     """
     if hasattr(settings, 'DOWNLOAD_ENABLED') and not settings.DOWNLOAD_ENABLED:
-        console.print("[yellow]⚠ Download disabled (DOWNLOAD_ENABLED=False in .env)[/yellow]")
+        console.print("[yellow]Download disabled (DOWNLOAD_ENABLED=False in .env)[/yellow]")
         console.print("[dim]Set DOWNLOAD_ENABLED=True to enable downloads[/dim]")
         return False
     return True
@@ -319,11 +319,11 @@ def handle_pipeline_result(
     """
     if result.success:
         msg = success_message or result.message
-        console.print(f"[green]✓ {msg}[/green]")
+        console.print(f"[green]{msg}[/green]")
         if show_metadata and result.metadata:
             for key, value in result.metadata.items():
                 if key in ['processed', 'total_rows', 'total_columns']:
                     console.print(f"[dim]{key}: {value}[/dim]")
     else:
-        console.print(f"[red]✗ Error: {result.error}[/red]")
+        console.print(f"[red]Error: {result.error}[/red]")
         raise typer.Exit(code=1)

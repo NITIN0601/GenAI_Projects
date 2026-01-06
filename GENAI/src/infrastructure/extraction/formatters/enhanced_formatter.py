@@ -176,11 +176,11 @@ class EnhancedTableFormatter:
         
         # Header information
         if header_info['has_multi_level']:
-            output.append(f"\n📋 Multi-Level Headers:")
+            output.append(f"\nMulti-Level Headers:")
             output.append(f"   Main Header: {header_info['main_header']}")
             output.append(f"   Sub Headers: {' | '.join(header_info['sub_headers'])}")
         else:
-            output.append(f"\n📋 Column Headers: {' | '.join(header_info['sub_headers'])}")
+            output.append(f"\nColumn Headers: {' | '.join(header_info['sub_headers'])}")
         
         # Subsections
         if subsections:
@@ -202,7 +202,7 @@ class EnhancedTableFormatter:
             output.append(f"\n💰 Currency Values: {currency_count} cells with $ symbol")
         
         # Table content
-        output.append(f"\n📄 Table:")
+        output.append(f"\nTable:")
         output.append("-" * 80)
         for line in lines[:25]:
             output.append(line)

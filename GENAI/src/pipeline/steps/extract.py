@@ -81,14 +81,14 @@ class ExtractStep(StepInterface):
             
             pbar = tqdm(
                 total=len(pdf_files),
-                desc="📄 Extracting",
+                desc="Extracting",
                 unit="file",
                 ncols=80,
                 bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
             )
             
             for pdf_path in pdf_files:
-                pbar.set_description(f"📄 {pdf_path.name[:25]}")
+                pbar.set_description(f"{pdf_path.name[:25]}")
                 
                 # Pass force flag to extractor
                 result = extractor.extract(str(pdf_path), force=self.force)
@@ -108,7 +108,7 @@ class ExtractStep(StepInterface):
                 
                 pbar.update(1)
             
-            pbar.set_description("📄 Extraction Complete")
+            pbar.set_description("Extraction Complete")
             pbar.close()
             
             # Write to context for next step

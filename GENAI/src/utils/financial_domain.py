@@ -163,6 +163,12 @@ NEW_TABLE_HEADER_PATTERNS = [
     
     # Generic period patterns
     'for the period', 'for the year', 'for the quarter',
+    
+    # Normalized period codes (after process step converts to Q-codes)
+    # These patterns are needed because process_advanced runs AFTER process step
+    'q1-qtd-', 'q2-qtd-', 'q3-qtd-', 'q4-qtd-',  # Quarterly (3-month periods)
+    'q1-ytd-', 'q2-ytd-', 'q3-ytd-', 'q4-ytd-',  # Year-to-date periods
+    'ytd-20',  # YTD patterns for 10-K reports
 ]
 
 # Year range for validation (fallback to constants if settings unavailable)

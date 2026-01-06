@@ -90,6 +90,10 @@ def _sort_chronologically(df: pd.DataFrame, dates_col) -> pd.DataFrame:
     
     # Create sort key column - handle both regular and MultiIndex columns
     try:
+        # Sort MultiIndex columns to avoid PerformanceWarning during indexing
+        if isinstance(df.columns, pd.MultiIndex):
+            df = df.sort_index(axis=1)
+        
         if dates_col in df.columns:
             df = df.copy()  # Avoid SettingWithCopyWarning
             df['_sort_key'] = df[dates_col].apply(get_sort_key)
@@ -216,7 +220,7 @@ def create_transposed_dataframe(
     return result_df
 
 
-def reconstruct_metadata_from_df(df: pd.DataFrame, first_col: str = None) -> Tuple[List[str], Dict[str, str], Dict[str, str]]:
+def reconstruct_metadata_from_df(df: pd.DataFrame, first_col: Optional[str] = None) -> Tuple[List[str], Dict[str, str], Dict[str, str]]:
     """
     Reconstruct row_labels, label_to_section, and normalized_row_labels from a DataFrame.
     
@@ -257,9 +261,16 @@ def reconstruct_metadata_from_df(df: pd.DataFrame, first_col: str = None) -> Tup
             is_empty = True
             for col in data_cols:
                 val = row[col]
-                if pd.notna(val) and str(val).strip() not in ['', 'nan']: 
-                    is_empty = False
-                    break
+                # Handle case where val is a Series (duplicate column names)
+                if isinstance(val, pd.Series):
+                    # If any value in the series is not empty, it's not a category
+                    if val.notna().any() and any(str(v).strip() not in ['', 'nan'] for v in val):
+                        is_empty = False
+                        break
+                else:
+                    if pd.notna(val) and str(val).strip() not in ['', 'nan']: 
+                        is_empty = False
+                        break
             
             if is_empty:
                 is_category = True

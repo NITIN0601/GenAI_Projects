@@ -75,7 +75,7 @@ def generate_file_urls(base_url, year, month=None, file_extension="pdf"):
             
             # Skip if file shouldn't exist yet
             if now < filing_available_date:
-                logger.info(f"⏭️  Skipping {m}/{year_padded} - Not available until {filing_available_date.strftime('%Y-%m-%d')}")
+                logger.info(f"Skipping {m}/{year_padded} - Not available until {filing_available_date.strftime('%Y-%m-%d')}")
                 continue
             
             # SPECIAL CASE: Q1 2023 uses 05 instead of 03
@@ -151,7 +151,7 @@ def _download_single_file(full_url, download_dir, timeout, max_retries):
     if local_path.exists():
         file_size = local_path.stat().st_size
         if file_size > 0:  # Valid file exists
-            logger.info(f"⚡ {file_name}.pdf - Already exists ({file_size / 1024 / 1024:.2f} MB)")
+            logger.info(f"{file_name}.pdf - Already exists ({file_size / 1024 / 1024:.2f} MB)")
             return (file_name, True, "Already exists (skipped)", file_size)
     
     attempt = 0
@@ -164,7 +164,7 @@ def _download_single_file(full_url, download_dir, timeout, max_retries):
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
             
-            logger.info(f"📥 Downloading {file_name}.pdf (attempt {attempt}/{max_retries})...")
+            logger.info(f"Downloading {file_name}.pdf (attempt {attempt}/{max_retries})...")
             
             # Get file size first
             response = requests.get(full_url, stream=True, timeout=timeout, headers=headers)
@@ -194,12 +194,12 @@ def _download_single_file(full_url, download_dir, timeout, max_retries):
             
         except RequestException as e:
             if attempt == max_retries:
-                logger.error(f"✗ {file_name}.pdf - Failed after {max_retries} attempts: {e}")
+                logger.error(f"{file_name}.pdf - Failed after {max_retries} attempts: {e}")
                 return (file_name, False, f"Failed after {max_retries} attempts: {e}", 0)
-            logger.warning(f"⚠ {file_name}.pdf - Attempt {attempt} failed, retrying...")
+            logger.warning(f"{file_name}.pdf - Attempt {attempt} failed, retrying...")
                 
         except IOError as e:
-            logger.error(f"✗ {file_name}.pdf - Error writing file: {e}")
+            logger.error(f"{file_name}.pdf - Error writing file: {e}")
             return (file_name, False, f"Error writing file: {e}", 0)
     
     return (file_name, False, "Unknown error", 0)

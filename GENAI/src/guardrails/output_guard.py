@@ -72,8 +72,8 @@ class OutputGuard:
         self.disclaimers = {
             'high': None,  # No disclaimer for high confidence
             'medium': "ℹ️ *This information is derived from the provided documents. Please verify critical figures.*",
-            'low': "⚠️ **Note:** This response has lower confidence. Some information may be incomplete or require verification.",
-            'very_low': "⚠️ **Warning:** This response has very low confidence. The information may be unreliable and should be independently verified.",
+            'low': "**Note:** This response has lower confidence. Some information may be incomplete or require verification.",
+            'very_low': "**Warning:** This response has very low confidence. The information may be unreliable and should be independently verified.",
             'hallucination': "🚨 **Caution:** Some statements in this response may not be fully supported by the source documents. Please verify all facts.",
         }
     

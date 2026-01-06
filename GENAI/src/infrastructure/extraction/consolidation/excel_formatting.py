@@ -12,6 +12,10 @@ from typing import Dict, List, Any
 from src.utils import get_logger
 from src.utils.excel_utils import ExcelUtils
 
+from openpyxl import load_workbook
+from openpyxl.styles import Font, Alignment
+from openpyxl.styles.numbers import FORMAT_CURRENCY_USD_SIMPLE
+
 logger = get_logger(__name__)
 
 
@@ -51,9 +55,6 @@ class ExcelFormatter:
     ) -> None:
         """Add hyperlinks to consolidated workbook."""
         try:
-            from openpyxl import load_workbook
-            from openpyxl.styles import Font
-            
             wb = load_workbook(output_path)
             
             # Add hyperlinks in Index sheet
@@ -117,10 +118,6 @@ class ExcelFormatter:
     ) -> None:
         """Apply US currency number format to numeric data cells."""
         try:
-            from openpyxl import load_workbook
-            from openpyxl.styles.numbers import FORMAT_CURRENCY_USD_SIMPLE
-            from openpyxl.styles import Alignment
-            
             wb = load_workbook(output_path)
             
             # US currency accounting format: $#,##0.00 for positive, ($#,##0.00) for negative
@@ -204,7 +201,6 @@ class ExcelFormatter:
     @classmethod
     def _merge_spanning_headers(cls, ws, header_rows: List[int]) -> None:
         """Merge cells for spanning headers in header rows."""
-        from openpyxl.styles import Alignment
         
         for header_row in header_rows:
             if header_row < 1:

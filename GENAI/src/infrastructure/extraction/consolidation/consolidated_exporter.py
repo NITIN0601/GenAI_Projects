@@ -19,6 +19,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 from collections import defaultdict
 
+from openpyxl import load_workbook
+
 from src.utils import get_logger
 from src.core import get_paths
 from src.utils.date_utils import DateUtils
@@ -134,7 +136,6 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         Returns:
             Dict with path, tables_merged, sources_merged, sheet_names
         """
-        from openpyxl import load_workbook
         
         # Find all processed xlsx files
         pattern = str(self.processed_dir / "*_tables.xlsx")
@@ -209,24 +210,50 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 title_to_sheet_name[normalized_key] = mapping
                 sheet_number += 1
             
-            # Create output file
-            output_path = self.consolidate_dir / current_output_filename
+            # Create output file - transposed goes to transpose/ folder
+            if is_transposed:
+                transpose_dir = self.consolidate_dir.parent / "transpose"
+                transpose_dir.mkdir(parents=True, exist_ok=True)
+                output_path = transpose_dir / current_output_filename
+            else:
+                output_path = self.consolidate_dir / current_output_filename
 
             
             try:
                 with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-                    # PASS 2: Create sheets only for non-empty tables
+                    # PASS 2: Create sheets with period type splitting
                     created_tables = {}
+                    split_sheet_mapping = {}  # Track split sheets: sheet_name -> period_type
+                    
                     for normalized_key in sorted_keys:
                         tables = non_empty_tables[normalized_key]
                         mapping = title_to_sheet_name.get(normalized_key, {})
                         sheet_name = mapping.get('unique_sheet_name')
                         if sheet_name:
-                            sheet_created = self._create_merged_table_sheet(
-                                writer, sheet_name, tables, transpose=is_transposed
+                            # Use split method - may create multiple sheets (_1, _2, _3)
+                            created_sheets = self._create_merged_table_sheets_with_split(
+                                writer, 
+                                sheet_name, 
+                                tables, 
+                                transpose=is_transposed,
+                                title_to_sheet_name=title_to_sheet_name,
+                                normalized_key=normalized_key
                             )
-                            if sheet_created:
-                                created_tables[normalized_key] = tables
+                            
+                            if created_sheets:
+                                # Track all created sheets
+                                split_sheet_mapping.update(created_sheets)
+                                
+                                # If split occurred, update the mapping for Index
+                                if len(created_sheets) > 1:
+                                    # Multiple sheets created - mark original as "split parent"
+                                    mapping['was_split'] = True
+                                    mapping['split_sheets'] = list(created_sheets.keys())
+                                    for split_sheet_name in created_sheets:
+                                        created_tables[f"{normalized_key}::{created_sheets[split_sheet_name]}"] = tables
+                                else:
+                                    # Single sheet - original behavior
+                                    created_tables[normalized_key] = tables
                             else:
                                 logger.debug(f"Sheet {sheet_name} was not created (no data after processing)")
                     
@@ -265,14 +292,113 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             except Exception as e:
                 logger.error(f"Failed to create {'transposed ' if is_transposed else ''}consolidated report: {e}", exc_info=True)
         
+        # Create Consolidated_Index.xlsx with all Index sheets from source files
+        index_result = self.consolidate_index_sheets(xlsx_files)
+        
         # Return combined results (backward compat: use regular as main result)
         if 'regular' in results:
             result = results['regular'].copy()
             result['transposed_path'] = results.get('transposed', {}).get('path')
+            result['index_path'] = index_result.get('path') if index_result else None
             return result
         return results.get('transposed', {})
 
     
+    def consolidate_index_sheets(
+        self,
+        xlsx_files: List[str],
+        output_filename: str = "Consolidated_Index.xlsx"
+    ) -> dict:
+        """
+        Consolidate all Index sheets from source XLSX files into a single file.
+        
+        Each source file's Index sheet is copied as a separate sheet named:
+        - Index_1 (from first source)
+        - Index_2 (from second source)
+        - etc.
+        
+        Note: Internal hyperlinks (links to sheets within the source file) will NOT work
+        in the consolidated file since those target sheets don't exist in this file.
+        External hyperlinks (URLs) will continue to work.
+        
+        Args:
+            xlsx_files: List of source XLSX file paths
+            output_filename: Output filename for consolidated index
+            
+        Returns:
+            Dict with path, sources_count, and sheet_names
+        """
+        if not xlsx_files:
+            logger.warning("No xlsx files provided for index consolidation")
+            return {}
+        
+        output_path = self.consolidate_dir / output_filename
+        
+        try:
+            # Sort files for consistent ordering (by filename)
+            sorted_files = sorted(xlsx_files, key=lambda x: Path(x).name)
+            
+            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+                sheet_names = []
+                source_mapping = []
+                
+                for idx, xlsx_path in enumerate(sorted_files, start=1):
+                    try:
+                        # Read the Index sheet from source file
+                        index_df = pd.read_excel(xlsx_path, sheet_name='Index')
+                        
+                        # Get source filename for reference (remove _tables suffix)
+                        source_name = Path(xlsx_path).stem
+                        
+                        # Use source name as sheet name (e.g., "10k1224" or "10q0325")
+                        # Remove common suffixes and sanitize for Excel
+                        clean_name = source_name.replace('_tables', '')
+                        # Excel sheet names max 31 chars, no special chars
+                        sheet_name = clean_name[:31].replace('/', '_').replace('\\', '_')
+                        
+                        # Write Index directly to the sheet (sheet name already identifies source)
+                        index_df.to_excel(writer, sheet_name=sheet_name, index=False)
+                        
+                        sheet_names.append(sheet_name)
+                        source_mapping.append({
+                            'sheet': sheet_name,
+                            'source': source_name,
+                            'rows': len(index_df)
+                        })
+                        
+                        logger.debug(f"Added {sheet_name} from {source_name} ({len(index_df)} rows)")
+                        
+                    except Exception as e:
+                        logger.warning(f"Could not read Index from {xlsx_path}: {e}")
+                        continue
+                
+                # Create a summary sheet listing all sources
+                if source_mapping:
+                    summary_data = []
+                    for item in source_mapping:
+                        summary_data.append({
+                            'Sheet': item['sheet'],
+                            'Source File': item['source'],
+                            'Table Count': item['rows']
+                        })
+                    summary_df = pd.DataFrame(summary_data)
+                    summary_df.to_excel(writer, sheet_name='Summary', index=False)
+            
+            logger.info(f"Created Consolidated_Index.xlsx at {output_path}")
+            logger.info(f"  - Sources consolidated: {len(sheet_names)}")
+            
+            return {
+                'path': str(output_path),
+                'sources_count': len(sheet_names),
+                'sheet_names': sheet_names,
+                'source_mapping': source_mapping
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to create Consolidated_Index.xlsx: {e}", exc_info=True)
+            return {}
+
+
     def _process_xlsx_file(
         self,
         xlsx_path: str,
@@ -282,6 +408,18 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         """Process a single xlsx file and add tables to collection."""
         # Read Index sheet to get metadata
         index_df = pd.read_excel(xlsx_path, sheet_name='Index')
+        
+        # DEDUPLICATE Index entries: Source files may have duplicate rows for same sheet
+        # This happens when tables are split but Index is updated multiple times
+        # Keep first occurrence to avoid inflating TableCount
+        if 'Link' in index_df.columns:
+            index_df['_link_clean'] = index_df['Link'].astype(str).str.replace('→ ', '', regex=False).str.strip()
+            original_count = len(index_df)
+            index_df = index_df.drop_duplicates(subset=['_link_clean'], keep='first')
+            dedup_count = original_count - len(index_df)
+            if dedup_count > 0:
+                logger.debug(f"Deduplicated {dedup_count} Index entries from {Path(xlsx_path).name}")
+            index_df = index_df.drop(columns=['_link_clean'])
         
         # Get all sheet names except Index
         xl = pd.ExcelFile(xlsx_path)
@@ -300,10 +438,19 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         for sheet_name in table_sheets:
             full_title = link_to_full_title.get(sheet_name, sheet_name)
             
-            # Find metadata for this sheet
+            # Find metadata for this SPECIFIC sheet by matching Link/Table_ID
+            # CRITICAL: Don't match by Table Title alone because multiple tables 
+            # can have the same title (e.g., "Income Statement Information" for IS/WM/IM)
+            # The Link column contains "→ {sheet_name}" format
             matching_rows = index_df[
-                index_df['Table Title'].astype(str) == full_title
+                index_df['Link'].astype(str).str.replace('→ ', '', regex=False).str.strip() == sheet_name
             ]
+            
+            # Fallback: try Table_ID column if Link matching fails
+            if len(matching_rows) == 0 and 'Table_ID' in index_df.columns:
+                matching_rows = index_df[
+                    index_df['Table_ID'].astype(str) == sheet_name
+                ]
             
             if len(matching_rows) > 0:
                 row = matching_rows.iloc[0]
@@ -359,6 +506,33 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 
                 # Store main_header in metadata for consolidated output
                 metadata['main_header'] = main_header
+                
+                # CRITICAL: Extract Category and Line Items fingerprints from ORIGINAL table_df
+                # BEFORE slicing (which removes metadata rows at line 436)
+                # This ensures IS/WM/IM Income Statements have different fingerprints
+                original_category_fp = ""
+                original_line_items_fp = ""
+                
+                for idx in range(min(10, len(table_df))):
+                    first_cell = str(table_df.iloc[idx, 0]) if pd.notna(table_df.iloc[idx, 0]) else ''
+                    if first_cell.startswith(MetadataLabels.CATEGORY_PARENT) or first_cell.startswith('Category'):
+                        cat_value = first_cell.split(':', 1)[1].strip() if ':' in first_cell else ''
+                        if cat_value:
+                            cat_parts = [p.strip() for p in cat_value.split(',') if p.strip()]
+                            if cat_parts:
+                                original_category_fp = re.sub(r'[^a-z0-9]', '', cat_parts[0].lower())[:20]
+                    elif first_cell.startswith(MetadataLabels.LINE_ITEMS) or first_cell.startswith('Line Items:'):
+                        li_value = first_cell.split(':', 1)[1].strip() if ':' in first_cell else ''
+                        if li_value:
+                            li_parts = [p.strip().lower() for p in li_value.split(',') if p.strip()]
+                            li_parts = [p for p in li_parts if p not in ['$ in millions', 'in millions', 'except per share data']]
+                            if li_parts:
+                                fp_items = li_parts[:5]
+                                original_line_items_fp = '|'.join(re.sub(r'[^a-z0-9]', '', item)[:20] for item in fp_items)
+                
+                # Store fingerprints in metadata for use by subtables
+                metadata['category_fingerprint'] = original_category_fp
+                metadata['line_items_fingerprint'] = original_line_items_fp
                 
                 # Dynamically find where data starts by looking for "Source:" row
                 # Individual xlsx structure:
@@ -445,6 +619,10 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                     
                     row_sig = "|".join(norm_rows)
                     
+                    # Store normalized row labels for 80% overlap comparison
+                    # This is used by TableGrouper.calculate_row_label_overlap()
+                    metadata['row_labels'] = norm_rows.copy()
+                    
                     # Skip if no valid rows found
                     if not row_sig:
                         continue
@@ -469,32 +647,30 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                     # Tables with same structure should merge (even from different sources)
                     # Tables with different structure should NOT merge (even from same source/title)
                     
-                    # 1. Extract Category (e.g., "Consolidated Results" vs "Ratios")
-                    category_fingerprint = ""
-                    for idx in range(min(10, len(subtable_df))):
-                        first_cell = str(subtable_df.iloc[idx, 0]) if pd.notna(subtable_df.iloc[idx, 0]) else ''
-                        if first_cell.startswith(MetadataLabels.CATEGORY_PARENT) or first_cell.startswith('Category'):
-                            cat_value = first_cell.split(':', 1)[1].strip() if ':' in first_cell else ''
-                            if cat_value:
-                                cat_parts = [p.strip() for p in cat_value.split(',') if p.strip()]
-                                if cat_parts:
-                                    category_fingerprint = re.sub(r'[^a-z0-9]', '', cat_parts[0].lower())[:20]
-                            break
+                    # Use pre-extracted fingerprints from original table_df (before slicing)
+                    # This ensures IS/WM/IM Income Statements maintain their distinct fingerprints
+                    category_fingerprint = metadata.get('category_fingerprint', '')
+                    line_items_fingerprint = metadata.get('line_items_fingerprint', '')
                     
-                    # 2. Extract Line Items fingerprint (e.g., "Net revenues, Earnings..." vs "Average liquidity, Loans...")
-                    line_items_fingerprint = ""
-                    for idx in range(min(10, len(subtable_df))):
-                        first_cell = str(subtable_df.iloc[idx, 0]) if pd.notna(subtable_df.iloc[idx, 0]) else ''
-                        if first_cell.startswith(MetadataLabels.LINE_ITEMS) or first_cell.startswith('Line Items:'):
-                            li_value = first_cell.split(':', 1)[1].strip() if ':' in first_cell else ''
-                            if li_value:
-                                li_parts = [p.strip().lower() for p in li_value.split(',') if p.strip()]
-                                # Skip common non-distinguishing items
-                                li_parts = [p for p in li_parts if p not in ['$ in millions', 'in millions', 'except per share data']]
-                                if li_parts:
-                                    fingerprint_items = li_parts[:3]
-                                    line_items_fingerprint = '|'.join(re.sub(r'[^a-z0-9]', '', item)[:15] for item in fingerprint_items)
-                            break
+                    # Fallback: Try to extract from subtable_df if not in metadata
+                    # (This handles edge cases where metadata extraction failed)
+                    if not category_fingerprint and not line_items_fingerprint:
+                        for idx in range(min(10, len(subtable_df))):
+                            first_cell = str(subtable_df.iloc[idx, 0]) if pd.notna(subtable_df.iloc[idx, 0]) else ''
+                            if first_cell.startswith(MetadataLabels.CATEGORY_PARENT) or first_cell.startswith('Category'):
+                                cat_value = first_cell.split(':', 1)[1].strip() if ':' in first_cell else ''
+                                if cat_value:
+                                    cat_parts = [p.strip() for p in cat_value.split(',') if p.strip()]
+                                    if cat_parts:
+                                        category_fingerprint = re.sub(r'[^a-z0-9]', '', cat_parts[0].lower())[:20]
+                            elif first_cell.startswith(MetadataLabels.LINE_ITEMS) or first_cell.startswith('Line Items:'):
+                                li_value = first_cell.split(':', 1)[1].strip() if ':' in first_cell else ''
+                                if li_value:
+                                    li_parts = [p.strip().lower() for p in li_value.split(',') if p.strip()]
+                                    li_parts = [p for p in li_parts if p not in ['$ in millions', 'in millions', 'except per share data']]
+                                    if li_parts:
+                                        fp_items = li_parts[:5]
+                                        line_items_fingerprint = '|'.join(re.sub(r'[^a-z0-9]', '', item)[:20] for item in fp_items)
                     
                     # Combined structure fingerprint: Category + Line Items
                     structure_fingerprint = f"{category_fingerprint}_{line_items_fingerprint}"
@@ -514,11 +690,14 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                     structure_key = f"{structure_fingerprint}::{header_pattern}"
                     
                     # Find best matching group using fuzzy Section+Title matching
+                    # Use 80% threshold for title AND row label overlap (per merge condition spec)
+                    # Structure fingerprint ensures only same-structure tables merge
                     best_match_key = self._find_fuzzy_matching_group(
                         all_tables_by_full_title,
                         section_title_combo,
                         structure_key,
-                        threshold=0.80
+                        threshold=0.80,
+                        row_labels=norm_rows  # Pass row labels for 80% overlap check
                     )
                     
                     if best_match_key:
@@ -530,6 +709,8 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                     # DEBUG: Log Reconciliations keys
                     if 'reconciliation' in normalized_title.lower():
                         logger.info(f"RECON KEY: sheet={sheet_name}, combo={section_title_combo[:40]}, struct={structure_key[:30]}, KEY={normalized_key[:80]}")
+                    
+                    # Debug logging removed - was: INC_STMT logger.warning
 
                     
                     all_tables_by_full_title[normalized_key].append({
@@ -605,29 +786,16 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         """Detect report type from source filename. Delegates to ExcelUtils."""
         return ExcelUtils.detect_report_type(source)
     
-    def _normalize_row_label(self, label: str) -> str:
-        """Normalize row label for matching. Delegates to ExcelUtils."""
-        return ExcelUtils.normalize_row_label(label)
+    # NOTE: _normalize_row_label inherited from BaseExcelExporter
+    # NOTE: _normalize_title_for_grouping - keeping as it may have custom logic
     
     def _normalize_title_for_grouping(self, title: str) -> str:
         """Normalize title for grouping. Delegates to ExcelUtils."""
         return ExcelUtils.normalize_title_for_grouping(title)
     
-    def _sanitize_sheet_name(self, name: str) -> str:
-        """Sanitize for Excel sheet name. Delegates to ExcelUtils."""
-        return ExcelUtils.sanitize_sheet_name(name)
-    
-    def _get_column_letter(self, idx: int) -> str:
-        """Convert column index to letter. Delegates to ExcelUtils."""
-        return ExcelUtils.get_column_letter(idx)
-    
-    def _clean_currency_value(self, val):
-        """
-        Convert currency string to float, keep special values as string.
-        
-        Delegates to ExcelUtils.clean_currency_value for centralized logic.
-        """
-        return ExcelUtils.clean_currency_value(val)
+    # NOTE: _sanitize_sheet_name inherited from BaseExcelExporter
+    # NOTE: _get_column_letter inherited from BaseExcelExporter
+    # NOTE: _clean_currency_value inherited from BaseExcelExporter
     
     def _normalize_header_for_deduplication(self, header: str) -> str:
         """
@@ -718,7 +886,6 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             Dict with missing_sheets, orphan_sheets, and valid flag
         """
         try:
-            from openpyxl import load_workbook
             
             wb = load_workbook(output_path)
             sheet_names = set(wb.sheetnames) - {'Index'}
@@ -766,15 +933,17 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         all_tables_by_full_title: Dict[str, List],
         section_title_combo: str,
         structure_key: str,
-        threshold: float = 0.80
+        threshold: float = 0.80,
+        row_labels: Optional[List[str]] = None
     ) -> Optional[str]:
         """
-        Find an existing group key that fuzzy-matches the given Section+Title combo.
+        Find an existing group key that fuzzy-matches using 80% conditions.
         
         Delegates to TableGrouper for centralized logic.
+        Checks both title similarity (80%) and row label overlap (80%).
         """
         return TableGrouper.find_fuzzy_matching_group(
-            all_tables_by_full_title, section_title_combo, structure_key, threshold
+            all_tables_by_full_title, section_title_combo, structure_key, threshold, row_labels
         )
     
     def _split_into_subtables(self, df: pd.DataFrame, data_start_idx: int = 0) -> List[Tuple[pd.DataFrame, int]]:
@@ -876,11 +1045,19 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             title_clean = ExcelUtils.fix_ocr_broken_words(title_text) if title_text else ''
             title_clean = re.sub(r'\s+', ' ', title_clean).strip() if title_clean else ''
             
+            # FIX: Count UNIQUE source files, not total table entries
+            unique_source_files = set()
+            for table in tables:
+                source = table.get('source', '') or table.get('source_file', '')
+                if source:
+                    unique_source_files.add(source)
+            table_count = len(unique_source_files) if unique_source_files else len(tables)
+            
             index_data.append({
                 '#': 0,  # Will be set after sorting
                 'Section': section_clean,
                 'Table Title': title_clean,
-                'TableCount': len(tables),
+                'TableCount': table_count,  # Now counts unique source files
                 'Sources': source_refs_str,
                 'Report Types': ', '.join(sorted(report_types)),
                 'Years': ', '.join(sorted(years, reverse=True)),
@@ -888,6 +1065,30 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 'Link': '',  # Will be set after sorting
                 '_normalized_key': normalized_key  # Hidden key for sheet mapping
             })
+        
+        # Validation check: Log debug for tables with TableCount > source_count
+        # This helps identify potential merge issues for manual inspection
+        # Calculate source_count from the tables we just processed
+        all_sources = set()
+        for entry in index_data:
+            sources_str = entry.get('Sources', '')
+            for src in sources_str.split(','):
+                src = src.strip()
+                if src and not src.startswith('(+'):
+                    all_sources.add(src.split('_')[0])  # Get Q1,2025 part
+        source_count = len(all_sources) if all_sources else 4  # Default to 4 if can't determine
+        
+        # After table splitting in process_advanced, TC > source_count is expected
+        # Tables with multiple period types get split (e.g., 66_1, 66_2, 66_3, 66_4)
+        # Changed from warning to debug since this is expected behavior
+        if source_count > 0:
+            for entry in index_data:
+                if entry['TableCount'] > source_count * 4:  # Only log if > 4x expected (truly unusual)
+                    logger.debug(
+                        f"TableCount validation: '{entry['Table Title'][:50]}' has "
+                        f"TC={entry['TableCount']} (source_count={source_count}). "
+                        f"This can occur due to subtable splits."
+                    )
         
         df = pd.DataFrame(index_data)
         # Keep the order from input (already sorted by page number in merge_processed_files)
@@ -1055,7 +1256,7 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         tables: List[Dict[str, Any]],
         transpose: bool = False,
         title_to_sheet_name: Dict[str, dict] = None,
-        normalized_key: str = None
+        normalized_key: Optional[str] = None
     ) -> Dict[str, str]:
         """
         Create merged sheets with period type splitting.
@@ -1099,18 +1300,36 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                     if pd.notna(val) and str(val).strip():
                         all_column_headers.add(str(val).strip())
         
-        # Classify headers by period type
+        # Classify headers by period type (filter out corrupt headers)
         period_types_found = set()
+        valid_headers = set()
         for header in all_column_headers:
+            # Skip corrupt numeric headers (e.g., "1212447" which is data, not a header)
+            if not PeriodTypeDetector.is_valid_period_header(header):
+                logger.debug(f"Sheet {base_sheet_name}: Filtered corrupt header: {header}")
+                continue
+            
+            valid_headers.add(header)
             period_type = PeriodTypeDetector.classify_header(header)
             if period_type != 'other':
                 period_types_found.add(period_type)
         
-        # If only one period type (or none), create single sheet without suffix
-        if len(period_types_found) <= 1:
+        # If NO period types found at all, this is a non-period table (e.g., SEC registration)
+        # Don't merge - just use the most recent source table
+        if len(period_types_found) == 0:
+            logger.debug(f"Sheet {base_sheet_name}: No period codes found, using single source (no merge)")
+            # Use only the first (most recent) table
+            single_table = [tables[0]] if tables else tables
+            created = self._create_merged_table_sheet(writer, base_sheet_name, single_table, transpose)
+            if created:
+                return {base_sheet_name: 'no_period'}
+            return {}
+        
+        # If only one period type, create single sheet without suffix
+        if len(period_types_found) == 1:
             created = self._create_merged_table_sheet(writer, base_sheet_name, tables, transpose)
             if created:
-                return {base_sheet_name: list(period_types_found)[0] if period_types_found else 'mixed'}
+                return {base_sheet_name: list(period_types_found)[0]}
             return {}
         
         # Multiple period types - need to split
@@ -1360,6 +1579,11 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 # Final cleanup
                 header = ExcelUtils.clean_year_string(header)
                 
+                # Skip corrupt headers (large numeric values that are data, not headers)
+                if not PeriodTypeDetector.is_valid_period_header(header):
+                    logger.debug(f"Skipping corrupt header in column {col_idx}: {header}")
+                    continue
+                
                 sort_key = DateUtils.parse_date_from_header(header)
                 
                 # Normalize header for deduplication comparison
@@ -1416,31 +1640,52 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 if not non_empty_data:
                     continue
                 
+                # Period type filter - skip columns not matching the filter
+                if period_type_filter:
+                    col_period_type = PeriodTypeDetector.classify_header(header)
+                    if col_period_type != period_type_filter and col_period_type != 'other':
+                        # Column has a different period type - skip it
+                        continue
+                
                 # Check for duplicates - skip if SAME header AND same data already exists
                 # This prevents multiple "At December 31, 2024" columns with identical data
                 is_duplicate = False
                 col_data_str = str(sorted([(k, str(v).strip()) for k, v in row_data_map.items()]))
                 
+                # Check if this header already exists - if so, merge data instead of duplicating
+                matching_key = None
                 for existing_key, existing_val in all_columns.items():
                     existing_data_str = str(sorted([(k, str(v).strip()) for k, v in existing_val.get('row_data_map', {}).items()]))
                     existing_header = existing_val.get('header', '').lower().strip()
                     
-                    # FIXED: Only mark as duplicate if BOTH header AND data match
-                    # This prevents dropping valid columns that happen to have same data but different periods
-                    # Changed from OR to AND
-                    if existing_header == norm_header and col_data_str == existing_data_str:
-                        is_duplicate = True
-                        logger.debug(f"Removing exact duplicate column: '{header}' (same as '{existing_val.get('header')}')")
-                        break
+                    # Check if headers match (normalized comparison)
+                    if existing_header == norm_header:
+                        # If data is also identical, skip entirely (true duplicate)
+                        if col_data_str == existing_data_str:
+                            is_duplicate = True
+                            logger.debug(f"Removing exact duplicate column: '{header}' (same as '{existing_val.get('header')}')")
+                            break
+                        else:
+                            # Headers match but data differs - merge data into existing column
+                            matching_key = existing_key
+                            break
+                
+                # If we found a matching header with different data, merge
+                if matching_key and not is_duplicate:
+                    existing_data = all_columns[matching_key].get('row_data_map', {})
+                    # Merge: fill empty values from new data
+                    for row_key, new_val in row_data_map.items():
+                        existing_val = existing_data.get(row_key, '')
+                        # Use new value if existing is empty
+                        if not existing_val or str(existing_val).strip() in ['', 'nan']:
+                            if new_val and str(new_val).strip() not in ['', 'nan']:
+                                existing_data[row_key] = new_val
+                    all_columns[matching_key]['row_data_map'] = existing_data
+                    is_duplicate = True  # Mark as handled (don't add new column)
+                    logger.debug(f"Merged data for duplicate header: '{header}'")
                 
                 if not is_duplicate:
-                    final_key = norm_header
-                    counter = 1
-                    while final_key in all_columns:
-                        final_key = f"{norm_header}_{counter}"
-                        counter += 1
-                    
-                    all_columns[final_key] = {
+                    all_columns[norm_header] = {
                         'header': header,
                         'level0_header': level0_header_from_meta,  # Main Header (e.g., 'Average Monthly Balance')
                         'level1_header': level1_header,  # Period Type (e.g., 'Three Months Ended')
@@ -1488,11 +1733,12 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             # Keep original header format (no conversion to Qn, YYYY)
             header = original_header
             
-            counter = 1
-            while header.lower() in used_headers:
-                header = f"{original_header} ({counter})"
-                counter += 1
-            used_headers.add(header.lower())
+            # Track if this header already exists - we'll merge data instead of creating duplicates
+            is_duplicate_header = header.lower() in used_headers
+            
+            # If header exists, we'll merge; if new, add it
+            if not is_duplicate_header:
+                used_headers.add(header.lower())
             
             # Store Level 0 header (Main Header like "Average Monthly Balance")
             l0_val = ExcelUtils.ensure_string_header(level0) if level0 else ''
@@ -1519,9 +1765,19 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                 if len(clean_l1) == 4 and clean_l1.isdigit():
                     l1_val = ''  # Years belong in L2 only
             
-            level0_headers.append(l0_val)
-            level1_headers.append(l1_val)
-            level2_headers.append(l2_val)
+            # COMBINE L1 and L2 if both present (e.g., "Three Months Ended June 30," + "2023")
+            # This creates complete headers like "Three Months Ended June 30, 2023"
+            if l1_val and l2_val and l2_val.isdigit() and len(l2_val) == 4:
+                # L1 is period description (Three Months Ended...), L2 is year
+                combined = f"{l1_val.rstrip(',')} {l2_val}"
+                l2_val = combined
+                l1_val = ''  # Clear L1 since we've combined
+            
+            # Only add headers for NEW columns (not duplicates we're merging)
+            if not is_duplicate_header:
+                level0_headers.append(l0_val)
+                level1_headers.append(l1_val)
+                level2_headers.append(l2_val)
             
             col_data = []
             # row_labels now contains section_keys (e.g., "Average common equity::institutional securities")
@@ -1540,7 +1796,19 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                     cleaned_value = float(cleaned_value)
                 col_data.append(cleaned_value)
             
-            result_data[header] = col_data
+            # MERGE logic for duplicate headers: update empty cells with new values
+            if is_duplicate_header and header in result_data:
+                existing_col = result_data[header]
+                merged_col = []
+                for i, (existing_val, new_val) in enumerate(zip(existing_col, col_data)):
+                    # Keep existing value if present, otherwise use new value
+                    if existing_val == '' or (isinstance(existing_val, str) and existing_val.lower() == 'nan'):
+                        merged_col.append(new_val)
+                    else:
+                        merged_col.append(existing_val)
+                result_data[header] = merged_col
+            else:
+                result_data[header] = col_data
         
         # Store header info for later cell merging
         # Deduplicate adjacent identical headers for spanning (keep first, empty rest)
@@ -1572,12 +1840,36 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         
         result_df = pd.DataFrame(result_data)
         
+        # Remove duplicate columns AND empty columns (keep first occurrence)
+        # 1. Remove columns where entire content is identical to another column
+        # 2. Remove columns that are entirely empty (no data values)
+        cols_to_keep = ['Row Label']  # Always keep first column
+        seen_data = {}
+        for col in result_df.columns:
+            if col == 'Row Label':
+                continue
+            col_data = tuple(result_df[col].fillna('').astype(str).tolist())
+            
+            # Check if column is entirely empty
+            is_empty = all(v == '' or v.lower() == 'nan' for v in col_data)
+            if is_empty:
+                continue  # Skip empty columns
+            
+            if col_data not in seen_data:
+                seen_data[col_data] = col
+                cols_to_keep.append(col)
+            # else: skip duplicate column
+        
+        if len(cols_to_keep) < len(result_df.columns):
+            result_df = result_df[cols_to_keep]
+        
         # Ensure column names are strings (prevent Excel from converting '2024' to 2024.0)
         # Use centralized ExcelUtils.ensure_string_header
         result_df.columns = [ExcelUtils.ensure_string_header(c) for c in result_df.columns]
         
         # Transpose if requested - creates multi-level column headers
         if transpose and len(result_df.columns) > 1:
+            # Debug logging removed
             # First, identify category (section) rows and their associated line items
             # Category rows have text in first column but rest is empty
             category_to_items = {}  # Maps category -> list of line items under it
@@ -1792,8 +2084,68 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         level2_df = pd.DataFrame([l2_headers], columns=columns, dtype=str)
         header_frames.append(level2_df)
         
+        
         # === CONCATENATE ALL FRAMES ===
-        # Structure: metadata (12 rows) + table headers (L0/L1/L2) + data
+        # For TRANSPOSED output: Keep metadata, but transpose the data portion
+        # For REGULAR output: metadata (12 rows) + table headers (L0/L1/L2) + data
+        if transpose:
+            # Transposed output: Flatten MultiIndex columns
+            # Keep category prefix ONLY if it's a real category (not 'General')
+            if isinstance(result_df.columns, pd.MultiIndex):
+                flat_cols = []
+                for col in result_df.columns:
+                    if isinstance(col, tuple):
+                        cat = col[0] if len(col) > 0 else ''
+                        line_item = col[1] if len(col) > 1 else str(col[0]) if len(col) > 0 else str(col)
+                        # Only add category prefix if it's a real category (not General)
+                        if cat and cat.strip() and cat.strip().lower() != 'general':
+                            flat_cols.append(f"{cat} - {line_item}")
+                        else:
+                            flat_cols.append(str(line_item))
+                    else:
+                        flat_cols.append(str(col))
+                result_df.columns = flat_cols
+            
+            # Build transposed output directly:
+            # Use same number of columns as transposed data
+            n_cols = len(result_df.columns)
+            
+            # Create metadata rows with padding
+            metadata_rows = []
+            metadata_items = [
+                f"Category (Parent): {', '.join(row_headers_l1[:3]) if row_headers_l1 else ''}",
+                f"Line Items: {', '.join(row_headers_l2[:5]) if row_headers_l2 else ''}",
+                f"Product/Entity: {', '.join(products[:3]) if products else ''}",
+                f"Column Header L1: {', '.join(col_headers_l1_display[:3]) if col_headers_l1_display else ''}",
+                f"Column Header L2: {', '.join(col_headers_l2_display[:3]) if col_headers_l2_display else ''}",  
+                f"Column Header L3: {', '.join(list(result_df.columns)[:5])}",
+                f"Year/Quarter: {', '.join(all_quarters)}",
+                "",
+                f"Table Title: {display_title} (Transposed)",
+                f"Source(s): {', '.join(all_sources)}",
+                "",
+                "",
+            ]
+            
+            for item in metadata_items:
+                row = [item] + [''] * (n_cols - 1)
+                metadata_rows.append(row)
+            
+            # Create metadata DataFrame
+            col_names = list(result_df.columns)
+            metadata_df_trans = pd.DataFrame(metadata_rows, columns=col_names)
+            
+            # Add header row (column names as data)
+            header_row = pd.DataFrame([col_names], columns=col_names)
+            
+            # Stack: metadata + header + transposed data
+            final_df = pd.concat([metadata_df_trans, header_row, result_df], ignore_index=True)
+            
+            # Write directly
+            final_df.to_excel(writer, sheet_name=title, index=False, header=False)
+            return True
+        
+        # REGULAR output: metadata + header rows + data
         frames_to_concat = [metadata_df] + header_frames + [result_df]
         
         # Ensure all frames have compatible column structures before concat
@@ -1812,18 +2164,35 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         # Now concatenate with matching column names
         try:
             final_df = pd.concat(normalized_frames, ignore_index=True)
-        except ValueError as e:
-            # Fallback: align columns by position if names don't match
-            logger.warning(f"Column name mismatch, using positional alignment: {e}")
-            # Get max columns and use positional indexing
-            max_cols = max(len(f.columns) for f in normalized_frames)
+        except (ValueError, pd.errors.InvalidIndexError) as e:
+            # Fallback: align columns by position if names don't match or have duplicates
+            logger.warning(f"Column issue during concat, using positional alignment: {e}")
+            # Deduplicate column names first
             aligned_frames = []
             for frame in normalized_frames:
-                frame.columns = list(range(len(frame.columns)))
+                # Create unique column names by appending index for duplicates
+                seen = {}
+                new_cols = []
+                for col in frame.columns:
+                    col_str = str(col)
+                    if col_str in seen:
+                        seen[col_str] += 1
+                        new_cols.append(f"{col_str}_{seen[col_str]}")
+                    else:
+                        seen[col_str] = 0
+                        new_cols.append(col_str)
+                frame.columns = new_cols
                 aligned_frames.append(frame)
-            final_df = pd.concat(aligned_frames, ignore_index=True)
-            # Restore original column names from result_df
-            final_df.columns = list(range(len(final_df.columns)))
+            
+            try:
+                final_df = pd.concat(aligned_frames, ignore_index=True)
+            except Exception as e2:
+                # Last resort: use positional indexing
+                logger.warning(f"Fallback to positional: {e2}")
+                for i, frame in enumerate(aligned_frames):
+                    frame.columns = list(range(len(frame.columns)))
+                final_df = pd.concat(aligned_frames, ignore_index=True)
+                final_df.columns = list(range(len(final_df.columns)))
         
         # Track header row count for cell merging later
         header_row_count = 12 + len(header_frames)

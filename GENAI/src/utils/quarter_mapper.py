@@ -108,7 +108,15 @@ class QuarterDateMapper:
         if not display:
             return ''
         
-        display_lower = str(display).lower().strip()
+        display = str(display).strip()
+        display_lower = display.lower()
+        
+        # Check if already a valid code format - return as-is
+        # Patterns: Q1-2024, Q2-QTD-2024, Q3-YTD-2024, YTD-2024
+        if re.match(r'^Q[1-4](-QTD|-YTD)?-20\d{2}$', display):
+            return display
+        if re.match(r'^YTD-20\d{2}$', display):
+            return display
         
         # Extract year
         year_match = re.search(r'(20\d{2})', display)

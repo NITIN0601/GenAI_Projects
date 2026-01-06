@@ -186,7 +186,7 @@ class MetadataBuilder:
         return 'UNKNOWN'
     
     @classmethod
-    def convert_to_qn_format(cls, header: str, period_type: str = None, use_separator: bool = False) -> str:
+    def convert_to_qn_format(cls, header: str, period_type: Optional[str] = None, use_separator: bool = False) -> str:
         """
         Convert column header to standardized quarter code format.
         
@@ -592,7 +592,6 @@ class MetadataBuilder:
         Returns:
             Headers sorted chronologically (oldest first)
         """
-        import re
         
         # Month name to number mapping
         MONTH_TO_NUM = {

@@ -43,6 +43,11 @@ from src.utils.quarter_mapper import QuarterDateMapper
 from src.utils.metadata_builder import MetadataBuilder
 from src.utils.multi_row_header_normalizer import MultiRowHeaderNormalizer, normalize_headers, normalize_header
 from src.utils.text_normalizer import TextNormalizer, normalize_text, clean_footnotes
+from src.utils.retry import retry, RetryConfig, retry_on_file_error, retry_on_network_error
+from src.utils.header_processor import HeaderProcessor
+# New modular utilities for scalability
+from src.utils.cell_processor import CellProcessor
+from src.utils.table_detector import TableDetector
 
 # Re-export tracing from infrastructure for convenience
 from src.infrastructure.observability import (
@@ -87,6 +92,17 @@ __all__ = [
     'MultiRowHeaderNormalizer',
     'normalize_headers',
     'normalize_header',
+    # Text normalization
+    'TextNormalizer',
+    'normalize_text',
+    'clean_footnotes',
+    # Retry utilities
+    'retry',
+    'RetryConfig',
+    'retry_on_file_error',
+    'retry_on_network_error',
+    # Header processing
+    'HeaderProcessor',
     # Tracing (re-exported from infrastructure.observability)
     'setup_tracing',
     'is_tracing_enabled',

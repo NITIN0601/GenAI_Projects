@@ -159,7 +159,7 @@ class HyDESearchStrategy(BaseSearchStrategy):
             # PLACEHOLDER - Remove when LLM is enabled
             # ============================================================
             logger.warning("\n" + "="*60)
-            logger.warning("⚠️  UNCOMMENT TO RUN LLM-BASED HYDE SEARCH")
+            logger.warning("UNCOMMENT TO RUN LLM-BASED HYDE SEARCH")
             logger.warning("="*60)
             logger.warning(f"Prompt would be:\n{prompt[:200]}...")
             logger.warning("="*60 + "\n")
