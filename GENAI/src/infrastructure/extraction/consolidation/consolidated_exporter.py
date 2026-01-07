@@ -35,7 +35,6 @@ from src.utils.financial_domain import (
 )
 from src.infrastructure.extraction.consolidation.consolidated_exporter_transpose import *
 from src.infrastructure.extraction.exporters.base_exporter import BaseExcelExporter
-from src.pipeline.steps.process import normalize_point_in_time_header
 # Import from new focused modules
 from src.infrastructure.extraction.consolidation.table_detection import TableDetector
 from src.infrastructure.extraction.consolidation.table_grouping import TableGrouper
@@ -1773,12 +1772,12 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             
             # COMBINE L1 and L2 if both present (e.g., "Three Months Ended June 30," + "2023")
             # This creates complete headers like "Three Months Ended June 30, 2023"
+            # NOTE: Period normalization is deferred to Process step
             if l1_val and l2_val and l2_val.isdigit() and len(l2_val) == 4:
                 # L1 is period description (Three Months Ended...), L2 is year
                 combined = f"{l1_val.rstrip(',')} {l2_val}"
-                # Normalize the combined value (e.g., "Three Months Ended June 30, 2024" -> "Q2-QTD-2024")
-                normalized = normalize_point_in_time_header(combined)
-                l2_val = normalized if normalized else combined
+                # Keep raw combined value (Process step will normalize)
+                l2_val = combined
                 l1_val = ''  # Clear L1 since we've combined
             
             # 10-Q Case: If L2 is just a year and no L1 context, derive quarter from source
@@ -2058,17 +2057,15 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         # Row 13+: Actual table with headers (L0, L1, L2) then data
         
         def _convert_header_value(val):
-            """Convert header value to clean string, normalizing period headers."""
+            """Convert header value to clean string (period normalization deferred to Process step)."""
             if val is None or val == '':
                 return ''
             clean_val = ExcelUtils.ensure_string_header(val)
             
-            # First try direct normalization (handles "Three Months Ended September 30, 2025")
-            normalized = normalize_point_in_time_header(clean_val)
-            if normalized:
-                return normalized
+            # NOTE: Period normalization (e.g., "Three Months Ended" -> "Q2-QTD-2024")
+            # is now done in Process step, not here
             
-            # Handle multi-period headers separated by ",, " or when pattern repeats
+            # Handle multi-period headers separated by ",, " - just clean them up
             # (e.g., "Three Months Ended June 30,, Six Months Ended June 30,")
             if ',, ' in clean_val or (clean_val.count('Months Ended') > 1):
                 # Split on ",, " or "Ended [Date]," pattern
@@ -2078,18 +2075,17 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                     # Try splitting on repeated period patterns
                     parts = re.split(r'(?<=\d{4}),\s*(?=[A-Z])', clean_val)
                 
-                normalized_parts = []
+                cleaned_parts = []
                 for part in parts:
                     part = part.strip().rstrip(',')
                     if not part:
                         continue
-                    norm = normalize_point_in_time_header(part)
-                    normalized_parts.append(norm if norm else part)
+                    cleaned_parts.append(part)
                 
                 # Remove duplicates while preserving order
                 seen = set()
                 unique_parts = []
-                for p in normalized_parts:
+                for p in cleaned_parts:
                     if p not in seen:
                         seen.add(p)
                         unique_parts.append(p)

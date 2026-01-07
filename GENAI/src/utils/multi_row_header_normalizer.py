@@ -312,20 +312,26 @@ class MultiRowHeaderNormalizer:
                         if not ctx.year and current_year:
                             ctx.year = current_year
         
-        # SECOND PASS: Propagate period, month, AND year from previous columns if still missing
+        # SECOND PASS: Propagate period, month, year, AND category from previous columns if still missing
         # This handles cases where column 2 has the period but columns 3,4,5 need it too
         last_period = ''
         last_month = ''
         last_year = ''
+        last_category = ''  # Track spanning category headers like "Average Monthly Balance"
         
         for ctx in contexts:
-            # Update tracking when we see a column with period/month/year
+            # Update tracking when we see a column with period/month/year/category
             if ctx.period_type:
                 last_period = ctx.period_type
             if ctx.month:
                 last_month = ctx.month
             if ctx.year:
                 last_year = ctx.year
+            # Track category from ANY column that has one (including date columns)
+            # This allows categories like "Average Monthly Balance" to propagate even when
+            # combined with a year in the same column
+            if ctx.category:
+                last_category = ctx.category
             
             # Propagate to columns that have categories but no period/month/year
             if ctx.category and not ctx.period_type and last_period:
@@ -341,6 +347,13 @@ class MultiRowHeaderNormalizer:
                 ctx.period_type = last_period
             if ctx.year and not ctx.month and last_month:
                 ctx.month = last_month
+            
+            # PROPAGATE CATEGORY: If this column has a year but no category,
+            # inherit the spanning category from earlier columns
+            # This handles: [Average Monthly Balance, '', '', ''] + [$ in millions, 2024, 2023, 2022]
+            # Where columns 1-3 should become "YTD-2024 Average Monthly Balance"
+            if ctx.year and not ctx.category and last_category:
+                ctx.category = last_category
             
             # DYNAMIC FIX: Also propagate to NON-DATE columns (preserve patterns like 'Average', 'High')
             # These are columns where is_date_column=False but have raw values

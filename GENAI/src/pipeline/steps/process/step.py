@@ -586,10 +586,20 @@ class ProcessStep(StepInterface):
         normalized_headers = normalized.get('normalized_headers', [])
         
         # For 10K reports: Update normalized_headers with YTD- prefix for year-only values
+        # Also handle year + category (e.g., "2024 Average Monthly Balance" -> "YTD-2024 Average Monthly Balance")
         if is_10k:
             for i, val in enumerate(normalized_headers):
-                if val and re.match(r'^20\d{2}$', val.strip()):
-                    normalized_headers[i] = f"YTD-{val.strip()}"
+                if val:
+                    # Pattern 1: year-only (e.g., "2024")
+                    if re.match(r'^20\d{2}$', val.strip()):
+                        normalized_headers[i] = f"YTD-{val.strip()}"
+                    # Pattern 2: year + category (e.g., "2024 Average Monthly Balance")
+                    elif re.match(r'^20\d{2}\s+\w', val.strip()):
+                        year_match = re.match(r'^(20\d{2})\s+(.+)$', val.strip())
+                        if year_match:
+                            year = year_match.group(1)
+                            suffix = year_match.group(2)
+                            normalized_headers[i] = f"YTD-{year} {suffix}"
         
         num_cols = ws.max_column
         
@@ -608,9 +618,16 @@ class ProcessStep(StepInterface):
             for col_idx in range(2, num_cols + 1):
                 norm_val = normalized_headers[col_idx - 1] if col_idx - 1 < len(normalized_headers) else ''
                 
-                # Always apply normalized code if it's a valid date code
+                # Apply normalized code if it's a valid date code OR starts with one
                 # Valid codes: Q1-2024, Q2-QTD-2024, Q3-YTD-2024, YTD-2024
-                if norm_val and is_valid_date_code(norm_val):
+                # Also allow: YTD-2024 Average Monthly Balance (code + category suffix)
+                is_valid = is_valid_date_code(norm_val) or (
+                    norm_val and (
+                        re.match(r'^Q[1-4](-QTD|-YTD)?-20\d{2}\s', norm_val) or  # Q-code with suffix
+                        re.match(r'^YTD-20\d{2}\s', norm_val)  # YTD-year with suffix
+                    )
+                )
+                if norm_val and is_valid:
                     if safe_set_cell_value(ws, header_row, col_idx, norm_val):
                         stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
         
