@@ -35,6 +35,7 @@ from src.utils.financial_domain import (
 )
 from src.infrastructure.extraction.consolidation.consolidated_exporter_transpose import *
 from src.infrastructure.extraction.exporters.base_exporter import BaseExcelExporter
+from src.pipeline.steps.process import normalize_point_in_time_header
 # Import from new focused modules
 from src.infrastructure.extraction.consolidation.table_detection import TableDetector
 from src.infrastructure.extraction.consolidation.table_grouping import TableGrouper
@@ -1695,7 +1696,8 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                         'level2_header': level2_header,  # Years/Dates (e.g., '2024')
                         'row_data_map': row_data_map,
                         'sort_key': sort_key,
-                        'source': meta.get('source', '')
+                        'source': meta.get('source', ''),
+                        'page': meta.get('page', ''),  # Track page number for source per column
                     }
         
         if not all_columns:
@@ -1724,6 +1726,7 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         level0_headers = ['']  # First column is Row Label (no L0 header)
         level1_headers = ['']  # First column is Row Label (no L1 header)
         level2_headers = ['Row Label']  # Row Label is the L2/L3 header for first column
+        sources_per_column = ['']  # First column is Row Label (no source)
         
         for _, col_info in sorted_cols:
             original_header = col_info['header']
@@ -1773,14 +1776,46 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             if l1_val and l2_val and l2_val.isdigit() and len(l2_val) == 4:
                 # L1 is period description (Three Months Ended...), L2 is year
                 combined = f"{l1_val.rstrip(',')} {l2_val}"
-                l2_val = combined
+                # Normalize the combined value (e.g., "Three Months Ended June 30, 2024" -> "Q2-QTD-2024")
+                normalized = normalize_point_in_time_header(combined)
+                l2_val = normalized if normalized else combined
                 l1_val = ''  # Clear L1 since we've combined
+            
+            # 10-Q Case: If L2 is just a year and no L1 context, derive quarter from source
+            # e.g., 10q0624 -> June 2024 -> Q2-2024, 10q0925 -> Sept 2025 -> Q3-2025
+            if l2_val and l2_val.isdigit() and len(l2_val) == 4 and not l1_val:
+                is_10q = '10q' in source.lower() if source else False
+                if is_10q:
+                    # Extract month from source filename (e.g., 10q0624 -> 06 -> June -> Q2)
+                    source_lower = source.lower()
+                    month_map = {
+                        '03': 'Q1', '0325': 'Q1',  # March -> Q1
+                        '06': 'Q2', '0624': 'Q2', '0625': 'Q2',  # June -> Q2
+                        '09': 'Q3', '0924': 'Q3', '0925': 'Q3',  # Sept -> Q3
+                        '12': 'Q4', '1224': 'Q4', '1225': 'Q4',  # Dec -> Q4
+                    }
+                    derived_quarter = None
+                    for pattern, quarter in month_map.items():
+                        if pattern in source_lower:
+                            derived_quarter = quarter
+                            break
+                    if derived_quarter:
+                        l2_val = f"{derived_quarter}-{l2_val}"
             
             # Only add headers for NEW columns (not duplicates we're merging)
             if not is_duplicate_header:
                 level0_headers.append(l0_val)
                 level1_headers.append(l1_val)
                 level2_headers.append(l2_val)
+                # Build source per column: "10q0624_p45" format
+                source_str = source.replace('.pdf', '').replace('.xlsx', '') if source else ''
+                page_str = str(col_info.get('page', '')).strip()
+                if source_str and page_str and page_str not in ['', 'nan']:
+                    sources_per_column.append(f"{source_str}_p{page_str}")
+                elif source_str:
+                    sources_per_column.append(source_str)
+                else:
+                    sources_per_column.append('')
             
             col_data = []
             # row_labels now contains section_keys (e.g., "Average common equity::institutional securities")
@@ -2023,10 +2058,44 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         # Row 13+: Actual table with headers (L0, L1, L2) then data
         
         def _convert_header_value(val):
-            """Convert header value to clean string."""
+            """Convert header value to clean string, normalizing period headers."""
             if val is None or val == '':
                 return ''
-            return ExcelUtils.ensure_string_header(val)
+            clean_val = ExcelUtils.ensure_string_header(val)
+            
+            # First try direct normalization (handles "Three Months Ended September 30, 2025")
+            normalized = normalize_point_in_time_header(clean_val)
+            if normalized:
+                return normalized
+            
+            # Handle multi-period headers separated by ",, " or when pattern repeats
+            # (e.g., "Three Months Ended June 30,, Six Months Ended June 30,")
+            if ',, ' in clean_val or (clean_val.count('Months Ended') > 1):
+                # Split on ",, " or "Ended [Date]," pattern
+                import re
+                parts = re.split(r',\s*,\s*', clean_val)
+                if len(parts) == 1:
+                    # Try splitting on repeated period patterns
+                    parts = re.split(r'(?<=\d{4}),\s*(?=[A-Z])', clean_val)
+                
+                normalized_parts = []
+                for part in parts:
+                    part = part.strip().rstrip(',')
+                    if not part:
+                        continue
+                    norm = normalize_point_in_time_header(part)
+                    normalized_parts.append(norm if norm else part)
+                
+                # Remove duplicates while preserving order
+                seen = set()
+                unique_parts = []
+                for p in normalized_parts:
+                    if p not in seen:
+                        seen.add(p)
+                        unique_parts.append(p)
+                return ', '.join(unique_parts) if unique_parts else clean_val
+            
+            return clean_val
         
         # Prepare column header lists with converted values
         l0_headers = [_convert_header_value(h) for h in self._last_level0_headers]
@@ -2054,6 +2123,9 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         display_title = re.sub(r'\s+', ' ', display_title).strip()
         
         # Create TableMetadata container for MetadataBuilder
+        # Ensure sources_per_column matches column count
+        sources_per_col_padded = _ensure_length(sources_per_column, col_count)
+        
         table_metadata = TableMetadata(
             category_parent=row_headers_l1[:5] if row_headers_l1 else [],
             line_items=row_headers_l2[:10] if row_headers_l2 else [],
@@ -2061,6 +2133,7 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
             column_header_l1=l0_headers,
             column_header_l2=l1_headers,
             column_header_l3=l2_headers,
+            sources_per_column=sources_per_col_padded,  # Per-column source tracking
             table_title=display_title,
             sources=all_sources,
             section=''  # Already included in display_title
@@ -2086,6 +2159,16 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
         # L2 (years/dates) is always present as table header
         level2_df = pd.DataFrame([l2_headers], columns=columns, dtype=str)
         header_frames.append(level2_df)
+        
+        # Source per Column row: Shows source file and page for each column
+        # Only add if there are actual sources per column
+        has_sources_per_col = any(s for s in sources_per_col_padded[1:] if s)
+        if has_sources_per_col:
+            # First cell is label, rest are per-column sources
+            sources_row_data = sources_per_col_padded.copy()
+            sources_row_data[0] = 'Source:'
+            sources_df = pd.DataFrame([sources_row_data], columns=columns, dtype=str)
+            header_frames.append(sources_df)
         
         
         # === CONCATENATE ALL FRAMES ===

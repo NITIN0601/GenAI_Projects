@@ -187,11 +187,55 @@ class HeaderDetector:
             len(level_2_headers) > 0
         ]) >= 2
         
+        # === COMBINE AND NORMALIZE PERIOD + DATE HEADERS ===
+        # If level_1 has period types without years (e.g., "Three Months Ended")
+        # and level_2 has years (e.g., "2024"), combine and normalize to Qn-QTD-YYYY
+        from src.utils.header_normalizer import normalize_point_in_time_header
+        
+        normalized_level_1 = []
+        for l1 in level_1_headers:
+            l1_str = str(l1).strip()
+            l1_lower = l1_str.lower()
+            has_period = any(p in l1_lower for p in ['months ended', 'at ', 'as of '])
+            has_year = bool(re.search(r'20\d{2}', l1_str))
+            
+            if has_period and not has_year and level_2_headers:
+                # Combine with dates from level_2 and normalize
+                for l2 in level_2_headers:
+                    l2_str = str(l2).strip()
+                    # Year-only
+                    if re.match(r'^20\d{2}$', l2_str):
+                        combined = f"{l1_str.rstrip(',')} {l2_str}"
+                        normalized = normalize_point_in_time_header(combined)
+                        if normalized and normalized not in normalized_level_1:
+                            normalized_level_1.append(normalized)
+                    # Full date (month + year)
+                    elif re.search(r'(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)', l2_str.lower()) and re.search(r'20\d{2}', l2_str):
+                        combined = f"{l1_str.rstrip(',')} {l2_str}"
+                        normalized = normalize_point_in_time_header(combined)
+                        if normalized and normalized not in normalized_level_1:
+                            normalized_level_1.append(normalized)
+            elif has_period and has_year:
+                # Already has year - normalize directly
+                normalized = normalize_point_in_time_header(l1_str)
+                if normalized and normalized not in normalized_level_1:
+                    normalized_level_1.append(normalized)
+                elif l1_str not in normalized_level_1:
+                    normalized_level_1.append(l1_str)
+            else:
+                # Not a period - keep as is
+                if l1_str and l1_str not in normalized_level_1:
+                    normalized_level_1.append(l1_str)
+        
+        # Use normalized level_1 if we got results
+        if normalized_level_1:
+            level_1_headers = normalized_level_1
+        
         return {
             'has_multi_level': has_multi_level,
             'level_0': level_0_headers,           # Top spanning (e.g., "Average Monthly Balance")
             'level_0_with_cols': level_0_with_cols,
-            'level_1': level_1_headers,           # Date periods (e.g., "Three Months Ended")
+            'level_1': level_1_headers,           # Date periods (now normalized: "Q2-QTD-2024")
             'level_1_with_cols': [],              # TODO: add if needed
             'level_2': level_2_headers            # Years (e.g., "2024", "2023")
         }

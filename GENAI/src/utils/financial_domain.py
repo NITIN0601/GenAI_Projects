@@ -369,24 +369,43 @@ def is_10k_source(source: str) -> bool:
 
 def convert_year_to_q4_header(header_text: str, source: str = '') -> str:
     """
-    Convert year-only column header to Q4 format for 10-K reports.
+    Convert year-only column header to Qn or YTD format based on source type.
     
     For 10-K sources:
-    - "2024" → "Q4, 2024"
+    - "2024" → "YTD-2024" (10-K are annual = full year = YTD)
     
-    For 10-Q sources (no change):
-    - "2024" → "2024"
+    For 10-Q sources (derive quarter from filename):
+    - "2024" from 10q0624 → "Q2-2024" (June = Q2)
+    - "2024" from 10q0325 → "Q1-2024" (March = Q1)
+    - "2025" from 10q0925 → "Q3-2025" (Sept = Q3)
     """
     if not header_text:
         return header_text
     
     header_str = str(header_text).strip()
     
-    if not is_10k_source(source):
+    # Only process 4-digit year strings
+    if not re.match(r'^20[1-3][0-9]$', header_str):
         return header_str
     
-    if re.match(r'^20[1-3][0-9]$', header_str):
-        return f"Q4, {header_str}"
+    source_lower = source.lower() if source else ''
+    
+    # 10-K: Annual report = Full Year = YTD
+    if is_10k_source(source):
+        return f"YTD-{header_str}"
+    
+    # 10-Q: Derive quarter from filename (10q0624 = June = Q2)
+    if '10q' in source_lower:
+        # Month patterns in 10-Q filenames
+        month_to_quarter = {
+            '03': 'Q1', '0325': 'Q1', '0324': 'Q1',  # March
+            '06': 'Q2', '0624': 'Q2', '0625': 'Q2',  # June
+            '09': 'Q3', '0924': 'Q3', '0925': 'Q3',  # September
+            '12': 'Q4', '1224': 'Q4', '1225': 'Q4',  # December
+        }
+        for pattern, quarter in month_to_quarter.items():
+            if pattern in source_lower:
+                return f"{quarter}-{header_str}"
     
     return header_str
 

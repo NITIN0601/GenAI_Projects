@@ -50,51 +50,20 @@ from src.pipeline.steps.process.header_flattener import flatten_table_headers_dy
 
 logger = get_logger(__name__)
 
-# Month to quarter mapping - single source of truth
-MONTH_TO_QUARTER_MAP = {
-    'january': 'Q1', 'february': 'Q1', 'march': 'Q1',
-    'april': 'Q2', 'may': 'Q2', 'june': 'Q2',
-    'july': 'Q3', 'august': 'Q3', 'september': 'Q3',
-    'october': 'Q4', 'november': 'Q4', 'december': 'Q4',
-}
+# Import from consolidated header normalizer module - single source of truth
+from src.utils.header_normalizer import (
+    MONTH_TO_QUARTER_MAP,
+    normalize_point_in_time_header,
+    is_valid_date_code,
+    convert_year_to_period,
+    combine_category_with_period,
+    combine_period_with_dates,
+    extract_quarter_from_header,
+    extract_year_from_header,
+)
 
+# Re-export for backward compatibility (other modules import from here)
 
-def normalize_point_in_time_header(value: str) -> Optional[str]:
-    """
-    Normalize point-in-time headers like "At June 30, 2024" to "Q2-2024".
-    
-    Args:
-        value: Header string to normalize
-        
-    Returns:
-        Normalized quarter code (e.g., "Q2-2024") or None if not a point-in-time header
-    """
-    if not value:
-        return None
-    
-    val_lower = value.lower().strip()
-    
-    # Only process "At" or "As of" prefixed headers
-    if not (val_lower.startswith('at ') or val_lower.startswith('as of ')):
-        return None
-    
-    # Extract year
-    year_match = re.search(r'(20\d{2})', value)
-    if not year_match:
-        return None
-    
-    # Find month
-    detected_month = None
-    for month_name in MONTH_TO_QUARTER_MAP:
-        if month_name in val_lower:
-            detected_month = month_name
-            break
-    
-    if not detected_month:
-        return None
-    
-    quarter = MONTH_TO_QUARTER_MAP[detected_month]
-    return f"{quarter}-{year_match.group(1)}"
 
 
 def is_valid_date_code(code: str) -> bool:
@@ -304,6 +273,247 @@ class ProcessStep(StepInterface):
         """
         header_row = table_info.get('header_row', 13)
         end_row = table_info.get('end_row', ws.max_row)
+        start_row = table_info.get('start_row', 1)
+        
+        # === UPDATE METADATA ROWS WITH NORMALIZED HEADERS ===
+        # Find and update Column Header L2 row (typically row 6)
+        # Also read L1 for date context to combine with L2 category headers
+        # Metadata rows are at the TOP of the sheet (rows 1-10), before table data starts
+        
+        # First, extract L1 content for date context
+        l1_content = ''
+        l1_normalized = None
+        for row_idx in range(1, 12):
+            cell_val = ws.cell(row=row_idx, column=1).value
+            if cell_val and 'Column Header L1' in str(cell_val):
+                l1_content = str(cell_val).split(':', 1)[1].strip() if ':' in str(cell_val) else ''
+                # Try to normalize L1 if it has date patterns
+                if l1_content:
+                    l1_normalized = normalize_point_in_time_header(l1_content)
+                    if not l1_normalized and re.match(r'^20\d{2}$', l1_content.strip()):
+                        l1_normalized = f"YTD-{l1_content.strip()}" if is_10k else l1_content.strip()
+                break
+        
+        # Now process L2
+        for row_idx in range(1, 12):  # Check rows 1-11 for metadata
+            cell_val = ws.cell(row=row_idx, column=1).value
+            if cell_val and 'Column Header L2' in str(cell_val):
+                # Found the Column Header L2 row - normalize its content
+                old_content = str(cell_val)
+                if ':' in old_content:
+                    prefix, raw_headers = old_content.split(':', 1)
+                    raw_list = [h.strip() for h in raw_headers.split(',') if h.strip()]
+                    
+                    # Recombine split date parts: ['At June 30', '2024'] → ['At June 30, 2024']
+                    # This happens when dates like "June 30, 2024" get split by comma
+                    recombined = []
+                    i = 0
+                    while i < len(raw_list):
+                        item = raw_list[i]
+                        # Check if this is a date prefix without year (At/As/Months pattern + month/day)
+                        has_date_prefix = re.search(r'(at|as of|months ended)\s+\w+\s+\d+', item.lower())
+                        has_year = bool(re.search(r'20\d{2}', item))
+                        
+                        if has_date_prefix and not has_year and i + 1 < len(raw_list):
+                            # Check if next item is a year
+                            next_item = raw_list[i + 1]
+                            if re.match(r'^20\d{2}$', next_item.strip()):
+                                # Combine: "At June 30" + "2024" → "At June 30, 2024"
+                                recombined.append(f"{item}, {next_item}")
+                                i += 2
+                                continue
+                        
+                        recombined.append(item)
+                        i += 1
+                    
+                    raw_list = recombined
+                    
+                    # Determine source type (10-K vs 10-Q) from worksheet name or parent
+                    source_doc = ''
+                    if hasattr(ws, 'parent') and hasattr(ws.parent, 'path') and ws.parent.path:
+                        source_doc = str(ws.parent.path)
+                    
+                    # Normalize each header using all available methods
+                    normalized_list = []
+                    for h in raw_list:
+                        # Try normalize_point_in_time_header first (handles At, Months Ended, etc.)
+                        norm = normalize_point_in_time_header(h)
+                        if norm:
+                            normalized_list.append(norm)
+                        # Handle year-only values - use is_10k parameter for correct period
+                        elif re.match(r'^20\d{2}$', h.strip()):
+                            year = h.strip()
+                            converted = f"YTD-{year}" if is_10k else year
+                            normalized_list.append(converted)
+                        else:
+                            normalized_list.append(h)
+                    
+                    # Check RAW patterns to see if L3 combination is needed
+                    # (Check raw_list, not normalized_list, since At patterns get normalized)
+                    needs_l3_combo = any('Months Ended' in h and not re.search(r'20\d{2}', h) for h in raw_list)
+                    if needs_l3_combo:
+                        # Look for Column Header L3 with years/dates (should be right after L2)
+                        for l3_row in range(row_idx + 1, row_idx + 5):
+                            l3_val = ws.cell(row=l3_row, column=1).value
+                            if l3_val and 'Column Header L3' in str(l3_val):
+                                l3_content = str(l3_val).split(':', 1)[1] if ':' in str(l3_val) else ''
+                                l3_parts = [y.strip() for y in l3_content.split(',') if y.strip()]
+                                
+                                # Recombine split date parts in L3: ['December 31', '2024'] → ['December 31, 2024']
+                                l3_recombined = []
+                                i = 0
+                                while i < len(l3_parts):
+                                    part = l3_parts[i]
+                                    # Check if this is a month+day without year
+                                    has_month = bool(re.search(r'(january|february|march|april|may|june|july|august|september|october|november|december)', part.lower()))
+                                    has_year = bool(re.search(r'20\d{2}', part))
+                                    
+                                    if has_month and not has_year and i + 1 < len(l3_parts):
+                                        # Next part might be the year
+                                        next_part = l3_parts[i + 1]
+                                        if re.match(r'^20\d{2}$', next_part.strip()):
+                                            l3_recombined.append(f"{part}, {next_part}")
+                                            i += 2
+                                            continue
+                                    
+                                    l3_recombined.append(part)
+                                    i += 1
+                                
+                                # Extract both full dates and year-only values
+                                full_dates = [d for d in l3_recombined if re.search(r'(january|february|march|april|may|june|july|august|september|october|november|december)', d.lower()) and re.search(r'20\d{2}', d)]
+                                years = [y for y in l3_recombined if re.match(r'^20\d{2}$', y.strip())]
+                                
+                                if full_dates or years:
+                                    # Combine period headers with dates/years and normalize
+                                    combined_normalized = []
+                                    # Prefer full dates, fall back to years
+                                    date_values = full_dates if full_dates else years
+                                    
+                                    for norm_h in normalized_list:
+                                        if 'Months Ended' in norm_h or 'At ' in norm_h:
+                                            for date_val in date_values:
+                                                combined = f"{norm_h.rstrip(',')} {date_val}"
+                                                norm_combined = normalize_point_in_time_header(combined)
+                                                if norm_combined and norm_combined not in combined_normalized:
+                                                    combined_normalized.append(norm_combined)
+                                        else:
+                                            if norm_h and norm_h not in combined_normalized:
+                                                combined_normalized.append(norm_h)
+                                    
+                                    if combined_normalized:
+                                        normalized_list = combined_normalized
+                                break
+                    
+                    # === HANDLE DESCRIPTIVE HEADERS WITH YEARS IN L3 ===
+                    # If L2 has descriptive text (not date patterns) and L3 has years,
+                    # append date context to descriptive headers
+                    has_descriptive = any(
+                        not is_valid_date_code(h) and 
+                        not re.match(r'^20\d{2}$', h.strip()) and
+                        not any(kw in h.lower() for kw in ['months ended', 'at ', 'as of'])
+                        for h in normalized_list
+                    )
+                    
+                    if has_descriptive:
+                        # Look for years in Column Header L3
+                        for l3_row in range(row_idx + 1, row_idx + 5):
+                            l3_val = ws.cell(row=l3_row, column=1).value
+                            if l3_val and 'Column Header L3' in str(l3_val):
+                                l3_content = str(l3_val).split(':', 1)[1] if ':' in str(l3_val) else ''
+                                l3_years = [y.strip() for y in l3_content.split(',') if re.match(r'^20\d{2}$', y.strip())]
+                                
+                                if l3_years:
+                                    # Use is_10k from function parameter (already correctly detected)
+                                    
+                                    # Build new normalized list with date prefixes
+                                    appended_list = []
+                                    for h in normalized_list:
+                                        if is_valid_date_code(h):
+                                            # Already normalized - keep as is
+                                            if h not in appended_list:
+                                                appended_list.append(h)
+                                        elif re.match(r'^20\d{2}$', h.strip()):
+                                            # Year-only - convert to period
+                                            period = f"YTD-{h.strip()}" if is_10k else h.strip()
+                                            if period not in appended_list:
+                                                appended_list.append(period)
+                                        else:
+                                            # Descriptive header - append each year
+                                            for year in l3_years:
+                                                period = f"YTD-{year}" if is_10k else year
+                                                combined = f"{period} {h}"
+                                                if combined not in appended_list:
+                                                    appended_list.append(combined)
+                                    
+                                    if appended_list:
+                                        normalized_list = appended_list
+                                break
+                    
+                    # === COMBINE L1 + L2 WHEN L1 HAS DATE AND L2 HAS CATEGORIES ===
+                    # If L1 has date context (l1_normalized) and L2 still has un-normalized
+                    # descriptive headers, combine them: "Q4-2024" + "IS, WM" → "Q4-2024 IS, Q4-2024 WM"
+                    if l1_normalized:
+                        still_descriptive = any(
+                            not is_valid_date_code(h) and 
+                            not re.match(r'^20\d{2}$', h.strip())
+                            for h in normalized_list
+                        )
+                        
+                        if still_descriptive:
+                            l1_combined = []
+                            for h in normalized_list:
+                                if is_valid_date_code(h):
+                                    # Already normalized - keep as is
+                                    if h not in l1_combined:
+                                        l1_combined.append(h)
+                                elif re.match(r'^20\d{2}$', h.strip()):
+                                    # Year-only - convert using L1 context
+                                    period = f"YTD-{h.strip()}" if is_10k else h.strip()
+                                    if period not in l1_combined:
+                                        l1_combined.append(period)
+                                else:
+                                    # Descriptive header - prepend L1 normalized date
+                                    combined = f"{l1_normalized} {h}"
+                                    if combined not in l1_combined:
+                                        l1_combined.append(combined)
+                            
+                            if l1_combined:
+                                normalized_list = l1_combined
+                    
+                    # Update the cell with normalized values
+                    new_content = f"{prefix}: {', '.join(normalized_list)}"
+                    if new_content != old_content:
+                        ws.cell(row=row_idx, column=1).value = new_content
+                        stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
+                        
+                        # Also update Year/Quarter row if we have normalized values
+                        if any(is_valid_date_code(n) for n in normalized_list):
+                            for yq_row in range(row_idx + 1, row_idx + 5):
+                                yq_val = ws.cell(row=yq_row, column=1).value
+                                if yq_val and 'Year/Quarter' in str(yq_val):
+                                    # Build new Year/Quarter entries from normalized headers
+                                    yq_entries = []
+                                    for norm_h in normalized_list:
+                                        if is_valid_date_code(norm_h):
+                                            # Extract period and year from normalized code
+                                            parts = norm_h.split('-')
+                                            if len(parts) >= 2:
+                                                if 'QTD' in norm_h or 'YTD' in norm_h:
+                                                    # Q2-QTD-2024 → Q2-QTD,2024
+                                                    period = f"{parts[0]}-{parts[1]}"
+                                                    year = parts[2] if len(parts) > 2 else ''
+                                                else:
+                                                    # Q2-2024 → Q2,2024
+                                                    period = parts[0]
+                                                    year = parts[1]
+                                                yq_entries.append(f"{period},{year}")
+                                    
+                                    if yq_entries:
+                                        new_yq = f"Year/Quarter: {', '.join(yq_entries)}"
+                                        ws.cell(row=yq_row, column=1).value = new_yq
+                                        stats['cells_formatted'] = stats.get('cells_formatted', 0) + 1
+                                    break
+                break
         
         # PRE-SCAN: Normalize point-in-time headers ("At June 30, 2024" -> "Q2-2024")
         # This handles headers that appear BEFORE the detected header_row

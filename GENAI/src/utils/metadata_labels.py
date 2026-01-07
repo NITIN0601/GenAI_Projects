@@ -31,6 +31,7 @@ class MetadataLabels:
     # Table info
     TABLE_TITLE = 'Table Title:'
     SOURCES = 'Source(s):'  # Works for one or many
+    SOURCES_PER_COLUMN = 'Source per Column:'  # Per-column source tracking
     
     # --- Row Index Constants (1-indexed for Excel) ---
     # NOTE: L1 (Main Header) is OPTIONAL - some tables have it, some don't
@@ -135,7 +136,11 @@ class TableMetadata:
     # Year/Quarter (per-column, derived from L2+L3)
     year_quarter: List[str] = field(default_factory=list)
     
+    # Source tracking per column (e.g., ["10q0624_p45", "10k1224_p32", ...])
+    sources_per_column: List[str] = field(default_factory=list)
+    
     # Table info
     table_title: str = ""
     sources: List[str] = field(default_factory=list)
     section: str = ""
+

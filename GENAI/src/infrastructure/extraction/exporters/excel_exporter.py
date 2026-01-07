@@ -41,6 +41,7 @@ from src.utils.excel_utils import ExcelUtils
 from src.utils.metadata_labels import MetadataLabels
 from src.utils.metadata_builder import MetadataBuilder
 from src.utils.financial_domain import extract_quarter_from_header, extract_year_from_header, convert_year_to_q4_header
+from src.pipeline.steps.process import normalize_point_in_time_header
 
 from openpyxl import load_workbook
 
@@ -491,7 +492,10 @@ class ExcelTableExporter(BaseExcelExporter):
                         return ''
                     if isinstance(c, float) and c == int(c):
                         return str(int(c))
-                    return str(c)
+                    # Normalize period headers
+                    header_str = str(c)
+                    normalized = normalize_point_in_time_header(header_str)
+                    return normalized if normalized else header_str
                 rows.append([clean_header(c) for c in table_df.columns])
                 
                 # Add data rows
@@ -691,13 +695,17 @@ class ExcelTableExporter(BaseExcelExporter):
                 # Found compound header - L1 is main header, add to level_0
                 if split_result['l1'] not in extracted_l0_from_split:
                     extracted_l0_from_split.append(split_result['l1'])
-                # L2 is period type, keep in level_1
+                # L2 is period type, keep in level_1 (normalized)
                 if split_result['l2'] and split_result['l2'] not in level_1:
-                    level_1.append(split_result['l2'])
+                    normalized_l2 = normalize_point_in_time_header(split_result['l2'])
+                    # Use normalized if available, else original
+                    level_1.append(normalized_l2 if normalized_l2 else split_result['l2'])
             else:
-                # No split needed - keep original
-                if header not in level_1:
-                    level_1.append(header)
+                # No split needed - normalize and keep original
+                normalized_header = normalize_point_in_time_header(header)
+                header_to_add = normalized_header if normalized_header else header
+                if header_to_add and header_to_add not in level_1:
+                    level_1.append(header_to_add)
         
         # Merge extracted L0 headers with existing level_0
         # (extracted from splits come after existing level_0)
@@ -706,15 +714,192 @@ class ExcelTableExporter(BaseExcelExporter):
                 if h not in level_0:
                     level_0.append(h)
         
-        # For 10-K reports with year-only headers (no period type), convert to Q4 format
+        # For 10-K reports with year-only headers (no period type), convert to YTD format
         # Only convert if level_1 is empty (no "Three Months Ended" etc.)
+        
+        # === RECOMBINE SPLIT DATE PARTS IN level_2_raw ===
+        # Sometimes dates like "December 31, 2024" are split into ["December 31", "2024"]
+        # Recombine adjacent month+day with year items
+        recombined_l2 = []
+        i = 0
+        while i < len(level_2_raw):
+            item = str(level_2_raw[i]).strip()
+            item_lower = item.lower()
+            
+            # Check if this item has a month+day pattern (e.g., "December 31")
+            has_month_day = re.search(r'(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\s+\d{1,2}', item_lower) and not re.search(r'20\d{2}', item)
+            
+            # Check if next item is a year
+            if has_month_day and i + 1 < len(level_2_raw):
+                next_item = str(level_2_raw[i + 1]).strip()
+                if re.match(r'^20\d{2}$', next_item):
+                    # Recombine: "December 31" + "2024" → "December 31, 2024"
+                    combined_date = f"{item}, {next_item}"
+                    recombined_l2.append(combined_date)
+                    i += 2  # Skip next item since we combined it
+                    continue
+            
+            recombined_l2.append(item)
+            i += 1
+        
+        # Use recombined list for further processing
+        level_2_raw = recombined_l2
+        
+        # === COMBINE PERIOD HEADERS WITH RAW DATES AND NORMALIZE (BEFORE L2 normalization) ===
+        # This must happen BEFORE level_2 is normalized, so we can match month names
+        # If level_1 has period text without years/months (e.g., "Three Months Ended")
+        # and level_2_raw has full dates (e.g., "December 31, 2024"), combine and normalize
+        normalized_l1 = []
+        for l1_header in level_1:
+            l1_str = str(l1_header).strip()
+            # Check if L1 has a period pattern but no year
+            has_period = any(p in l1_str.lower() for p in ['months ended', 'at ', 'as of '])
+            has_year = bool(re.search(r'20\d{2}', l1_str))
+            
+            if has_period and not has_year and level_2_raw:
+                # Combine with each value from level_2_RAW (before normalization!) and normalize
+                for l2_header in level_2_raw:
+                    l2_str = str(l2_header).strip()
+                    # Case 1: level_2 is year-only (e.g., "2024")
+                    if re.match(r'^20\d{2}$', l2_str):
+                        combined = f"{l1_str.rstrip(',')} {l2_str}"
+                        normalized = normalize_point_in_time_header(combined)
+                        if normalized and normalized not in normalized_l1:
+                            normalized_l1.append(normalized)
+                        elif not normalized:
+                            # Fallback: derive quarter from source filename when month is missing
+                            # e.g., 10q0624 = June = Q2, 10k1224 = December = Q4/YTD
+                            year = l2_str
+                            period_type = 'QTD' if 'three months' in l1_str.lower() else ('YTD' if 'six months' in l1_str.lower() or 'nine months' in l1_str.lower() else '')
+                            # Derive quarter from filename
+                            quarter = None
+                            source_lower = source_doc.lower()
+                            if '10k' in source_lower:
+                                # 10-K is annual = YTD
+                                fallback = f"YTD-{year}"
+                            elif '10q' in source_lower:
+                                # Extract month from filename like 10q0624 (06 = June = Q2)
+                                month_match = re.search(r'10q(\d{2})\d{2}', source_lower)
+                                if month_match:
+                                    month_num = int(month_match.group(1))
+                                    quarter = f"Q{(month_num - 1) // 3 + 1}"
+                                    if period_type:
+                                        fallback = f"{quarter}-{period_type}-{year}"
+                                    else:
+                                        fallback = f"{quarter}-{year}"
+                                else:
+                                    fallback = f"{l1_str}, {year}"
+                            else:
+                                fallback = f"{l1_str}, {year}"
+                            if fallback not in normalized_l1:
+                                normalized_l1.append(fallback)
+                    # Case 2: level_2 is full date (e.g., "December 31, 2024", "Sept 30, 2025")
+                    elif re.search(r'(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)', l2_str.lower()) and re.search(r'20\d{2}', l2_str):
+                        # Combine period type with full date: "Three Months Ended" + "December 31, 2024"
+                        combined = f"{l1_str.rstrip(',')} {l2_str}"
+                        normalized = normalize_point_in_time_header(combined)
+                        if normalized and normalized not in normalized_l1:
+                            normalized_l1.append(normalized)
+            elif has_period and has_year:
+                # Already has year - normalize directly
+                normalized = normalize_point_in_time_header(l1_str)
+                if normalized and normalized not in normalized_l1:
+                    normalized_l1.append(normalized)
+                elif l1_str not in normalized_l1:
+                    normalized_l1.append(l1_str)
+            else:
+                # Not a period header - keep as-is
+                if l1_str and l1_str not in normalized_l1:
+                    normalized_l1.append(l1_str)
+        
+        # Replace level_1 with normalized version if we got results
+        if normalized_l1:
+            level_1 = normalized_l1
+        
+        # === HANDLE 3-LEVEL HEADERS: L2 has both period type AND dates ===
+        # When level_2_raw contains both period types ("Three Months Ended") and dates ("December 31, 2024")
+        # we need to combine them within level_2_raw itself
+        period_types_in_l2 = []
+        dates_in_l2 = []
+        for h in level_2_raw:
+            h_str = str(h).strip()
+            h_lower = h_str.lower()
+            # Check if it's a period type (no year/month date components)
+            is_period_type = any(p in h_lower for p in ['months ended', 'at ', 'as of ']) and not re.search(r'(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\s+\d', h_lower)
+            # Check if it's a full date (month + day + year)
+            is_full_date = re.search(r'(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\s+\d{1,2}.*20\d{2}', h_lower) is not None
+            
+            if is_period_type:
+                period_types_in_l2.append(h_str)
+            elif is_full_date:
+                dates_in_l2.append(h_str)
+        
+        # If we have both period types and dates in L2, combine them
+        combined_l2_periods = []
+        if period_types_in_l2 and dates_in_l2:
+            for period_type in period_types_in_l2:
+                for date in dates_in_l2:
+                    combined = f"{period_type.rstrip(',')} {date}"
+                    normalized = normalize_point_in_time_header(combined)
+                    if normalized and normalized not in combined_l2_periods:
+                        combined_l2_periods.append(normalized)
+            
+            # Update level_1 with these combined periods if we got results
+            if combined_l2_periods:
+                for cp in combined_l2_periods:
+                    if cp not in level_1:
+                        level_1.append(cp)
+        
+        # Now normalize level_2 (after combination logic has used the raw values)
         level_2 = []
         for h in level_2_raw:
+            h_str = str(h).strip()
+            # Skip period types that were already combined above
+            if h_str in period_types_in_l2 and combined_l2_periods:
+                continue
+            # Skip dates that were already combined above  
+            if h_str in dates_in_l2 and combined_l2_periods:
+                continue
+                
             if not level_1:  # No period type headers, just year-only
-                converted = convert_year_to_q4_header(str(h), source_doc)
+                converted = convert_year_to_q4_header(h_str, source_doc)
                 level_2.append(converted)
             else:
-                level_2.append(h)
+                # Normalize period headers in level_2
+                normalized = normalize_point_in_time_header(h_str)
+                # Use normalized if available, else original
+                level_2.append(normalized if normalized else h_str)
+        
+        # === COMBINE CATEGORY (L0) WITH NORMALIZED PERIODS (L1) ===
+        # If level_0 has category labels (e.g., "Average Daily Balance") and level_1 has 
+        # normalized periods (e.g., "Q4-QTD-2024"), combine them to produce
+        # "Average Daily Balance Q4-QTD-2024"
+        if level_0 and level_1:
+            combined_headers = []
+            for l0_header in level_0:
+                l0_str = str(l0_header).strip()
+                # Check if L0 is a category label (not a date pattern)
+                is_category = not any(p in l0_str.lower() for p in 
+                    ['months ended', 'at ', 'as of ', 'q1-', 'q2-', 'q3-', 'q4-', 'ytd-', 'qdt-'])
+                
+                if is_category and l0_str:
+                    # Combine category with each normalized period
+                    for l1_header in level_1:
+                        l1_str = str(l1_header).strip()
+                        # Check if L1 is a normalized period (Qn-YYYY or Qn-QTD-YYYY format)
+                        if re.match(r'^Q[1-4]-(QTD|YTD)?-?20\d{2}$', l1_str):
+                            combined = f"{l0_str} {l1_str}"
+                            if combined not in combined_headers:
+                                combined_headers.append(combined)
+                        else:
+                            # L1 is not normalized, keep as-is
+                            if l1_str not in combined_headers:
+                                combined_headers.append(l1_str)
+            
+            # Replace level_1 with combined headers if we got results
+            if combined_headers:
+                level_1 = combined_headers
+                level_0 = []  # Clear L0 since it's now combined into L1
         
         # Extract years from all header levels
         for header in level_0 + level_1 + level_2:
@@ -809,7 +994,10 @@ class ExcelTableExporter(BaseExcelExporter):
                     return ''
                 if isinstance(c, float) and c == int(c):
                     return str(int(c))
-                return str(c)
+                header_str = str(c)
+                # Normalize period headers like "Three Months Ended Sept 30, 2025" -> "Q3-QTD-2025"
+                normalized = normalize_point_in_time_header(header_str)
+                return normalized if normalized else header_str
             rows.append([clean_header(c) for c in table_df.columns])
             
             # Track header rows for mid-table replication

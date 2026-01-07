@@ -285,11 +285,14 @@ class MetadataBuilder:
         rows.append({first_col: f"{MetadataLabels.COLUMN_HEADER_L3} {l3_str}"})
         
         # Row 8: Year/Quarter (derived from L2 + L3)
+        # Only include valid date codes (Qn-YYYY, YTD-YYYY, Qn-QTD-YYYY, Qn-YTD-YYYY)
+        valid_yq_pattern = re.compile(r'^(Q[1-4](-QTD|-YTD)?|YTD)-20\d{2}$', re.IGNORECASE)
         year_quarter_values = []
         for i, (l2_val, l3_val) in enumerate(zip(metadata.column_header_l2, metadata.column_header_l3)):
             if i > 0:  # Skip first column
                 yq = cls.build_year_quarter_value(l2_val, l3_val, metadata.sources[0] if metadata.sources else '')
-                if yq and yq not in year_quarter_values:
+                # Only include if it looks like a valid date code
+                if yq and valid_yq_pattern.match(yq) and yq not in year_quarter_values:
                     year_quarter_values.append(yq)
         yq_str = ', '.join(year_quarter_values) if year_quarter_values else ''
         rows.append({first_col: f"{MetadataLabels.YEAR_QUARTER} {yq_str}"})
