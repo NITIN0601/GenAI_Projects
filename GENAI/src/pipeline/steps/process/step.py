@@ -66,27 +66,6 @@ from src.utils.header_normalizer import (
 
 
 
-def is_valid_date_code(code: str) -> bool:
-    """
-    Check if a string is a valid normalized date code.
-    
-    Valid codes:
-    - Q1-2024, Q2-2024, Q3-2024, Q4-2024 (point-in-time)
-    - Q1-QTD-2024, Q2-YTD-2024 (period-based)
-    - YTD-2024 (annual)
-    
-    Args:
-        code: String to validate
-        
-    Returns:
-        True if the code is a valid date code
-    """
-    if not code:
-        return False
-    return bool(
-        re.match(r'^Q[1-4](-QTD|-YTD)?-20\d{2}', code) or
-        re.match(r'^YTD-20\d{2}', code)
-    )
 
 class ProcessStep(StepInterface):
     """
@@ -291,7 +270,7 @@ class ProcessStep(StepInterface):
                 if l1_content:
                     l1_normalized = normalize_point_in_time_header(l1_content)
                     if not l1_normalized and re.match(r'^20\d{2}$', l1_content.strip()):
-                        l1_normalized = f"YTD-{l1_content.strip()}" if is_10k else l1_content.strip()
+                        l1_normalized = convert_year_to_period(l1_content.strip(), str(ws.parent.path) if hasattr(ws, 'parent') and hasattr(ws.parent, 'path') else '')
                 break
         
         # Now process L2
@@ -340,10 +319,11 @@ class ProcessStep(StepInterface):
                         norm = normalize_point_in_time_header(h)
                         if norm:
                             normalized_list.append(norm)
-                        # Handle year-only values - use is_10k parameter for correct period
+                        # Handle year-only values - use convert_year_to_period for correct Q-format
                         elif re.match(r'^20\d{2}$', h.strip()):
                             year = h.strip()
-                            converted = f"YTD-{year}" if is_10k else year
+                            # Use convert_year_to_period to get Q1-2024 format for 10Q
+                            converted = convert_year_to_period(year, source_doc)
                             normalized_list.append(converted)
                         else:
                             normalized_list.append(h)
@@ -434,13 +414,13 @@ class ProcessStep(StepInterface):
                                                 appended_list.append(h)
                                         elif re.match(r'^20\d{2}$', h.strip()):
                                             # Year-only - convert to period
-                                            period = f"YTD-{h.strip()}" if is_10k else h.strip()
+                                            period = convert_year_to_period(h.strip(), source_doc)
                                             if period not in appended_list:
                                                 appended_list.append(period)
                                         else:
                                             # Descriptive header - append each year
                                             for year in l3_years:
-                                                period = f"YTD-{year}" if is_10k else year
+                                                period = convert_year_to_period(year, source_doc)
                                                 combined = f"{period} {h}"
                                                 if combined not in appended_list:
                                                     appended_list.append(combined)
@@ -468,7 +448,7 @@ class ProcessStep(StepInterface):
                                         l1_combined.append(h)
                                 elif re.match(r'^20\d{2}$', h.strip()):
                                     # Year-only - convert using L1 context
-                                    period = f"YTD-{h.strip()}" if is_10k else h.strip()
+                                    period = convert_year_to_period(h.strip(), source_doc)
                                     if period not in l1_combined:
                                         l1_combined.append(period)
                                 else:

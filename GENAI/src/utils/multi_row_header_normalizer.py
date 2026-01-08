@@ -173,6 +173,30 @@ class MultiRowHeaderNormalizer:
             ctx.raw_values.append(val)
             val_lower = val.lower()
             
+            # Check if this is already a normalized date code - preserve as-is
+            # Patterns: Q1-2024, Q2-QTD-2024, Q3-YTD-2024, YTD-2024
+            if re.match(r'^Q[1-4]-20\d{2}$', val, re.IGNORECASE):
+                # Already Q-code format - extract and preserve
+                match = re.match(r'^Q([1-4])-(20\d{2})$', val, re.IGNORECASE)
+                ctx.year = match.group(2)
+                ctx.period_type = 'POINT'
+                quarter_to_month = {'1': 'march', '2': 'june', '3': 'september', '4': 'december'}
+                ctx.month = quarter_to_month.get(match.group(1), '')
+                continue
+            if re.match(r'^Q[1-4]-(QTD|YTD)-20\d{2}$', val, re.IGNORECASE):
+                match = re.match(r'^Q([1-4])-(QTD|YTD)-(20\d{2})$', val, re.IGNORECASE)
+                ctx.year = match.group(3)
+                ctx.period_type = match.group(2).upper()
+                quarter_to_month = {'1': 'march', '2': 'june', '3': 'september', '4': 'december'}
+                ctx.month = quarter_to_month.get(match.group(1), '')
+                continue
+            if re.match(r'^YTD-20\d{2}$', val, re.IGNORECASE):
+                match = re.match(r'^YTD-(20\d{2})$', val, re.IGNORECASE)
+                ctx.year = match.group(1)
+                ctx.period_type = 'ANNUAL'
+                ctx.month = 'december'
+                continue
+            
             # Check if this is a preserve-as-is column
             if cls._should_preserve(val):
                 ctx.is_date_column = False
@@ -476,12 +500,9 @@ class MultiRowHeaderNormalizer:
             code = f"YTD-{ctx.year}" if ctx.year else ''
             l2_value = 'Year Ended'
         elif ctx.year:
-            # Year only - check if 10-K
-            is_10k = '10k' in source_filename.lower() if source_filename else False
-            if is_10k:
-                code = f"YTD-{ctx.year}"
-            else:
-                code = f"{quarter}-{ctx.year}" if quarter else ctx.year
+            # Year only - use convert_year_to_period for proper Q-format
+            from src.utils.header_normalizer import convert_year_to_period
+            code = convert_year_to_period(ctx.year, source_filename)
         
         # Clean category (remove nan and strip footnotes)
         clean_category = ctx.category if ctx.category and ctx.category.lower() != 'nan' else ''

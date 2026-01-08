@@ -71,11 +71,13 @@ class ConsolidateStep(StepInterface):
                 
                 if merge_result and 'path' in merge_result:
                     consolidated_path = merge_result['path']
+                    from pathlib import Path as PathlibPath
+                    output_filename = PathlibPath(consolidated_path).name
                     return StepResult(
                         step_name=self.name,
                         status=StepStatus.SUCCESS,
                         data={'export_paths': {'excel': consolidated_path}},
-                        message=f"Consolidated all {merge_result.get('tables_merged', 0)} tables into {consolidated_path}",
+                        message=f"Consolidated all {merge_result.get('tables_merged', 0)} tables to {output_filename}",
                         metadata={
                             'mode': 'full_merge',
                             'tables_merged': merge_result.get('tables_merged', 0),

@@ -256,6 +256,12 @@ class TableMerger:
             wb.save(output_path)
             result['output_path'] = str(output_path)
             
+            # Apply currency/percentage formatting to output file
+            try:
+                self._apply_number_formatting(output_path)
+            except Exception as e:
+                logger.debug(f"Could not apply number formatting to {output_path}: {e}")
+            
             logger.info(f"Processed {source_path.name}: {result['tables_merged']} merges, {result['tables_split']} splits across {result['sheets_processed']} sheets")
             
         except Exception as e:
@@ -1399,6 +1405,88 @@ class TableMerger:
                 if ws.cell(row=row_num, column=col_num).value is not None:
                     max_col = max(max_col, col_num)
         return max_col
+    
+    def _apply_number_formatting(self, output_path: Path) -> None:
+        """
+        Apply currency and percentage formatting to merged output file.
+        
+        Uses row label heuristics and value-based detection similar to
+        ExcelFormatter.apply_currency_format().
+        """
+        from openpyxl import load_workbook
+        
+        # US currency accounting format
+        CURRENCY_FORMAT = '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'
+        PERCENTAGE_FORMAT = '0.00%'
+        
+        # Indicators for determining format type
+        CURRENCY_INDICATORS = ['$', 'dollar', 'revenue', 'income', 'expense', 'cost', 'assets', 'liabilities', 'balance']
+        PERCENTAGE_INDICATORS = ['%', 'percent', 'ratio', 'margin', 'return', 'rate', 'yield', 'roe', 'roa', 'rotce']
+        
+        wb = load_workbook(output_path)
+        
+        for sheet_name in wb.sheetnames:
+            if sheet_name.lower() == 'index':
+                continue
+            
+            ws = wb[sheet_name]
+            
+            # Find where data starts (after Row Label row)
+            data_start_row = None
+            for r in range(1, min(20, ws.max_row + 1)):
+                cell_val = str(ws.cell(row=r, column=1).value or '').strip()
+                # Look for data rows (non-metadata, non-empty first column)
+                if cell_val and not any(label in cell_val for label in [
+                    'Category:', 'Line Items:', 'Product/Entity:', 'Period Type:',
+                    'Year:', 'Table Title:', 'Source:', 'Column Header', '← Back to Index'
+                ]):
+                    # Check if this looks like a data row (has values in other columns)
+                    has_data = any(ws.cell(row=r, column=c).value for c in range(2, min(10, ws.max_column + 1)))
+                    if has_data:
+                        data_start_row = r
+                        break
+            
+            if data_start_row is None:
+                continue
+            
+            # Apply formatting to data rows
+            for row in range(data_start_row, ws.max_row + 1):
+                row_label = str(ws.cell(row=row, column=1).value or '').lower()
+                
+                # Collect numeric values in this row
+                row_values = []
+                for col in range(2, ws.max_column + 1):
+                    cell = ws.cell(row=row, column=col)
+                    if isinstance(cell.value, (int, float)) and cell.value is not None:
+                        row_values.append(cell.value)
+                
+                # Determine if percentage or currency based on row label
+                is_pct_label = any(ind in row_label for ind in PERCENTAGE_INDICATORS)
+                is_currency_label = any(ind in row_label for ind in CURRENCY_INDICATORS)
+                
+                if is_pct_label:
+                    is_percentage_row = True
+                elif is_currency_label:
+                    is_percentage_row = False
+                else:
+                    # Value-based detection for unlabeled rows
+                    is_percentage_row = False
+                    if row_values:
+                        non_zero_values = [v for v in row_values if v != 0]
+                        if non_zero_values:
+                            all_in_pct_range = all(-1 <= v <= 1 for v in non_zero_values)
+                            has_decimal = any(0 < abs(v) < 1 for v in non_zero_values)
+                            is_percentage_row = all_in_pct_range and has_decimal
+                
+                # Apply format to all numeric cells in this row
+                format_to_apply = PERCENTAGE_FORMAT if is_percentage_row else CURRENCY_FORMAT
+                for col in range(2, ws.max_column + 1):
+                    cell = ws.cell(row=row, column=col)
+                    if isinstance(cell.value, (int, float)) and cell.value is not None:
+                        cell.number_format = format_to_apply
+        
+        wb.save(output_path)
+        logger.debug(f"Applied number formatting to {output_path.name}")
 
 # =============================================================================
 # FACTORY FUNCTION (not a singleton - allows directory overrides)

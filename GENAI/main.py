@@ -602,8 +602,8 @@ def process(
         python main.py process --skip-advanced  # Skip remaining steps
         python main.py process --source ./data/extracted_raw
     """
-    console.print("\n[bold green]Step 2: Process Data[/bold green]\n")
-    console.print("[cyan]Normalizing and cleaning extracted data...[/cyan]\n")
+    console.print("\n[bold]Step 2: Process Data[/bold]")
+    console.print("\n[cyan]Normalizing and cleaning extracted data...[/cyan]\n")
     
     # Step 1: Process
     result = run_process(source_dir=source, dest_dir=dest)

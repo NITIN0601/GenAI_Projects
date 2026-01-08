@@ -630,7 +630,15 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                     if not row_sig:
                         continue
                     
+                    # Extract date suffix from title for column header context
+                    # e.g., "Borrowings at March 31, 2025" → date_code = "Q1-2025"
+                    _, title_date_suffix, title_date_code = ExcelUtils.extract_title_date_suffix(full_title)
+                    if title_date_code:
+                        metadata['title_date_code'] = title_date_code  # e.g., "Q1-2025"
+                        metadata['title_date_suffix'] = title_date_suffix  # e.g., "at March 31, 2025"
+                    
                     # Create grouping key: Section + Title + [SubtableIdx] + Structure
+                    # Note: normalized_title now has date suffix stripped for better merging
                     normalized_title = self._normalize_title_for_grouping(full_title)
                     subtable_suffix = f"::sub{subtable_idx}" if len(subtables) > 1 else ""
                     
@@ -1505,10 +1513,13 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                             row_labels.append(norm_val)
                             label_to_section[norm_val] = ''  # Section headers have no parent section
                     else:
-                        # This is a data row - use section prefix for unique matching
+                        # This is a data row - use NORMALIZED section prefix for unique matching
+                        # Normalizing the section ensures consistent matching across source files
+                        # (handles OCR variations like "Institutional Securities" vs "Institutional securities")
                         norm_val = self._normalize_row_label(val)
-                        # Create a section-prefixed key for disambiguation
-                        section_key = f"{current_section}::{norm_val}" if current_section else norm_val
+                        norm_section = self._normalize_row_label(current_section) if current_section else ''
+                        # Create a normalized section-prefixed key for disambiguation
+                        section_key = f"{norm_section}::{norm_val}" if norm_section else norm_val
                         
                         if section_key not in normalized_row_labels:
                             normalized_row_labels[section_key] = val_str
@@ -1626,9 +1637,11 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                             if norm_row:
                                 row_data_map[norm_row] = value  # Section headers stay as simple keys
                         else:
-                            # This is a data row - use section prefix for matching
+                            # This is a data row - use NORMALIZED section prefix for matching
+                            # Normalizing ensures consistent matching across source files
                             if norm_row:
-                                section_key = f"{current_section_for_data}::{norm_row}" if current_section_for_data else norm_row
+                                norm_section = self._normalize_row_label(current_section_for_data) if current_section_for_data else ''
+                                section_key = f"{norm_section}::{norm_row}" if norm_section else norm_row
                                 row_data_map[section_key] = value
                 
                 non_empty_data = [v for v in row_data_map.values() if pd.notna(v) and str(v).strip() and str(v).strip() != 'nan']

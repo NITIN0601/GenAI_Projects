@@ -95,6 +95,106 @@ class ExcelUtils:
             result = result.replace(broken, fixed)
         return result
     
+    # Month to quarter mapping for title date extraction
+    MONTH_TO_QUARTER = {
+        'january': 'Q1', 'february': 'Q1', 'march': 'Q1',
+        'april': 'Q2', 'may': 'Q2', 'june': 'Q2',
+        'july': 'Q3', 'august': 'Q3', 'september': 'Q3',
+        'october': 'Q4', 'november': 'Q4', 'december': 'Q4',
+    }
+    
+    @staticmethod
+    def extract_title_date_suffix(title: str) -> tuple:
+        """
+        Extract and strip date suffix from table title.
+        
+        Handles patterns like:
+        - "Borrowings by Maturity at March 31, 2025"
+        - "Deposits - Savings at September 30, 2025 (Part 1)"
+        - "Average Balances as of December 31, 2024"
+        - "Cash Flows for the Three Months Ended June 30, 2024"
+        
+        Args:
+            title: Table title to process
+            
+        Returns:
+            Tuple of (normalized_title, date_suffix, normalized_date_code)
+            - normalized_title: Title without date suffix
+            - date_suffix: Original date portion (for reference)
+            - normalized_date_code: Qn-2024 format (for column header context)
+            
+        Examples:
+            "Borrowings at March 31, 2025" → ("Borrowings", "at March 31, 2025", "Q1-2025")
+            "Cash Flows for Three Months Ended June 30, 2024" → ("Cash Flows", "for Three Months Ended June 30, 2024", "Q2-QTD-2024")
+        """
+        if not title:
+            return (title, '', '')
+        
+        title_str = str(title).strip()
+        
+        # Define date patterns to extract (order matters - more specific first)
+        # Each pattern: (regex, period_type)
+        # Note: Patterns allow for optional underscore suffix after date (e.g., "_Fitch Ratings, Inc.")
+        date_patterns = [
+            # "for the Three Months Ended March 31, 2025" or "Three Months Ended March 31, 2025"
+            (r'\s*(?:for\s+the\s+)?three\s+months?\s+ended\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+(20\d{2})(?:\s*\(part\s*\d+\))?(?:_|$)', 'QTD'),
+            
+            # "for the Six Months Ended June 30, 2024"
+            (r'\s*(?:for\s+the\s+)?six\s+months?\s+ended\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+(20\d{2})(?:\s*\(part\s*\d+\))?(?:_|$)', 'YTD'),
+            
+            # "for the Nine Months Ended September 30, 2024"
+            (r'\s*(?:for\s+the\s+)?nine\s+months?\s+ended\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+(20\d{2})(?:\s*\(part\s*\d+\))?(?:_|$)', 'YTD'),
+            
+            # "for the Year Ended December 31, 2024"
+            (r'\s*(?:for\s+the\s+)?year\s+ended\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+(20\d{2})(?:\s*\(part\s*\d+\))?(?:_|$)', 'ANNUAL'),
+            
+            # "at March 31, 2025" or "as of March 31, 2025"
+            # Allows: end of string ($) OR underscore followed by suffix (_)
+            (r'\s+(?:at|as\s+of)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+(20\d{2})(?:\s*\(part\s*\d+\))?(?:_|$)', 'POINT'),
+        ]
+        
+        title_lower = title_str.lower()
+        
+        for pattern, period_type in date_patterns:
+            match = re.search(pattern, title_lower, re.IGNORECASE)
+            if match:
+                # Extract month and year from match groups
+                month = match.group(1).lower()
+                year = match.group(2)
+                
+                # Get quarter from month
+                quarter = ExcelUtils.MONTH_TO_QUARTER.get(month, 'Q4')
+                
+                # Build normalized date code
+                if period_type == 'QTD':
+                    date_code = f"{quarter}-QTD-{year}"
+                elif period_type == 'YTD':
+                    date_code = f"{quarter}-YTD-{year}"
+                elif period_type == 'ANNUAL':
+                    date_code = f"YTD-{year}"
+                else:  # POINT
+                    date_code = f"{quarter}-{year}"
+                
+                # Get the original date suffix (preserve original case)
+                # Check if there's an underscore after the date (category suffix)
+                match_end = match.end()
+                full_match_text = title_str[match.start():match_end]
+                
+                # If the match ends with underscore, don't include it in date_suffix
+                if full_match_text.endswith('_'):
+                    date_suffix = full_match_text[:-1]  # Remove trailing underscore
+                    # Keep the underscore and everything after it in the normalized title
+                    underscore_suffix = title_str[match_end - 1:]  # Start from the underscore
+                    normalized_title = title_str[:match.start()].strip() + underscore_suffix
+                else:
+                    date_suffix = title_str[match.start():]
+                    normalized_title = title_str[:match.start()].strip()
+                
+                return (normalized_title, date_suffix, date_code)
+        
+        # No date pattern found - return original
+        return (title_str, '', '')
+    
     @staticmethod
     def normalize_title_for_grouping(title: str, clean_row_ranges: bool = True) -> str:
         """
@@ -105,10 +205,10 @@ class ExcelUtils:
         - "Difference between Contractual..."
         are grouped together.
         
-        Also strips Part numbers so tables with same content but different 
-        Part numbers across quarters can merge:
-        - "Wealth Management Metrics (Part 2)" -> "wealth management metrics"
-        - "Wealth Management Metrics (Part 5)" -> "wealth management metrics"
+        Also strips:
+        - Part numbers: "(Part 2)" → removed
+        - Date suffixes: "at March 31, 2025" → removed (for merging across quarters)
+        - Unit suffixes: "_$ In Billions" → removed (these are metadata, not title)
         
         Args:
             title: Title to normalize
@@ -123,6 +223,10 @@ class ExcelUtils:
         # First fix OCR broken words
         result = ExcelUtils.fix_ocr_broken_words(title)
         
+        # NEW: Strip date suffixes from titles for better merging across quarters
+        # e.g., "Borrowings at March 31, 2025" → "Borrowings"
+        result, _, _ = ExcelUtils.extract_title_date_suffix(result)
+        
         result = result.lower().strip()
         
         if clean_row_ranges:
@@ -132,6 +236,11 @@ class ExcelUtils:
         # Remove Part number patterns: "(Part 2)", "(Part 5)", etc.
         # These can change between quarters but the table content stays same
         result = re.sub(r'\s*\(part\s*\d+\)\s*', ' ', result, flags=re.IGNORECASE)
+        
+        # Remove unit suffixes: "_$ in billions", "_$ in millions" (with dollar sign only)
+        # These are metadata/unit indicators, not part of the meaningful table title
+        result = re.sub(r'_?\s*\$\s*in\s*(billions?|millions?)\s*$', '', result, flags=re.IGNORECASE)
+        result = re.sub(r'_?\s*\(\s*\$\s*in\s*(billions?|millions?)\s*\)\s*$', '', result, flags=re.IGNORECASE)
         
         # Remove leading section numbers
         result = re.sub(r'^\d+[\.:\s]+\s*', '', result)

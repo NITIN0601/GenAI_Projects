@@ -21,8 +21,12 @@ Edge cases handled per docs:
 
 import pandas as pd
 import re
+import warnings
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
+
+# Suppress PerformanceWarning from non-lexsorted MultiIndex operations
+warnings.filterwarnings('ignore', category=pd.errors.PerformanceWarning)
 
 from src.utils.excel_utils import ExcelUtils
 from src.utils.metadata_labels import MetadataLabels
@@ -85,25 +89,19 @@ def _sort_chronologically(df: pd.DataFrame, dates_col) -> pd.DataFrame:
             period = 1
         else:
             period = 0
-        
         return (year, quarter, period)
     
     # Create sort key column - handle both regular and MultiIndex columns
     try:
-        # Sort MultiIndex columns to avoid PerformanceWarning during indexing
-        if isinstance(df.columns, pd.MultiIndex):
-            df = df.sort_index(axis=1)
-        
         if dates_col in df.columns:
             df = df.copy()  # Avoid SettingWithCopyWarning
             df['_sort_key'] = df[dates_col].apply(get_sort_key)
             
-            # Sort and remove helper column
+            # Sort rows chronologically (oldest first) and remove helper column
             df = df.sort_values('_sort_key').reset_index(drop=True)
             df = df.drop('_sort_key', axis=1, errors='ignore')
     except Exception as e:
         logger.debug(f"Could not sort chronologically: {e}")
-        pass
     
     return df
 
@@ -242,7 +240,7 @@ def reconstruct_metadata_from_df(df: pd.DataFrame, first_col: Optional[str] = No
     label_to_section = {}
     normalized_row_labels = {}
     
-    current_category = "General"
+    current_category = ""  # No category prefix for items without explicit section
     
     # Identify data columns (exclude first column)
     data_cols = [c for c in df.columns if c != first_col]
