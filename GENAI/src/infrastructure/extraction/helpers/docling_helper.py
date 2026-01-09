@@ -1412,6 +1412,7 @@ class DoclingHelper:
             'credit spread',
             'selected financial',
             'reconciliation',
+            'reconciliations',
             'advisor-led',
             'self-directed',
             'workplace',
@@ -1534,18 +1535,28 @@ class DoclingHelper:
             return True
         
         def is_known_table_title(text: str) -> bool:
-            """Check if text matches a known table title pattern."""
-            text_lower = text.lower().strip()
+            """Check if text matches a known table title pattern.
+            
+            Handles OCR spacing issues by normalizing whitespace before matching.
+            """
+            # Normalize: collapse multiple spaces, lowercase, strip
+            text_normalized = re.sub(r'\s+', ' ', text.lower().strip())
+            
             for pattern in table_title_patterns:
-                if pattern.lower() in text_lower:
+                pattern_normalized = re.sub(r'\s+', ' ', pattern.lower().strip())
+                if pattern_normalized in text_normalized:
                     return True
             return False
         
         def clean_title(text: str) -> str:
-            """Clean up the title text."""
+            """Clean up the title text, including OCR artifacts."""
             text = re.sub(r'^\d+[\.\:\s]+\s*', '', text)  # Remove leading numbers
             text = re.sub(r'\s+\d+\s*$', '', text)  # Remove trailing numbers
             text = re.sub(r'\s*\(\d+\)\s*$', '', text)  # Remove (N) at end
+            # Normalize OCR spacing: collapse multiple spaces to single
+            text = re.sub(r'\s+', ' ', text)
+            # Normalize dashes: replace em-dash, en-dash with regular dash
+            text = text.replace('—', '-').replace('–', '-')
             return text.strip()[:100]
         
         # === APPROACH 1: Get immediate preceding text (most accurate) ===
@@ -1553,6 +1564,122 @@ class DoclingHelper:
         items_list = list(doc.iterate_items())
         immediate_candidates = []  # (text, distance_from_table, label)
         
+        # Page headers that should NEVER be used as table titles
+        PAGE_HEADER_PATTERNS = [
+            'notes to consolidated financial statements',
+            'management\'s discussion and analysis',
+            'quarterly report on form 10',
+            'table of contents',
+            'annual report on form 10',
+        ]
+        
+        # === APPROACH -1: Find IMMEDIATE preceding text (actual table title) ===
+        # The table title is literally the text directly above the table
+        # This takes highest priority - check first 5 items before the table
+        items_list = list(doc.iterate_items())
+        immediate_title = None
+        table_found = False
+        
+        items_checked = 0
+        for item_data in reversed(items_list):
+            item = item_data[0] if isinstance(item_data, tuple) else item_data
+            
+            if item is table_item:
+                table_found = True
+                items_checked = 0
+                continue
+            
+            if not table_found:
+                continue
+            
+            items_checked += 1
+            
+            # For multi-page tables, check up to 15 items before
+            if items_checked > 15:
+                break
+            
+            item_page = DoclingHelper.get_item_page(item)
+            # For multi-page tables (spanning 2-3 pages), look back up to 3 pages
+            if item_page < page_no - 3:
+                continue  # Too far back
+            
+            if not hasattr(item, 'text') or not item.text:
+                continue
+            
+            text = str(item.text).strip()
+            
+            # Skip very short or very long text
+            if len(text) < 5 or len(text) > 120:
+                continue
+            
+            # Skip if it looks like table data (numbers, currency)
+            if re.match(r'^[\$\(\d\,\.\%\)\s\-]+$', text):
+                continue
+            
+            # Skip page headers
+            text_lower = text.lower()
+            if any(ph in text_lower for ph in PAGE_HEADER_PATTERNS):
+                continue
+            
+            # Skip footnotes and references
+            if text_lower.startswith(('(', 'note:', 'see ', '1 ', '2 ', '* ')):
+                continue
+                
+            # This looks like a valid title - use it!
+            if is_table_title_candidate(text):
+                immediate_title = text
+                break
+        
+        # If we found immediate title, use it
+        if immediate_title:
+            return clean_title(immediate_title)
+        
+        # === APPROACH 0: Find CLOSEST SECTION_HEADER (highest priority) ===
+        # This is the most reliable method - section headers are explicitly labeled
+        closest_section_header = None
+        table_found = False
+        distance = 0
+        
+        for item_data in reversed(items_list):
+            item = item_data[0] if isinstance(item_data, tuple) else item_data
+            
+            if item is table_item:
+                table_found = True
+                distance = 0
+                continue
+            
+            if not table_found:
+                continue
+            
+            distance += 1
+            if distance > 15:  # Only check closest 15 items for section headers
+                break
+            
+            item_page = DoclingHelper.get_item_page(item)
+            if item_page < page_no - 1:  # Section header should be on same or previous page
+                continue
+            
+            if not hasattr(item, 'text') or not item.text:
+                continue
+            
+            text = str(item.text).strip()
+            label = str(item.label) if hasattr(item, 'label') else 'UNKNOWN'
+            
+            # Check if this is a SECTION_HEADER
+            if 'SECTION' in label.upper() or 'TITLE' in label.upper():
+                text_lower = text.lower()
+                # Skip page headers
+                if any(ph in text_lower for ph in PAGE_HEADER_PATTERNS):
+                    continue
+                # This is the closest section header - use it!
+                closest_section_header = text
+                break
+        
+        # If we found a close section header, use it directly
+        if closest_section_header and len(closest_section_header) > 10:
+            return clean_title(closest_section_header)
+        
+        # === APPROACH 1 (continued): Collect all candidates for scoring ===
         table_found = False
         distance = 0
         
@@ -1585,13 +1712,8 @@ class DoclingHelper:
             if 5 < len(text) < 120 and is_table_title_candidate(text):
                 immediate_candidates.append((text, distance, label, item_page))
         
-        # Patterns that appear on every page but are NOT table titles
-        PAGE_HEADER_PATTERNS = [
-            'notes to consolidated financial statements',
-            'management\'s discussion and analysis',
-            'quarterly report on form 10',
-            'table of contents',
-        ]
+        
+        # Note: PAGE_HEADER_PATTERNS is defined above in APPROACH 0
         
         # Date/time fragments from multi-page tables (NOT table titles)
         DATE_FRAGMENT_PATTERNS = [
@@ -1621,9 +1743,14 @@ class DoclingHelper:
             score = 0
             text_lower = text.lower()
             
+            # FIRST: Check if this is a known table title pattern
+            # Known patterns should OVERRIDE other penalties
+            is_known_title = is_known_table_title(text)
+            
             # PENALTY: Page headers that appear on every page
+            # BUT SKIP if this is a known table title pattern
             is_page_header = any(ph in text_lower for ph in PAGE_HEADER_PATTERNS)
-            if is_page_header:
+            if is_page_header and not is_known_title:
                 score -= 200  # Strong penalty - should never be picked as title
             
             # PENALTY: Date fragments from multi-page tables
@@ -1636,16 +1763,17 @@ class DoclingHelper:
             if is_sentence:
                 score -= 150  # Strong penalty - explanatory text, not title
             
-            # Known table title pattern = highest priority
-            if is_known_table_title(text):
-                score += 100
+            # Known table title pattern = HIGHEST priority (increased from +100)
+            if is_known_title:
+                score += 150
             
             # Same page = better than previous page
             if item_page == page_no:
                 score += 50
             
-            # Closer to table = better
-            score += (10 - distance) * 5
+            # Closer to table = MUCH better (increased weight from *5 to *15)
+            # At distance 1: +135 points, at distance 12: -30 points
+            score += (10 - distance) * 15
             
             # SECTION_HEADER or TITLE label = likely title
             if 'SECTION' in label.upper() or 'TITLE' in label.upper():
@@ -1685,7 +1813,8 @@ class DoclingHelper:
             return cleaned
         
         # === FALLBACK 1: Look for nearby SECTION_HEADER items ===
-        # Search backwards through document for the nearest SECTION_HEADER
+        # ONLY use section headers that match known table title patterns
+        # Generic section headers like "Management's Discussion and Analysis" should be skipped
         items_list = list(doc.iterate_items())
         table_found = False
         distance = 0
@@ -1710,10 +1839,13 @@ class DoclingHelper:
                 label = str(item.label.value) if hasattr(item.label, 'value') else str(item.label)
                 if 'SECTION' in label.upper() and hasattr(item, 'text') and item.text:
                     text = item.text.strip()
-                    # Skip page headers
-                    if not any(ph in text.lower() for ph in PAGE_HEADER_PATTERNS):
-                        if is_table_title_candidate(text):
-                            return clean_title(text)
+                    # Skip page headers (generic repeated headers)
+                    if any(ph in text.lower() for ph in PAGE_HEADER_PATTERNS):
+                        continue
+                    # ONLY accept as title if it matches a KNOWN table title pattern
+                    # This prevents generic section headers from becoming table titles
+                    if is_known_table_title(text) and is_table_title_candidate(text):
+                        return clean_title(text)
         
         # === FALLBACK 2: Use section name from TOC hierarchy ===
         section_name = DoclingHelper.extract_section_name(doc, table_item, page_no)

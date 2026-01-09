@@ -10,7 +10,7 @@ for easy maintenance and configuration.
 # =============================================================================
 
 # Default quality threshold for extraction (0-100)
-EXTRACTION_MIN_QUALITY = 60.0
+EXTRACTION_MIN_QUALITY = 10.0
 
 # Cache TTL in hours (168 = 1 week)
 EXTRACTION_CACHE_TTL_HOURS = 168

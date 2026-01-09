@@ -570,29 +570,18 @@ class TableMerger:
 
     def _update_split_sheet_table_title(self, ws: Worksheet, subtitle: str) -> None:
         """
-        Update the Table Title metadata row inside a split sheet to include subtable name.
+        NOTE: This method is kept for backwards compatibility but no longer appends subtitles.
         
-        Finds the "Table Title:" row and appends the subtitle with underscore separator.
-        Example: "Table Title: Wealth Management Metrics" becomes 
-                 "Table Title: Wealth Management Metrics_Net New Assets"
+        The table title should already include qualifiers like "by Property Type" or "by Region"
+        from the original title extraction. We should NOT append first row labels as suffixes.
         
         Args:
             ws: The worksheet to update
-            subtitle: The subtable identifier to append (e.g., "Net New Assets")
+            subtitle: Ignored - kept for API compatibility
         """
-        if not subtitle:
-            return
-        
-        # Find the Table Title row (scan first 20 rows)
-        for row_num in range(1, min(21, ws.max_row + 1)):
-            cell_val = ws.cell(row=row_num, column=1).value
-            if cell_val and MetadataLabels.TABLE_TITLE in str(cell_val):
-                current_title = str(cell_val).strip()
-                # Append subtitle with underscore
-                new_title = f"{current_title}_{subtitle}"
-                ws.cell(row=row_num, column=1).value = new_title
-                logger.debug(f"Updated Table Title: {current_title} -> {new_title}")
-                break
+        # Do nothing - titles should not have suffixes appended
+        # The full title including "by Property Type" etc. should come from title extraction
+        pass
 
     def _add_unit_indicator_to_split_sheet(self, source_ws: Worksheet, new_ws: Worksheet, 
                                             first_block: Dict, data_start_row: int) -> None:

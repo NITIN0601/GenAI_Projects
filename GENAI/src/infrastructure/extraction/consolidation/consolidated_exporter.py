@@ -690,15 +690,21 @@ class ConsolidatedExcelExporter(BaseExcelExporter):
                     # Tables only merge if they have the same L1/L2/L3 structure
                     # This prevents merging L3_ONLY (point-in-time) with L2_L3 (period-based)
                     header_pattern = self._get_header_structure_pattern(subtable_df)
-                    logger.debug(f"Table '{normalized_title}' has header pattern: {header_pattern}, structure: {structure_fingerprint}")
+                    
+                    # NEW: Extract actual header content fingerprint to differentiate sub-tables
+                    # with same structure but different column headers (e.g., different periods)
+                    header_content_fp = self._extract_header_content_fingerprint(subtable_df)
+                    
+                    logger.debug(f"Table '{normalized_title}' has header pattern: {header_pattern}, structure: {structure_fingerprint}, headers: {header_content_fp[:50]}")
                     
                     # UPDATED: Grouping key uses 80% fuzzy matching on Section+Title
                     # Structure fingerprint and header_pattern must match exactly
                     # Section+Title can fuzzy match at 80% threshold
                     section_title_combo = f"{normalized_section}|{normalized_title}" if normalized_section else normalized_title
                     
-                    # Exact key for structure+pattern (these must match exactly)
-                    structure_key = f"{structure_fingerprint}::{header_pattern}"
+                    # Exact key for structure+pattern+header_content (these must match exactly)
+                    # header_content_fp ensures sub-tables with different column headers stay separate
+                    structure_key = f"{structure_fingerprint}::{header_pattern}::{header_content_fp}"
                     
                     # Find best matching group using fuzzy Section+Title matching
                     # Use 80% threshold for title AND row label overlap (per merge condition spec)

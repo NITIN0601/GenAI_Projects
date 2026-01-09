@@ -119,13 +119,13 @@ class IndexManager:
         
         # Step 1: Update the original row with first split sheet (9_1)
         first_split = split_sheets[0]
-        first_subtitle = subtable_info.get(first_split, '')
-        
-        # Create descriptive title: "Original Title_Subtitle" or "Original Title (Part 1)" if no subtitle
-        if first_subtitle:
-            new_title = f"{title_base}_{first_subtitle}"
-        else:
+        # NOTE: Subtitles like "by Property Type" should already be in the table title from extraction
+        # We don't append first row labels as suffixes anymore
+        # Use (Part N) only when there are multiple splits with no distinguishing subtitle
+        if len(split_sheets) > 1:
             new_title = f"{title_base} (Part 1)"
+        else:
+            new_title = title_base
         
         index_ws.cell(row=original_row, column=3).value = first_split  # Table_ID
         index_ws.cell(row=original_row, column=6).value = new_title  # Title
@@ -144,12 +144,9 @@ class IndexManager:
                 # Insert a new row at the position
                 index_ws.insert_rows(insert_position)
                 
-                # Get subtitle for this split
-                subtitle = subtable_info.get(split_sheet, '')
-                if subtitle:
-                    new_title = f"{title_base}_{subtitle}"
-                else:
-                    new_title = f"{title_base} (Part {part_num})"
+                # NOTE: Subtitles like "by Property Type" should already be in the table title
+                # We just use (Part N) to distinguish multiple splits
+                new_title = f"{title_base} (Part {part_num})"
                 
                 # Copy data from original row
                 index_ws.cell(row=insert_position, column=1).value = original_data['source']
