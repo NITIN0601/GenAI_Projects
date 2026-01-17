@@ -23,6 +23,10 @@ from .csv_writer import (
     CSVWriter,
     get_csv_writer,
 )
+from .metadata_injector import (
+    MetadataInjector,
+    get_metadata_injector,
+)
 from .exporter import (
     WorkbookExportResult,
     ExportSummary,
@@ -49,6 +53,10 @@ __all__ = [
     # CSV Writing
     'CSVWriter',
     'get_csv_writer',
+    
+    # Metadata Injection
+    'MetadataInjector',
+    'get_metadata_injector',
     
     # Main Exporter
     'WorkbookExportResult',

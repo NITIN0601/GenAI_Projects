@@ -35,7 +35,7 @@ class CSVWriter:
         self,
         df: pd.DataFrame,
         output_path: Path,
-        include_header: bool = True
+        include_header: bool = False  # Default False: first data row IS the header
     ) -> bool:
         """
         Write table data to CSV.

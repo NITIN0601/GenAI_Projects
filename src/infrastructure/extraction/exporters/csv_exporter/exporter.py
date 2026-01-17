@@ -7,7 +7,8 @@ Follows the Manager pattern used throughout the codebase.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
+import re
 
 import pandas as pd
 
@@ -21,6 +22,10 @@ from .constants import (
 from .metadata_extractor import SheetMetadataExtractor, TableBlock
 from .index_builder import EnhancedIndexBuilder
 from .csv_writer import CSVWriter
+from .category_separator import CategorySeparator
+from .data_formatter import DataFormatter
+from .metadata_injector import MetadataInjector
+from .data_normalizer import DataNormalizer
 
 logger = get_logger(__name__)
 
@@ -87,7 +92,11 @@ class ExcelToCSVExporter:
     def __init__(
         self,
         source_dir: Optional[Path] = None,
-        output_dir: Optional[Path] = None
+        output_dir: Optional[Path] = None,
+        enable_category_separation: bool = True,
+        enable_data_formatting: bool = True,
+        enable_metadata_injection: bool = True,
+        enable_data_normalization: bool = False
     ):
         """
         Initialize exporter.
@@ -95,17 +104,29 @@ class ExcelToCSVExporter:
         Args:
             source_dir: Source directory containing xlsx files
             output_dir: Base output directory for CSV files
+            enable_category_separation: Enable category separation feature
+            enable_data_formatting: Enable data formatting feature (currency & percentage)
+            enable_metadata_injection: Enable metadata injection feature (Source, Section, Table Title)
+            enable_data_normalization: Enable data normalization feature (wide to long format)
         """
         self.logger = get_logger(f"{__name__}.{self.__class__.__name__}")
         
         paths = get_paths()
         self.source_dir = source_dir or Path(paths.data_dir) / "processed"
         self.output_dir = output_dir or Path(paths.data_dir) / "csv_output"
+        self.enable_category_separation = enable_category_separation
+        self.enable_data_formatting = enable_data_formatting
+        self.enable_metadata_injection = enable_metadata_injection
+        self.enable_data_normalization = enable_data_normalization
         
         # Components
         self.metadata_extractor = SheetMetadataExtractor()
         self.index_builder = EnhancedIndexBuilder()
         self.csv_writer = CSVWriter()
+        self.category_separator = CategorySeparator() if enable_category_separation else None
+        self.data_formatter = DataFormatter() if enable_data_formatting else None
+        self.metadata_injector = MetadataInjector() if enable_metadata_injection else None
+        self.data_normalizer = DataNormalizer() if enable_data_normalization else None
     
     def export_all(
         self,
@@ -198,20 +219,27 @@ class ExcelToCSVExporter:
             
             # Separate Index and table sheets
             index_df = None
+            index_metadata_map: Dict[str, List[dict]] = {}
             table_metadata: Dict[str, List[TableBlock]] = {}
             csv_file_mapping: Dict[str, List[str]] = {}
             
+            # Load Index sheet first to build metadata map
+            if 'Index' in sheet_names:
+                index_df = pd.read_excel(xlsx, sheet_name='Index')
+                if self.enable_metadata_injection:
+                    index_metadata_map = self._build_index_metadata_map(index_df)
+                    self.logger.debug(f"Built metadata map for {len(index_metadata_map)} sheets")
+            
             for sheet_name in sheet_names:
                 if sheet_name in TableDetectionPatterns.SKIP_SHEETS:
-                    if sheet_name == 'Index':
-                        index_df = pd.read_excel(xlsx, sheet_name=sheet_name)
                     continue
                 
                 # Process table sheet
                 sheet_result = self._process_sheet(
                     xlsx=xlsx,
                     sheet_name=sheet_name,
-                    output_dir=output_dir
+                    output_dir=output_dir,
+                    index_metadata=index_metadata_map.get(sheet_name, [])
                 )
                 
                 if sheet_result:
@@ -259,18 +287,79 @@ class ExcelToCSVExporter:
         
         return result
     
+    def _build_index_metadata_map(self, index_df: pd.DataFrame) -> Dict[str, List[dict]]:
+        """
+        Build mapping from sheet_name to list of table metadata from Index sheet.
+        
+        Uses the Link column to determine which sheet each table belongs to.
+        For multi-table sheets, orders metadata by row appearance.
+        
+        Args:
+            index_df: Index DataFrame (from original Index sheet)
+            
+        Returns:
+            Dict mapping sheet_name to list of metadata dicts.
+            Each metadata dict contains: Section, Table Title, Source, PageNo
+        """
+        metadata_map: Dict[str, List[dict]] = {}
+        
+        for _, row in index_df.iterrows():
+            # Get Link column which tells us the sheet
+            # Examples: '→ 1', '→ 2', '→ 147'
+            link = str(row.get('Link', '')).strip()
+            if not link:
+                continue
+            
+            # Parse sheet number from link
+            # Pattern: '→ 147' -> sheet_name='147'
+            sheet_match = re.search(r'→\s*(\d+)', link)
+            if not sheet_match:
+                continue
+            
+            sheet_name = sheet_match.group(1)
+            
+            # Build metadata dict for this table
+            table_meta = {
+                'Section': str(row.get('Section', '')).strip(),
+                'Table Title': str(row.get('Table Title', '')).strip(),
+                'Source': str(row.get('Source', '')).strip(),
+                'PageNo': str(row.get('PageNo', '')).strip(),
+            }
+            
+            # Add to map
+            if sheet_name not in metadata_map:
+                metadata_map[sheet_name] = []
+            metadata_map[sheet_name].append(table_meta)
+        
+        # Assign Table_Index based on order within each sheet
+        for sheet_name, tables in metadata_map.items():
+            for idx, table_meta in enumerate(tables, start=1):
+                table_meta['Table_Index'] = idx
+        
+        return metadata_map
+    
     def _process_sheet(
         self,
         xlsx: pd.ExcelFile,
         sheet_name: str,
-        output_dir: Path
-    ) -> Optional[tuple]:
+        output_dir: Path,
+        index_metadata: List[dict] = None
+    ) -> Optional[Tuple[List[TableBlock], List[str]]]:
         """
         Process a single table sheet.
+        
+        Args:
+            xlsx: Excel file object
+            sheet_name: Name of the sheet to process
+            output_dir: Output directory for CSV files
+            index_metadata: List of metadata dicts for tables in this sheet
         
         Returns:
             Tuple of (List[TableBlock], List[csv_filenames]) or None on error
         """
+        if index_metadata is None:
+            index_metadata = []
+        
         try:
             # Load sheet without header (to preserve all rows)
             sheet_df = pd.read_excel(xlsx, sheet_name=sheet_name, header=None)
@@ -292,6 +381,100 @@ class ExcelToCSVExporter:
                 if table.data_df is None or table.data_df.empty:
                     continue
                 
+                # Apply category separation if enabled
+                df_to_write = table.data_df
+                has_categories = False
+                
+                if self.category_separator:
+                    categorized_df, categories_found = self.category_separator.separate_categories(table.data_df)
+                    
+                    if not categorized_df.empty:
+                        df_to_write = categorized_df
+                        has_categories = True
+                        
+                        # Update table metadata with categories
+                        if categories_found:
+                            category_str = ", ".join(categories_found)
+                            table.metadata['Category_Parent'] = category_str
+                            self.logger.debug(
+                                f"Sheet {sheet_name} table {table.table_index}: "
+                                f"Found {len(categories_found)} categories"
+                            )
+                
+                # Apply data formatting if enabled
+                if self.data_formatter:
+                    # Get table header from first column name or metadata
+                    table_header = None
+                    if not df_to_write.empty and len(df_to_write.columns) > 0:
+                        # Try to get from metadata first
+                        table_header = table.metadata.get('first_column_header')
+                        # Fallback to first column name
+                        if not table_header:
+                            table_header = str(df_to_write.columns[0])
+                    
+                    df_to_write = self.data_formatter.format_table(
+                        df_to_write, 
+                        table_header=table_header
+                    )
+                    
+                    self.logger.debug(
+                        f"Sheet {sheet_name} table {table.table_index}: "
+                        f"Applied data formatting"
+                    )
+                
+                # Inject metadata columns if enabled
+                if self.metadata_injector:
+                    # Find metadata for this specific table
+                    table_meta = None
+                    for meta in index_metadata:
+                        if meta.get('Table_Index') == table.table_index:
+                            table_meta = meta
+                            break
+                    
+                    # Extract metadata fields
+                    section = ""
+                    table_title = ""
+                    source = ""
+                    
+                    if table_meta:
+                        section = table_meta.get('Section', '')
+                        table_title = table_meta.get('Table Title', '')
+                        
+                        # Construct Source from Source + PageNo
+                        source_pdf = table_meta.get('Source', '')
+                        page_no = table_meta.get('PageNo', '')
+                        if source_pdf and page_no:
+                            source = f"{source_pdf}_pg{page_no}"
+                    
+                    # Log warning if metadata is incomplete
+                    if not section or not table_title or not source:
+                        self.logger.warning(
+                            f"Incomplete metadata for sheet {sheet_name} table {table.table_index}: "
+                            f"section={section!r}, table_title={table_title!r}, source={source!r}"
+                        )
+                    
+                    # Inject columns
+                    df_to_write = self.metadata_injector.inject_metadata_columns(
+                        df_to_write,
+                        source=source or '',
+                        section=section or '',
+                        table_title=table_title or ''
+                    )
+                    
+                    self.logger.debug(
+                        f"Sheet {sheet_name} table {table.table_index}: "
+                        f"Injected metadata columns"
+                    )
+                
+                # Apply data normalization if enabled (must be last step)
+                if self.data_normalizer:
+                    df_to_write = self.data_normalizer.normalize_table(df_to_write)
+                    
+                    self.logger.debug(
+                        f"Sheet {sheet_name} table {table.table_index}: "
+                        f"Applied data normalization (wide to long format)"
+                    )
+                
                 # Determine filename
                 if len(tables) == 1:
                     filename = CSVExportSettings.TABLE_FILENAME_PATTERN.format(
@@ -305,10 +488,14 @@ class ExcelToCSVExporter:
                 
                 csv_path = output_dir / filename
                 
-                if self.csv_writer.write_table_csv(table.data_df, csv_path):
+                # Include headers if category separation or metadata injection was applied
+                include_header = has_categories or (self.metadata_injector is not None)
+                
+                if self.csv_writer.write_table_csv(df_to_write, csv_path, include_header=include_header):
                     csv_files.append(filename)
                 else:
                     self.logger.warning(f"Failed to write {csv_path}")
+
             
             return (tables, csv_files)
             
@@ -319,7 +506,11 @@ class ExcelToCSVExporter:
 
 def get_csv_exporter(
     source_dir: Optional[Path] = None,
-    output_dir: Optional[Path] = None
+    output_dir: Optional[Path] = None,
+    enable_category_separation: bool = True,
+    enable_data_formatting: bool = True,
+    enable_metadata_injection: bool = True,
+    enable_data_normalization: bool = False
 ) -> ExcelToCSVExporter:
     """
     Factory function for ExcelToCSVExporter.
@@ -327,8 +518,19 @@ def get_csv_exporter(
     Args:
         source_dir: Optional source directory override
         output_dir: Optional output directory override
+        enable_category_separation: Enable category separation feature
+        enable_data_formatting: Enable data formatting feature (currency & percentage)
+        enable_metadata_injection: Enable metadata injection feature (Source, Section, Table Title)
+        enable_data_normalization: Enable data normalization feature (wide to long format)
         
     Returns:
         Configured ExcelToCSVExporter instance
     """
-    return ExcelToCSVExporter(source_dir=source_dir, output_dir=output_dir)
+    return ExcelToCSVExporter(
+        source_dir=source_dir, 
+        output_dir=output_dir,
+        enable_category_separation=enable_category_separation,
+        enable_data_formatting=enable_data_formatting,
+        enable_metadata_injection=enable_metadata_injection,
+        enable_data_normalization=enable_data_normalization
+    )

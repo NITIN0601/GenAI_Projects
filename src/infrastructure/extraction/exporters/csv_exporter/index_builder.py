@@ -97,13 +97,69 @@ class EnhancedIndexBuilder:
                     )
                     enhanced_rows.append(enhanced_row)
             else:
-                # Mismatch - expand each original row with all tables
-                # This handles cases where original Index had 1 row but multiple tables exist
+                # Mismatch - Use Greedy Best Match strategy
+                # to avoid Cross Product (Cartesian Join) which causes duplicates.
+                
+                # Create a pool of available tables to match
+                available_tables = list(tables)
+                available_csvs = list(csv_files)
+                
+                # Keep track of which original rows have been assigned
+                # We will process all original rows 
+                
                 for _, row in group_rows:
-                    for i, table in enumerate(tables):
-                        csv_file = csv_files[i] if i < len(csv_files) else ''
+                    matched_table = None
+                    matched_csv = ''
+                    matched_idx = -1
+                    
+                    # Strategy 1: Title Match (if available)
+                    row_title = str(row.get('Table Title', '')).strip().lower()
+                    if row_title and available_tables:
+                        for i, table in enumerate(available_tables):
+                            # Check metadata title
+                            meta_title = table.metadata.get('Table_Title_Metadata', '').strip().lower()
+                            # Check for fuzzy match or containment
+                            if row_title == meta_title or \
+                               (len(row_title) > 5 and row_title in meta_title) or \
+                               (len(meta_title) > 5 and meta_title in row_title):
+                                matched_table = table
+                                matched_csv = available_csvs[i] if i < len(available_csvs) else ''
+                                matched_idx = i
+                                break
+                    
+                    # Strategy 2: Order Match (Fallback)
+                    if not matched_table and available_tables:
+                        # Just take the first one available (preserving order)
+                        matched_table = available_tables[0]
+                        matched_csv = available_csvs[0] if available_csvs else ''
+                        matched_idx = 0
+                        
+                    # Remove matched table from pool
+                    if matched_table:
+                        available_tables.pop(matched_idx)
+                        if matched_idx < len(available_csvs):
+                            available_csvs.pop(matched_idx)
+                    
+                    # Create row (populated or empty)
+                    enhanced_row = self._create_enhanced_row(
+                        original_row=row,
+                        table_block=matched_table,
+                        table_index=matched_table.table_index if matched_table else -1,
+                        csv_file=matched_csv
+                    )
+                    enhanced_rows.append(enhanced_row)
+                
+                # Handle any remaining tables (orphan tables)
+                # If we have extracted MORE tables than index rows, we need to preserve them
+                # effectively creating new index entries for them.
+                # Use the last row's generic info as a base? Or create blank?
+                # Usually it's better to attribute to the sheet ID.
+                if available_tables:
+                    base_row = group_rows[-1][1] if group_rows else pd.Series()
+                    for i, table in enumerate(available_tables):
+                        csv_file = available_csvs[i] if i < len(available_csvs) else ''
                         enhanced_row = self._create_enhanced_row(
-                            original_row=row,
+                            original_row=base_row,
                             table_block=table,
                             table_index=table.table_index,
                             csv_file=csv_file
