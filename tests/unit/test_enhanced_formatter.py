@@ -3,12 +3,14 @@
 Test enhanced table formatter.
 """
 import sys
+sys.path.insert(0, '/Users/nitin/Desktop/Chatbot/Morgan/GENAI')
 
 from extraction import UnifiedExtractor, format_all_tables_enhanced, format_enhanced_table
 
 def test_enhanced_formatter():
     """Test enhanced table formatting."""
     
+    pdf_path = '/Users/nitin/Desktop/Chatbot/Morgan/raw_data/10k1222-1-20.pdf'
     
     print("=" * 80)
     print("🚀 TESTING ENHANCED TABLE FORMATTER")

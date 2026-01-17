@@ -3,12 +3,14 @@
 Test the new table structure formatter.
 """
 import sys
+sys.path.insert(0, '/Users/nitin/Desktop/Chatbot/Morgan/GENAI')
 
 from extraction import UnifiedExtractor, format_extraction_tables, format_table_structure
 
 def test_formatter():
     """Test table structure formatting."""
     
+    pdf_path = '/Users/nitin/Desktop/Chatbot/Morgan/raw_data/10k1222-1-20.pdf'
     
     print("Testing Table Structure Formatter")
     print("=" * 80)
